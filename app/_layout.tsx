@@ -8,6 +8,8 @@ import { View } from "react-native";
 import { useLibraryStore } from "../store/likedStore";
 import { usePlayerStore } from "../store/playerStore";
 
+import { Toast } from "../components/Toast";
+
 export default function RootLayout() {
   const hydrate = useLibraryStore((s) => s.hydrate);
   const init = usePlayerStore((s) => s.init);
@@ -37,7 +39,15 @@ export default function RootLayout() {
                 animation: "slide_from_bottom",
               }}
             />
+            <Stack.Screen
+              name="queue"
+              options={{
+                presentation: "modal",
+                animation: "slide_from_bottom",
+              }}
+            />
           </Stack>
+          <Toast />
         </View>
       </SafeAreaProvider>
     </GestureHandlerRootView>

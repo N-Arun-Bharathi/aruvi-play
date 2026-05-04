@@ -23,6 +23,7 @@ interface PlayerState {
 
   init: () => Promise<void>;
   playSong: (song: Song, contextQueue?: Song[]) => Promise<void>;
+  addToQueue: (song: Song) => Promise<void>;
   togglePlay: () => Promise<void>;
   next: () => Promise<void>;
   prev: () => Promise<void>;
@@ -108,6 +109,28 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ queue, index: idx, current: queue[idx], isPlaying: true });
     await loadIndex(queue, idx);
     if (queue[idx]?.source === "online") get().appendRelatedIfNeeded();
+  },
+
+  addToQueue: async (song) => {
+    const { queue } = get();
+    // Check if already in queue to avoid duplicates (optional as per prompt)
+    const exists = queue.some((s) => s.id === song.id || (s.title === song.title && s.artist === song.artist));
+    if (exists) {
+      const { useToastStore } = require("./toastStore");
+      useToastStore.getState().show("Already in Queue");
+      return;
+    }
+
+    const newQueue = [...queue, song];
+    set({ queue: newQueue });
+
+    const { useToastStore } = require("./toastStore");
+    useToastStore.getState().show("Added to Queue");
+
+    // If nothing is playing, maybe start playing this song?
+    // The prompt says "without interrupting playback", so if something IS playing, just append.
+    // If NOTHING is playing, it's safer to just append or maybe play if the user expects it.
+    // Usually "Add to Queue" means just append.
   },
 
   togglePlay: async () => {

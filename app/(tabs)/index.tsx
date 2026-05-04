@@ -20,9 +20,8 @@ import { useSettingsStore } from "../../store/settingsStore";
 
 export default function Home() {
   const router = useRouter();
-  const recent = useLibraryStore((s) => s.recent);
-  const refreshRecent = useLibraryStore((s) => s.refreshRecent);
-  const playSong = usePlayerStore((s) => s.playSong);
+  const { recent, refreshRecent, isLiked, toggleLike, liked } = useLibraryStore();
+  const { playSong, addToQueue } = usePlayerStore();
   const { languages, setLanguages, hydrate: hydrateSettings } = useSettingsStore();
   const [trending, setTrending] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,7 +126,7 @@ export default function Home() {
           </Text>
           {loading ? (
             <View className="py-12 items-center">
-              <ActivityIndicator color="#1DB954" />
+              <ActivityIndicator color="#EF4444" />
             </View>
           ) : (
             <View>
@@ -135,6 +134,9 @@ export default function Home() {
                 <SongRow
                   key={s.id}
                   song={s}
+                  liked={isLiked(s)}
+                  onLike={() => toggleLike(s)}
+                  onAddToQueue={() => addToQueue(s)}
                   onPress={() => {
                     playSong(s, trending);
                     router.push("/player");

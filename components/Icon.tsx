@@ -23,6 +23,9 @@ export type IconName =
   | "chevron-down"
   | "more"
   | "music"
+  | "plus"
+  | "list"
+  | "clock"
   | "folder";
 
 export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
@@ -150,6 +153,37 @@ export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
           <Circle cx="5" cy="12" r="1.5" fill={color} />
           <Circle cx="12" cy="12" r="1.5" fill={color} />
           <Circle cx="19" cy="12" r="1.5" fill={color} />
+        </Svg>
+      );
+    case "list":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "clock":
+      return (
+        <Svg {...props}>
+          <Circle cx="12" cy="12" r="9" stroke={color} strokeWidth={2} />
+          <Path d="M12 7v5l3 3" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      );
+    case "plus":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M12 5v14M5 12h14"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </Svg>
       );
     case "music":

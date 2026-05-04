@@ -9,14 +9,34 @@ import { useLibraryStore } from "../store/likedStore";
 import { PlayerControls } from "../components/PlayerControls";
 import { SeekBar } from "../components/SeekBar";
 import { Icon } from "../components/Icon";
+import { AnimatedHeart } from "../components/AnimatedHeart";
+
+import { useTimerStore } from "../store/timerStore";
+import { Alert } from "react-native";
 
 export default function PlayerScreen() {
   const router = useRouter();
   const current = usePlayerStore((s) => s.current);
-  const isLiked = useLibraryStore((s) => s.isLiked);
-  const toggleLike = useLibraryStore((s) => s.toggleLike);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+  const { isLiked, toggleLike, liked: likedSongs } = useLibraryStore();
+  const { timeLeft, setTimer } = useTimerStore();
+  
   const { width } = Dimensions.get("window");
   const artSize = Math.min(width - 48, 360);
+
+  const showTimerOptions = () => {
+    Alert.alert(
+      "Sleep Timer",
+      timeLeft ? `Current timer: ${Math.ceil(timeLeft / 60)}m left` : "Stop playback after:",
+      [
+        { text: "15 minutes", onPress: () => setTimer(15) },
+        { text: "30 minutes", onPress: () => setTimer(30) },
+        { text: "60 minutes", onPress: () => setTimer(60) },
+        { text: "Off", onPress: () => setTimer(null), style: "destructive" },
+        { text: "Cancel", style: "cancel" },
+      ]
+    );
+  };
 
   if (!current) {
     return (
@@ -29,7 +49,7 @@ export default function PlayerScreen() {
     );
   }
 
-  const liked = isLiked(current.id);
+  const liked = isLiked(current);
 
   return (
     <View className="flex-1 bg-bg">
@@ -42,10 +62,27 @@ export default function PlayerScreen() {
           <Pressable onPress={() => router.back()} hitSlop={12} className="p-2">
             <Icon name="chevron-down" size={26} />
           </Pressable>
-          <Text className="text-text text-sm font-medium">Now playing</Text>
-          <Pressable hitSlop={12} className="p-2">
-            <Icon name="more" size={22} />
-          </Pressable>
+          
+          <View className="items-center">
+            <Text className="text-text text-xs opacity-50 uppercase font-bold tracking-widest">Now playing</Text>
+            {timeLeft && (
+              <View className="flex-row items-center mt-1">
+                <Icon name="clock" size={12} color="#EF4444" />
+                <Text className="text-accent text-[10px] font-bold ml-1">
+                  {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View className="flex-row items-center">
+            <Pressable onPress={() => router.push("/queue")} hitSlop={12} className="p-2 mr-1">
+              <Icon name="list" size={22} />
+            </Pressable>
+            <Pressable onPress={showTimerOptions} hitSlop={12} className="p-2">
+              <Icon name="clock" size={22} color={timeLeft ? "#EF4444" : "#FFFFFF"} />
+            </Pressable>
+          </View>
         </View>
 
         <View className="flex-1 px-6 justify-center items-center">
@@ -75,17 +112,13 @@ export default function PlayerScreen() {
                 {current.artist}
               </Text>
             </View>
-            <Pressable
+            <AnimatedHeart
+              liked={liked}
               onPress={() => toggleLike(current)}
-              hitSlop={12}
-              className="p-2"
-            >
-              <Icon
-                name={liked ? "heart-filled" : "heart"}
-                size={26}
-                color={liked ? "#1DB954" : "#FFFFFF"}
-              />
-            </Pressable>
+              size={28}
+              activeColor="#EF4444"
+              inactiveColor="#FFFFFF"
+            />
           </View>
 
           <SeekBar />

@@ -12,7 +12,7 @@ type Tab = "liked" | "collection" | "local";
 
 export default function Library() {
   const { liked, likedJson, isLiked, toggleLike, resolveAndPlay } = useLibraryStore();
-  const playSong = usePlayerStore((s) => s.playSong);
+  const { playSong, addToQueue } = usePlayerStore();
   const [tab, setTab] = useState<Tab>("collection");
   const [local, setLocal] = useState<Song[]>([]);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
@@ -39,6 +39,31 @@ export default function Library() {
     if (!likedJson.length) return;
     const list = shuffle ? [...likedJson].sort(() => Math.random() - 0.5) : likedJson;
     handleJsonPress(list[0]);
+  };
+
+  const renderCollectionItem = (item: any, index: number) => {
+    const song: Song = {
+      id: item.id || `json:${item.title}-${item.artist}-${index}`,
+      title: item.title,
+      artist: item.artist,
+      album: item.album || "",
+      artwork: item.artwork || "",
+      url: item.url || "",
+      duration: item.duration || 0,
+      source: "online",
+    };
+    
+    const isResolving = resolvingId === (item.title + item.artist);
+    
+    return (
+      <SongRow
+        song={song}
+        liked={isLiked(song)}
+        onLike={() => toggleLike(song)}
+        onAddToQueue={() => addToQueue(song)}
+        onPress={() => handleJsonPress(item)}
+      />
+    );
   };
 
   return (
@@ -88,7 +113,7 @@ export default function Library() {
           onPress={importLocal}
           className="mx-5 mb-4 flex-row items-center bg-surface rounded-lg p-4 active:opacity-70 border border-white/5"
         >
-          <Icon name="folder" size={22} color="#1DB954" />
+          <Icon name="folder" size={22} color="#EF4444" />
           <Text className="text-text ml-3 font-medium">Import audio files</Text>
         </Pressable>
       )}
@@ -97,38 +122,16 @@ export default function Library() {
         data={tab === "collection" ? likedJson : tab === "liked" ? liked : local}
         keyExtractor={(item, index) => item.id || `${item.title}-${index}`}
         contentContainerStyle={{ paddingBottom: 140 }}
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           if (tab === "collection") {
-            const isResolving = resolvingId === (item.title + item.artist);
-            return (
-              <Pressable
-                onPress={() => handleJsonPress(item)}
-                className="flex-row items-center px-5 py-3 active:opacity-60"
-              >
-                <View className="w-12 h-12 rounded bg-surface2 items-center justify-center">
-                  {isResolving ? (
-                    <ActivityIndicator size="small" color="#1DB954" />
-                  ) : (
-                    <Icon name="music" size={20} color="#555" />
-                  )}
-                </View>
-                <View className="flex-1 ml-4">
-                  <Text className="text-text text-base font-bold" numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  <Text className="text-muted text-sm mt-1" numberOfLines={1}>
-                    {item.artist.split(";").join(", ")} • {item.album}
-                  </Text>
-                </View>
-                <Icon name="chevron-right" size={16} color="#333" />
-              </Pressable>
-            );
+            return renderCollectionItem(item, index);
           }
           return (
             <SongRow
               song={item}
-              liked={isLiked(item.id)}
+              liked={isLiked(item)}
               onLike={() => toggleLike(item)}
+              onAddToQueue={() => addToQueue(item)}
               onPress={() => playSong(item, tab === "liked" ? liked : local)}
             />
           );

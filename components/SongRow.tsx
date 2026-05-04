@@ -3,6 +3,7 @@ import { Pressable, View, Text } from "react-native";
 import { Image } from "expo-image";
 import { Song } from "../types/song";
 import { Icon } from "./Icon";
+import { AnimatedHeart } from "./AnimatedHeart";
 
 interface Props {
   song: Song;
@@ -10,9 +11,10 @@ interface Props {
   isActive?: boolean;
   onLike?: () => void;
   liked?: boolean;
+  onAddToQueue?: () => void;
 }
 
-export function SongRow({ song, onPress, isActive, onLike, liked }: Props) {
+export function SongRow({ song, onPress, isActive, onLike, liked, onAddToQueue }: Props) {
   return (
     <Pressable
       onPress={onPress}
@@ -31,25 +33,33 @@ export function SongRow({ song, onPress, isActive, onLike, liked }: Props) {
       </View>
       <View className="flex-1 ml-3">
         <Text
-          className={`text-base ${isActive ? "text-accent" : "text-text"}`}
+          className={`text-base font-medium ${isActive ? "text-accent" : "text-text"}`}
           numberOfLines={1}
         >
           {song.title}
         </Text>
-        <Text className="text-sm text-muted" numberOfLines={1}>
+        <Text className="text-xs text-muted mt-0.5" numberOfLines={1}>
           {song.artist}
           {song.source === "local" ? " • Local" : ""}
         </Text>
       </View>
-      {onLike ? (
-        <Pressable hitSlop={12} onPress={onLike} className="p-2">
-          <Icon
-            name={liked ? "heart-filled" : "heart"}
+      
+      <View className="flex-row items-center">
+        {onAddToQueue && (
+          <Pressable hitSlop={12} onPress={onAddToQueue} className="p-2 mr-1">
+            <Icon name="plus" size={20} color="#A0A0A0" />
+          </Pressable>
+        )}
+        {onLike && (
+          <AnimatedHeart
+            liked={!!liked}
+            onPress={onLike}
             size={20}
-            color={liked ? "#1DB954" : "#A0A0A0"}
+            activeColor="#EF4444"
+            inactiveColor="#A0A0A0"
           />
-        </Pressable>
-      ) : null}
+        )}
+      </View>
     </Pressable>
   );
 }

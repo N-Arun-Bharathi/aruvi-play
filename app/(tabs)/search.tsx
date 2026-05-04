@@ -17,9 +17,8 @@ import { useLibraryStore } from "../../store/likedStore";
 
 export default function Search() {
   const router = useRouter();
-  const playSong = usePlayerStore((s) => s.playSong);
-  const isLiked = useLibraryStore((s) => s.isLiked);
-  const toggleLike = useLibraryStore((s) => s.toggleLike);
+  const { playSong, addToQueue } = usePlayerStore();
+  const { isLiked, toggleLike, liked } = useLibraryStore();
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
@@ -54,7 +53,7 @@ export default function Search() {
       </View>
       {loading ? (
         <View className="py-8 items-center">
-          <ActivityIndicator color="#1DB954" />
+          <ActivityIndicator color="#EF4444" />
         </View>
       ) : null}
       <FlatList
@@ -65,8 +64,9 @@ export default function Search() {
         renderItem={({ item }) => (
           <SongRow
             song={item}
-            liked={isLiked(item.id)}
+            liked={isLiked(item)}
             onLike={() => toggleLike(item)}
+            onAddToQueue={() => addToQueue(item)}
             onPress={() => {
               playSong(item, results);
               router.push("/player");
