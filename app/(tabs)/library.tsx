@@ -102,7 +102,7 @@ export default function Library() {
         <View className="flex-row items-center bg-surface px-4 py-2 rounded-xl mb-4 border border-white/5">
           <Icon name="search" size={18} color="#A0A0A0" />
           <TextInput
-            className="flex-1 ml-3 text-text text-sm h-8"
+            className="flex-1 ml-3 text-text text-sm"
             placeholder={`Search ${tab === "collection" ? "collection" : tab === "liked" ? "liked songs" : "local files"}...`}
             placeholderTextColor="#A0A0A0"
             value={search}

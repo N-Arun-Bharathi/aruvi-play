@@ -1,7 +1,7 @@
 import axios from "axios";
 import { Song, SaavnSong } from "../types/song";
 
-const BASE = "https://jiosaavn-api-privatecvc2.vercel.app";
+const BASE = "https://saavn.sumit.co";
 
 const client = axios.create({
   baseURL: BASE,
@@ -12,13 +12,13 @@ function pickImage(image: SaavnSong["image"]): string | undefined {
   if (typeof image === "string") return image;
   if (!Array.isArray(image)) return undefined;
   const high = image.find((i) => i.quality === "500x500");
-  return (high ?? image[image.length - 1])?.link;
+  return (high ?? image[image.length - 1])?.url;
 }
 
 function pickUrl(downloadUrl: SaavnSong["downloadUrl"]): string | undefined {
   if (!downloadUrl?.length) return undefined;
   const high = downloadUrl.find((d) => d.quality === "320kbps");
-  return (high ?? downloadUrl[downloadUrl.length - 1])?.link;
+  return (high ?? downloadUrl[downloadUrl.length - 1])?.url;
 }
 
 function artistName(s: SaavnSong): string {
@@ -59,29 +59,18 @@ function decodeHtml(s: string): string {
     .replace(/&gt;/g, ">");
 }
 
-function deduplicateSongs(songs: Song[]): Song[] {
-  const uniqueMap = new Map();
-  for (const s of songs) {
-    const key = `${s.title.toLowerCase().trim()}|${s.artist.toLowerCase().trim()}`;
-    if (!uniqueMap.has(key)) {
-      uniqueMap.set(key, s);
-    }
-  }
-  return Array.from(uniqueMap.values());
-}
 
 export async function searchSongs(query: string, limit = 20): Promise<Song[]> {
   if (!query.trim()) return [];
-  const res = await client.get(`/search/songs`, {
+  const res = await client.get(`/api/search/songs`, {
     params: { query, limit },
   });
   const results: SaavnSong[] = res.data?.data?.results ?? [];
-  const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
-  return deduplicateSongs(mapped);
+  return results.map(mapSaavnToSong).filter(Boolean) as Song[];
 }
 
 export async function getSongById(id: string): Promise<Song | null> {
-  const res = await client.get(`/songs`, { params: { id: id } });
+  const res = await client.get(`/api/songs/${id}`);
   const results: SaavnSong[] = res.data?.data ?? [];
   if (!results.length) return null;
   return mapSaavnToSong(results[0]);
@@ -89,12 +78,11 @@ export async function getSongById(id: string): Promise<Song | null> {
 
 export async function getRelatedSongs(id: string): Promise<Song[]> {
   try {
-    const res = await client.get(`/songs/${id}/suggestions`, {
+    const res = await client.get(`/api/songs/${id}/suggestions`, {
       params: { limit: 20 },
     });
     const results: SaavnSong[] = res.data?.data ?? [];
-    const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
-    return deduplicateSongs(mapped);
+    return results.map(mapSaavnToSong).filter(Boolean) as Song[];
   } catch {
     return [];
   }
@@ -104,12 +92,11 @@ export async function getTrending(language = "tamil,english,hindi"): Promise<Son
   try {
     // Search specifically for top hits in the selected languages
     const langQuery = language.split(",").map(l => `${l.trim()} top hits`).join(" ");
-    const res = await client.get(`/search/songs`, {
+    const res = await client.get(`/api/search/songs`, {
       params: { query: langQuery || "trending songs", limit: 30 },
     });
     const results: SaavnSong[] = res.data?.data?.results ?? [];
-    const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
-    return deduplicateSongs(mapped);
+    return results.map(mapSaavnToSong).filter(Boolean) as Song[];
   } catch {
     return [];
   }

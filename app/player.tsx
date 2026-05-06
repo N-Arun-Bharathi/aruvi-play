@@ -30,12 +30,13 @@ export default function PlayerScreen() {
       "Sleep Timer",
       timeLeft ? `Current timer: ${Math.ceil(timeLeft / 60)}m left` : "Stop playback after:",
       [
-        { text: "15 minutes", onPress: () => setTimer(15) },
-        { text: "30 minutes", onPress: () => setTimer(30) },
-        { text: "60 minutes", onPress: () => setTimer(60) },
-        { text: "Off", onPress: () => setTimer(null), style: "destructive" },
         { text: "Cancel", style: "cancel" },
-      ]
+        { text: "15 min", onPress: () => setTimer(15) },
+        { text: "30 min", onPress: () => setTimer(30) },
+        { text: "60 min", onPress: () => setTimer(60) },
+        { text: "Turn Off", onPress: () => setTimer(null), style: "destructive" },
+      ],
+      { cancelable: true }
     );
   };
 
