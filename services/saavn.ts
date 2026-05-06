@@ -59,13 +59,25 @@ function decodeHtml(s: string): string {
     .replace(/&gt;/g, ">");
 }
 
+function deduplicateSongs(songs: Song[]): Song[] {
+  const uniqueMap = new Map();
+  for (const s of songs) {
+    const key = `${s.title.toLowerCase().trim()}|${s.artist.toLowerCase().trim()}`;
+    if (!uniqueMap.has(key)) {
+      uniqueMap.set(key, s);
+    }
+  }
+  return Array.from(uniqueMap.values());
+}
+
 export async function searchSongs(query: string, limit = 20): Promise<Song[]> {
   if (!query.trim()) return [];
   const res = await client.get(`/search/songs`, {
     params: { query, limit },
   });
   const results: SaavnSong[] = res.data?.data?.results ?? [];
-  return results.map(mapSaavnToSong).filter(Boolean) as Song[];
+  const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
+  return deduplicateSongs(mapped);
 }
 
 export async function getSongById(id: string): Promise<Song | null> {
@@ -81,7 +93,8 @@ export async function getRelatedSongs(id: string): Promise<Song[]> {
       params: { limit: 20 },
     });
     const results: SaavnSong[] = res.data?.data ?? [];
-    return results.map(mapSaavnToSong).filter(Boolean) as Song[];
+    const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
+    return deduplicateSongs(mapped);
   } catch {
     return [];
   }
@@ -95,7 +108,8 @@ export async function getTrending(language = "tamil,english,hindi"): Promise<Son
       params: { query: langQuery || "trending songs", limit: 30 },
     });
     const results: SaavnSong[] = res.data?.data?.results ?? [];
-    return results.map(mapSaavnToSong).filter(Boolean) as Song[];
+    const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
+    return deduplicateSongs(mapped);
   } catch {
     return [];
   }

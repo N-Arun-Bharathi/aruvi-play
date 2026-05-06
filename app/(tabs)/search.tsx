@@ -68,7 +68,12 @@ export default function Search() {
             onLike={() => toggleLike(item)}
             onAddToQueue={() => addToQueue(item)}
             onPress={() => {
-              playSong(item, results);
+              const { smartMode, playSmart, playSong } = usePlayerStore.getState();
+              if (smartMode) {
+                playSmart(item);
+              } else {
+                playSong(item, results);
+              }
               router.push("/player");
             }}
           />

@@ -19,10 +19,13 @@ interface PlayerState {
   repeat: RepeatMode;
   fetchingRelated: boolean;
   resolving: boolean;
-
+  smartMode: boolean;
+  currentContext: any | null;
 
   init: () => Promise<void>;
   playSong: (song: Song, contextQueue?: Song[]) => Promise<void>;
+  playSmart: (song: Song) => Promise<void>;
+  setSmartMode: (enabled: boolean) => void;
   addToQueue: (song: Song) => Promise<void>;
   togglePlay: () => Promise<void>;
   next: () => Promise<void>;
@@ -87,21 +90,55 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   repeat: "off",
   fetchingRelated: false,
   resolving: false,
+  smartMode: true, // Default to true as per premium vibe
+  currentContext: null,
 
   setResolving: (val: boolean) => set({ resolving: val }),
   setQueue: (queue: Song[]) => set({ queue }),
   setCurrent: (current: Song) => set({ current }),
+  setSmartMode: (enabled: boolean) => set({ smartMode: enabled }),
 
   init: async () => {
     if (get().ready) return;
     await setupPlayer();
+    const p = tryGetPlayer();
+    if (p) {
+      p.addListener("playbackStatusUpdate", (status) => {
+        if (status.didJustFinish) {
+          get().onTrackFinished();
+        }
+      });
+      // Handle remote lock-screen actions (Next/Prev/Like)
+      (p as any).addListener("remoteAction", ({ action }: { action: string }) => {
+        if (action === "next") get().next();
+        if (action === "previous") get().prev();
+        if (action === "like") {
+          const { current } = get();
+          if (current) {
+            const { useLibraryStore } = require("./likedStore");
+            useLibraryStore.getState().toggleLike(current);
+          }
+        }
+      });
+    }
     set({ ready: true });
   },
 
   playSong: async (song, contextQueue) => {
     await get().init();
     let queue = contextQueue && contextQueue.length ? contextQueue : [song];
-    let idx = queue.findIndex((s) => s.id === song.id);
+    
+    // Deduplicate the queue by title and artist for an "organic" feel
+    const uniqueMap = new Map();
+    for (const s of queue) {
+      const key = `${s.title.toLowerCase().trim()}|${s.artist.toLowerCase().trim()}`;
+      if (!uniqueMap.has(key)) {
+        uniqueMap.set(key, s);
+      }
+    }
+    queue = Array.from(uniqueMap.values());
+
+    let idx = queue.findIndex((s) => s.id === song.id || (s.title === song.title && s.artist === song.artist));
     if (idx < 0) {
       queue = [song, ...queue];
       idx = 0;
@@ -113,8 +150,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   addToQueue: async (song) => {
     const { queue } = get();
-    // Check if already in queue to avoid duplicates (optional as per prompt)
-    const exists = queue.some((s) => s.id === song.id || (s.title === song.title && s.artist === song.artist));
+    const exists = queue.some(
+      (s) =>
+        s.id === song.id ||
+        (s.title.toLowerCase().trim() === song.title.toLowerCase().trim() &&
+          s.artist.toLowerCase().trim() === song.artist.toLowerCase().trim())
+    );
     if (exists) {
       const { useToastStore } = require("./toastStore");
       useToastStore.getState().show("Already in Queue");
@@ -198,20 +239,50 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ repeat: next });
   },
 
+  playSmart: async (song) => {
+    const { fetchSmartSongs } = require("../services/smartQueue");
+    const { songs, context } = await fetchSmartSongs(song);
+    set({ currentContext: context });
+    await get().playSong(song, [song, ...songs]);
+  },
+
   appendRelatedIfNeeded: async () => {
-    const { queue, index, current, fetchingRelated } = get();
+    const { queue, index, current, fetchingRelated, smartMode, currentContext } = get();
     if (fetchingRelated) return;
     if (!current || current.source !== "online") return;
     
-    // Proactively fetch more songs if we're near the end of the current queue (less than 5 ahead)
     const songsAhead = queue.length - 1 - index;
-    if (songsAhead >= 5) return;
+    if (songsAhead >= 10) return;
 
     set({ fetchingRelated: true });
     try {
-      const related = await getRelatedSongs(current.id);
-      const existing = new Set(queue.map((s) => s.id));
-      const fresh = related.filter((s) => !existing.has(s.id));
+      let fresh: Song[] = [];
+      
+      if (smartMode) {
+        const { fetchSmartSongs } = require("../services/smartQueue");
+        const { songs, context } = await fetchSmartSongs(current);
+        if (!currentContext) set({ currentContext: context });
+        
+        fresh = songs.filter((s) => {
+          const inQueue = queue.some(q => 
+            q.id === s.id || 
+            (q.title.toLowerCase().trim() === s.title.toLowerCase().trim() && 
+             q.artist.toLowerCase().trim() === s.artist.toLowerCase().trim())
+          );
+          return !inQueue;
+        });
+      } else {
+        const related = await getRelatedSongs(current.id);
+        fresh = related.filter((s) => {
+          const inQueue = queue.some(q => 
+            q.id === s.id || 
+            (q.title.toLowerCase().trim() === s.title.toLowerCase().trim() && 
+             q.artist.toLowerCase().trim() === s.artist.toLowerCase().trim())
+          );
+          return !inQueue;
+        });
+      }
+
       if (fresh.length) {
         set({ queue: [...queue, ...fresh] });
       }

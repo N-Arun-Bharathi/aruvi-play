@@ -35,12 +35,16 @@ export function tryGetPlayer(): AudioPlayer | null {
   return player;
 }
 
-function songToMetadata(song: Song): AudioMetadata {
+function songToMetadata(song: Song): any {
+  const { useLibraryStore } = require("../store/likedStore");
+  const isLiked = useLibraryStore.getState().isLiked(song);
+  
   return {
     title: song.title,
     artist: song.artist,
     albumTitle: song.album,
     artworkUrl: song.artwork,
+    isLiked, // Supported by native Android bridge
   };
 }
 
@@ -52,7 +56,8 @@ export function loadAndPlay(song: Song) {
     player.setActiveForLockScreen(true, songToMetadata(song), {
       showSkipNext: true,
       showSkipPrevious: true,
-    });
+      showLikeButton: true,
+    } as any);
   } catch {
     // setActiveForLockScreen is no-op on platforms without lock-screen support (e.g. web).
   }

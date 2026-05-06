@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { View, Text, FlatList, Pressable, Alert, ActivityIndicator } from "react-native";
+import React, { useState, useMemo } from "react";
+import { View, Text, FlatList, Pressable, Alert, TextInput } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLibraryStore } from "../../store/likedStore";
 import { usePlayerStore } from "../../store/playerStore";
@@ -16,6 +16,17 @@ export default function Library() {
   const [tab, setTab] = useState<Tab>("collection");
   const [local, setLocal] = useState<Song[]>([]);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filteredData = useMemo(() => {
+    const raw = tab === "collection" ? likedJson : tab === "liked" ? liked : local;
+    if (!search.trim()) return raw;
+    const q = search.toLowerCase();
+    return raw.filter(s => 
+      s.title.toLowerCase().includes(q) || 
+      s.artist.toLowerCase().includes(q)
+    );
+  }, [tab, liked, likedJson, local, search]);
 
   async function importLocal() {
     try {
@@ -87,9 +98,26 @@ export default function Library() {
             onPress={() => setTab("local")}
           />
         </View>
+
+        <View className="flex-row items-center bg-surface px-4 py-2 rounded-xl mb-4 border border-white/5">
+          <Icon name="search" size={18} color="#A0A0A0" />
+          <TextInput
+            className="flex-1 ml-3 text-text text-sm h-8"
+            placeholder={`Search ${tab === "collection" ? "collection" : tab === "liked" ? "liked songs" : "local files"}...`}
+            placeholderTextColor="#A0A0A0"
+            value={search}
+            onChangeText={setSearch}
+            autoCorrect={false}
+          />
+          {search.length > 0 && (
+            <Pressable onPress={() => setSearch("")}>
+              <Icon name="plus" size={18} color="#A0A0A0" style={{ transform: [{ rotate: "45deg" }] }} />
+            </Pressable>
+          )}
+        </View>
       </View>
 
-      {tab === "collection" && likedJson.length > 0 && (
+      {tab === "collection" && filteredData.length > 0 && !search && (
         <View className="flex-row px-5 mb-4">
           <Pressable
             onPress={() => playAllJson(false)}
@@ -119,7 +147,7 @@ export default function Library() {
       )}
 
       <FlatList
-        data={tab === "collection" ? likedJson : tab === "liked" ? liked : local}
+        data={filteredData}
         keyExtractor={(item, index) => item.id || `${item.title}-${index}`}
         contentContainerStyle={{ paddingBottom: 140 }}
         renderItem={({ item, index }) => {

@@ -20,6 +20,7 @@ export default function PlayerScreen() {
   const addToQueue = usePlayerStore((s) => s.addToQueue);
   const { isLiked, toggleLike, liked: likedSongs } = useLibraryStore();
   const { timeLeft, setTimer } = useTimerStore();
+  const { smartMode, setSmartMode, currentContext } = usePlayerStore();
   
   const { width } = Dimensions.get("window");
   const artSize = Math.min(width - 48, 360);
@@ -123,6 +124,25 @@ export default function PlayerScreen() {
 
           <SeekBar />
           <PlayerControls />
+          
+          <View className="flex-row items-center justify-between mt-4 px-2 py-3 rounded-xl bg-white/5 border border-white/5">
+            <View className="flex-1">
+              <Text className="text-white/40 text-[10px] uppercase font-bold tracking-widest">Smart Mode</Text>
+              <Text className="text-text text-xs font-medium mt-0.5 capitalize">
+                {smartMode && currentContext
+                  ? `Vibe: ${currentContext.type} 🔥`
+                  : "Discovering similar vibes"}
+              </Text>
+            </View>
+            <Pressable 
+              onPress={() => setSmartMode(!smartMode)}
+              className={`px-3 py-1.5 rounded-full ${smartMode ? "bg-accent" : "bg-white/10"}`}
+            >
+              <Text className={`text-[10px] font-bold ${smartMode ? "text-black" : "text-white"}`}>
+                {smartMode ? "ON" : "OFF"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         <View className="h-10" />
