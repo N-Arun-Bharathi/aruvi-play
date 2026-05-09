@@ -69,15 +69,24 @@ async function loadIndex(queue: Song[], idx: number) {
       newQueue[idx] = songToPlay;
       store.setQueue(newQueue);
     } else {
-      console.error("Failed to resolve song:", song.title);
+      console.warn(`Could not resolve "${song.title}", skipping to next...`);
+      // Skip to next track rather than stopping
+      if (idx + 1 < queue.length) {
+        store.setCurrent(queue[idx + 1]);
+        usePlayerStore.setState({ index: idx + 1 });
+        // Small delay to prevent rapid-fire skipping if many fail
+        setTimeout(() => {
+          loadIndex(queue, idx + 1);
+        }, 500);
+      }
       return;
     }
   }
 
   loadAndPlay(songToPlay);
   store.setCurrent(songToPlay);
-  pushRecent(songToPlay).catch(() => {});
-  saveLastPlayed(songToPlay, 0).catch(() => {});
+  pushRecent(songToPlay).catch(() => { });
+  saveLastPlayed(songToPlay, 0).catch(() => { });
 }
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -127,7 +136,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playSong: async (song, contextQueue) => {
     await get().init();
     let queue = contextQueue && contextQueue.length ? contextQueue : [song];
-    
+
     // Deduplicate the queue by title and artist for an "organic" feel
     const uniqueMap = new Map();
     for (const s of queue) {
@@ -250,34 +259,34 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const { queue, index, current, fetchingRelated, smartMode, currentContext } = get();
     if (fetchingRelated) return;
     if (!current || current.source !== "online") return;
-    
+
     const songsAhead = queue.length - 1 - index;
     if (songsAhead >= 10) return;
 
     set({ fetchingRelated: true });
     try {
       let fresh: Song[] = [];
-      
+
       if (smartMode) {
         const { fetchSmartSongs } = require("../services/smartQueue");
         const { songs, context } = await fetchSmartSongs(current);
         if (!currentContext) set({ currentContext: context });
-        
-        fresh = songs.filter((s) => {
-          const inQueue = queue.some(q => 
-            q.id === s.id || 
-            (q.title.toLowerCase().trim() === s.title.toLowerCase().trim() && 
-             q.artist.toLowerCase().trim() === s.artist.toLowerCase().trim())
+
+        fresh = songs.filter((s: any) => {
+          const inQueue = queue.some(q =>
+            q.id === s.id ||
+            (q.title.toLowerCase().trim() === s.title.toLowerCase().trim() &&
+              q.artist.toLowerCase().trim() === s.artist.toLowerCase().trim())
           );
           return !inQueue;
         });
       } else {
         const related = await getRelatedSongs(current.id);
         fresh = related.filter((s) => {
-          const inQueue = queue.some(q => 
-            q.id === s.id || 
-            (q.title.toLowerCase().trim() === s.title.toLowerCase().trim() && 
-             q.artist.toLowerCase().trim() === s.artist.toLowerCase().trim())
+          const inQueue = queue.some(q =>
+            q.id === s.id ||
+            (q.title.toLowerCase().trim() === s.title.toLowerCase().trim() &&
+              q.artist.toLowerCase().trim() === s.artist.toLowerCase().trim())
           );
           return !inQueue;
         });

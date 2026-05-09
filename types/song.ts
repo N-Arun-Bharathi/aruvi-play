@@ -25,8 +25,8 @@ export interface SaavnSong {
   name: string;
   album: { id: string; name: string } | string;
   duration: string | number;
-  image: Array<{ quality: string; url: string }> | string;
-  downloadUrl: Array<{ quality: string; url: string }>;
+  image: Array<{ quality: string; url?: string; link?: string }> | string;
+  downloadUrl: Array<{ quality: string; url?: string; link?: string }>;
   primaryArtists?: string;
   artists?: { primary?: Array<{ name: string }> };
   language?: string;
