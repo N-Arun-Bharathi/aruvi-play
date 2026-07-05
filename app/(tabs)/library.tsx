@@ -12,8 +12,15 @@ import { useScrollHandler } from "../../hooks/useScrollHandler";
 type Tab = "liked" | "collection" | "local";
 
 export default function Library() {
-  const { liked, likedJson, isLiked, toggleLike, resolveAndPlay } = useLibraryStore();
-  const { playSong, addToQueue } = usePlayerStore();
+  const liked = useLibraryStore((s) => s.liked);
+  const likedJson = useLibraryStore((s) => s.likedJson);
+  const isLiked = useLibraryStore((s) => s.isLiked);
+  const toggleLike = useLibraryStore((s) => s.toggleLike);
+  const resolveAndPlay = useLibraryStore((s) => s.resolveAndPlay);
+
+  const playSong = usePlayerStore((s) => s.playSong);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+
   const [tab, setTab] = useState<Tab>("collection");
   const [local, setLocal] = useState<Song[]>([]);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
@@ -157,6 +164,11 @@ export default function Library() {
         data={filteredData}
         keyExtractor={(item, index) => item.id || `${item.title}-${index}`}
         contentContainerStyle={{ paddingBottom: 180 }}
+        getItemLayout={(data, index) => ({ length: 72, offset: 72 * index, index })}
+        removeClippedSubviews={true}
+        initialNumToRender={10}
+        maxToRenderPerBatch={10}
+        windowSize={5}
         renderItem={({ item, index }) => {
           if (tab === "collection") {
             return renderCollectionItem(item, index);

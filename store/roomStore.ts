@@ -132,6 +132,19 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       }
     }
 
+    // Clean up previous listeners if switching rooms
+    const oldCode = get().roomCode;
+    if (!useMock && database && oldCode) {
+      if (playbackListener) off(ref(database, `rooms/${oldCode}/playback`));
+      if (usersListener) off(ref(database, `rooms/${oldCode}/users`));
+      if (chatListener) off(ref(database, `rooms/${oldCode}/chat`));
+      if (reactionListener) off(ref(database, `rooms/${oldCode}/reactions`));
+      playbackListener = null;
+      usersListener = null;
+      chatListener = null;
+      reactionListener = null;
+    }
+
     // Connect listener to playback
     if (!useMock && database) {
       const roomRef = ref(database, `rooms/${cleanCode}`);
@@ -290,6 +303,11 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       if (chatListener) off(ref(database, `rooms/${roomCode}/chat`));
       if (reactionListener) off(ref(database, `rooms/${roomCode}/reactions`));
       
+      playbackListener = null;
+      usersListener = null;
+      chatListener = null;
+      reactionListener = null;
+
       // Remove self from room
       firebaseRemove(ref(database, `rooms/${roomCode}/users/${userId}`));
     }

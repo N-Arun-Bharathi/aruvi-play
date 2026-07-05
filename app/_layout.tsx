@@ -7,16 +7,30 @@ import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { useLibraryStore } from "../store/likedStore";
 import { usePlayerStore } from "../store/playerStore";
+import { enableFreeze } from "react-native-screens";
 
 import { Toast } from "../components/Toast";
+
+// Enable screen freeze to optimize navigation memory
+enableFreeze(true);
+
+// Set app startup benchmark timestamp
+if (typeof global !== "undefined" && !(global as any).appStartTime) {
+  (global as any).appStartTime = Date.now();
+}
 
 export default function RootLayout() {
   const hydrate = useLibraryStore((s) => s.hydrate);
   const init = usePlayerStore((s) => s.init);
 
   useEffect(() => {
-    hydrate();
-    init();
+    hydrate().then(() => {
+      init().then(() => {
+        if (typeof global !== "undefined" && !(global as any).appReadyTime) {
+          (global as any).appReadyTime = Date.now();
+        }
+      });
+    });
   }, [hydrate, init]);
 
   return (

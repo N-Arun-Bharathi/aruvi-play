@@ -8,13 +8,16 @@ import { usePlayerStore } from "../../store/playerStore";
 import { useScrollHandler } from "../../hooks/useScrollHandler";
 import { useSettingsStore } from "../../store/settingsStore";
 import { useRoomStore } from "../../store/roomStore";
+import { DevPerformanceDashboard } from "../../components/DevPerformanceDashboard";
 
 const REACTION_EMOJIS = ["❤️", "🔥", "👏", "😂", "🎉", "🚀"];
 
 export default function ProfileScreen() {
-  const { liked, recent } = useLibraryStore();
-  const { queue } = usePlayerStore();
-  const { languages, setLanguages } = useSettingsStore();
+  const likedLength = useLibraryStore((s) => s.liked.length);
+  const recentLength = useLibraryStore((s) => s.recent.length);
+  const queueLength = usePlayerStore((s) => s.queue.length);
+  const languages = useSettingsStore((s) => s.languages);
+  const setLanguages = useSettingsStore((s) => s.setLanguages);
   const onScroll = useScrollHandler();
 
   // Settings states
@@ -264,17 +267,17 @@ export default function ProfileScreen() {
             </Text>
             <View className="flex-row justify-between bg-surface rounded-2xl p-4 border border-white/5">
               <View className="items-center flex-1">
-                <Text className="text-text text-xl font-bold">{liked.length}</Text>
+                <Text className="text-text text-xl font-bold">{likedLength}</Text>
                 <Text className="text-muted text-[10px] uppercase font-semibold mt-1">Liked</Text>
               </View>
               <View className="w-[1px] h-8 bg-white/10 my-auto" />
               <View className="items-center flex-1">
-                <Text className="text-text text-xl font-bold">{recent.length}</Text>
+                <Text className="text-text text-xl font-bold">{recentLength}</Text>
                 <Text className="text-muted text-[10px] uppercase font-semibold mt-1">Recents</Text>
               </View>
               <View className="w-[1px] h-8 bg-white/10 my-auto" />
               <View className="items-center flex-1">
-                <Text className="text-text text-xl font-bold">{queue.length}</Text>
+                <Text className="text-text text-xl font-bold">{queueLength}</Text>
                 <Text className="text-muted text-[10px] uppercase font-semibold mt-1">In Queue</Text>
               </View>
             </View>
@@ -370,6 +373,15 @@ export default function ProfileScreen() {
               </View>
             </View>
           </View>
+
+          {__DEV__ && (
+            <View className="px-5 mt-6">
+              <Text className="text-muted text-xs uppercase font-bold tracking-wider mb-3">
+                Developer Performance Panel
+              </Text>
+              <DevPerformanceDashboard />
+            </View>
+          )}
 
           <Text className="text-center text-muted/40 text-[10px] mt-8 font-medium">
             Aruvi Play v1.1.0 • Made with ❤️

@@ -9,7 +9,7 @@ interface Props {
   onPress: () => void;
 }
 
-export function SongCard({ song, onPress }: Props) {
+export const SongCard = React.memo(function SongCard({ song, onPress }: Props) {
   return (
     <Pressable
       onPress={onPress}
@@ -34,4 +34,4 @@ export function SongCard({ song, onPress }: Props) {
       </Text>
     </Pressable>
   );
-}
+});

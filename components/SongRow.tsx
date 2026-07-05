@@ -14,7 +14,7 @@ interface Props {
   onAddToQueue?: () => void;
 }
 
-export function SongRow({ song, onPress, isActive, onLike, liked, onAddToQueue }: Props) {
+export const SongRow = React.memo(function SongRow({ song, onPress, isActive, onLike, liked, onAddToQueue }: Props) {
   return (
     <Pressable
       onPress={onPress}
@@ -62,4 +62,4 @@ export function SongRow({ song, onPress, isActive, onLike, liked, onAddToQueue }
       </View>
     </Pressable>
   );
-}
+});

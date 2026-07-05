@@ -32,9 +32,17 @@ const ARTISTS = [
 
 export default function Home() {
   const router = useRouter();
-  const { recent, refreshRecent, isLiked, toggleLike } = useLibraryStore();
-  const { playSong, addToQueue } = usePlayerStore();
-  const { languages, setLanguages, hydrate: hydrateSettings } = useSettingsStore();
+  const recent = useLibraryStore((s) => s.recent);
+  const refreshRecent = useLibraryStore((s) => s.refreshRecent);
+  const isLiked = useLibraryStore((s) => s.isLiked);
+  const toggleLike = useLibraryStore((s) => s.toggleLike);
+
+  const playSong = usePlayerStore((s) => s.playSong);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+
+  const languages = useSettingsStore((s) => s.languages);
+  const setLanguages = useSettingsStore((s) => s.setLanguages);
+  const hydrateSettings = useSettingsStore((s) => s.hydrate);
   
   const [trending, setTrending] = useState<Song[]>([]);
   const [recommended, setRecommended] = useState<Song[]>([]);

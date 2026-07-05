@@ -1,6 +1,13 @@
 import axios, { AxiosInstance } from "axios";
 import { Song, SaavnSong } from "../types/song";
 
+export let apiCallCount = 0;
+export const getApiCallCount = () => apiCallCount;
+
+const searchCache = new Map<string, Song[]>();
+const relatedSongsCache = new Map<string, Song[]>();
+const songByIdCache = new Map<string, Song>();
+
 const BASE_URLS = [
   "https://nepotuneapi.vercel.app",
   "https://jiosaavn-api-beta.vercel.app",
@@ -27,7 +34,8 @@ function rotateBase() {
   console.log(`Switched API base to: ${BASE_URLS[currentBaseIndex]}`);
 }
 
-async function request(url: string, params: any = {}): Promise<any> {
+async function request(url: string, params: any = {}, signal?: AbortSignal): Promise<any> {
+  apiCallCount++;
   const maxRetries = BASE_URLS.length;
   let lastError: any = null;
 
@@ -38,9 +46,12 @@ async function request(url: string, params: any = {}): Promise<any> {
       const isBeta = BASE_URLS[currentBaseIndex].includes("beta");
       const path = isBeta ? url : `/api${url}`;
       
-      const res = await client.get(path, { params });
+      const res = await client.get(path, { params, signal });
       return res.data;
     } catch (error: any) {
+      if (axios.isCancel(error)) {
+        throw error;
+      }
       lastError = error;
       // Only rotate on network errors or 404/500s. 
       if (!error.response || error.response.status >= 500 || error.response.status === 404) {
@@ -109,25 +120,43 @@ function decodeHtml(s: string): string {
     .replace(/&gt;/g, ">");
 }
 
-export async function searchSongs(query: string, limit = 20): Promise<Song[]> {
+export async function searchSongs(query: string, limit = 20, signal?: AbortSignal): Promise<Song[]> {
   if (!query.trim()) return [];
+  const cacheKey = `${query.trim().toLowerCase()}:${limit}`;
+  if (searchCache.has(cacheKey)) {
+    return searchCache.get(cacheKey)!;
+  }
+
   try {
-    const data = await request(`/search/songs`, { query, limit });
+    const data = await request(`/search/songs`, { query, limit }, signal);
     const results: SaavnSong[] = data?.data?.results ?? [];
-    return results.map(mapSaavnToSong).filter(Boolean) as Song[];
+    const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
+    searchCache.set(cacheKey, mapped);
+    return mapped;
   } catch (error) {
+    if (axios.isCancel(error)) {
+      throw error;
+    }
     console.error("Search error:", error);
     return [];
   }
 }
 
 export async function getSongById(id: string): Promise<Song | null> {
+  if (songByIdCache.has(id)) {
+    return songByIdCache.get(id)!;
+  }
+
   try {
     // Some use /songs?id=, some use /songs/:id. request() handles normalization to query params mostly.
     const data = await request(`/songs`, { id });
     const results: SaavnSong[] = data?.data ?? [];
     if (!results.length) return null;
-    return mapSaavnToSong(results[0]);
+    const song = mapSaavnToSong(results[0]);
+    if (song) {
+      songByIdCache.set(id, song);
+    }
+    return song;
   } catch (error) {
     console.error("Get song error:", error);
     return null;
@@ -135,10 +164,16 @@ export async function getSongById(id: string): Promise<Song | null> {
 }
 
 export async function getRelatedSongs(id: string): Promise<Song[]> {
+  if (relatedSongsCache.has(id)) {
+    return relatedSongsCache.get(id)!;
+  }
+
   try {
     const data = await request(`/songs/${id}/suggestions`, { limit: 20 });
     const results: SaavnSong[] = data?.data ?? [];
-    return results.map(mapSaavnToSong).filter(Boolean) as Song[];
+    const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
+    relatedSongsCache.set(id, mapped);
+    return mapped;
   } catch {
     return [];
   }

@@ -75,6 +75,8 @@ interface LikedState {
   hydrated: boolean;
   resolvedCache: Record<string, Song>;
   parsedLiked: ParsedSong[];
+  likedIds: Set<string>;
+  titleToArtistsMap: Map<string, string[][]>;
   hydrate: () => Promise<void>;
   toggleLike: (song: Song) => Promise<void>;
   isLiked: (song: Song) => boolean;
@@ -91,6 +93,8 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
   hydrated: false,
   resolvedCache: {},
   parsedLiked: [],
+  likedIds: new Set(),
+  titleToArtistsMap: new Map(),
 
   hydrate: async () => {
     let liked = await loadLiked();
@@ -119,7 +123,19 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
 
     const recent = await loadRecent();
     const parsedLiked = liked.map(getParsedSong);
-    set({ liked, likedJson, recent, hydrated: true, parsedLiked });
+    
+    const likedIds = new Set(liked.map((s) => s.id));
+    const titleToArtistsMap = new Map<string, string[][]>();
+    for (const s of liked) {
+      const target = getParsedSong(s);
+      const titleKey = target.normalizedTitle;
+      if (!titleToArtistsMap.has(titleKey)) {
+        titleToArtistsMap.set(titleKey, []);
+      }
+      titleToArtistsMap.get(titleKey)!.push(target.artists);
+    }
+
+    set({ liked, likedJson, recent, hydrated: true, parsedLiked, likedIds, titleToArtistsMap });
   },
 
   toggleLike: async (song) => {
@@ -131,7 +147,19 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
     
     await saveLiked(next);
     const parsedLiked = next.map(getParsedSong);
-    set({ liked: next, parsedLiked });
+    
+    const likedIds = new Set(next.map((s) => s.id));
+    const titleToArtistsMap = new Map<string, string[][]>();
+    for (const s of next) {
+      const target = getParsedSong(s);
+      const titleKey = target.normalizedTitle;
+      if (!titleToArtistsMap.has(titleKey)) {
+        titleToArtistsMap.set(titleKey, []);
+      }
+      titleToArtistsMap.get(titleKey)!.push(target.artists);
+    }
+
+    set({ liked: next, parsedLiked, likedIds, titleToArtistsMap });
 
     const toast = useToastStore.getState();
     if (exists) {
@@ -142,29 +170,41 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
   },
 
   isLiked: (song) => {
-    const { parsedLiked } = get();
-    if (!parsedLiked || parsedLiked.length === 0) return false;
+    const { likedIds, titleToArtistsMap } = get();
+    if (!likedIds || likedIds.size === 0) return false;
+    if (likedIds.has(song.id)) return true;
 
     const target = getParsedSong(song);
-
-    return parsedLiked.some((s) => {
-      if (s.id === target.id) return true;
-
-      // If titles don't match, they aren't the same song
-      if (
-        s.normalizedTitle !== target.normalizedTitle &&
-        !s.normalizedTitle.includes(target.normalizedTitle) &&
-        !target.normalizedTitle.includes(s.normalizedTitle)
-      ) {
-        return false;
-      }
-
-      return s.artists.some((name1) =>
-        target.artists.some((name2) =>
-          name1 === name2 || name1.includes(name2) || name2.includes(name1)
+    const titleKey = target.normalizedTitle;
+    
+    // Check if we have any liked song with the exact normalized title
+    const artistLists = titleToArtistsMap.get(titleKey);
+    if (artistLists) {
+      const match = artistLists.some((artists) => 
+        artists.some((name1) =>
+          target.artists.some((name2) =>
+            name1 === name2 || name1.includes(name2) || name2.includes(name1)
+          )
         )
       );
-    });
+      if (match) return true;
+    }
+
+    // Fallback: Check partial matches in titles
+    for (const [title, artistsList] of titleToArtistsMap.entries()) {
+      if (title !== titleKey && (title.includes(titleKey) || titleKey.includes(title))) {
+        const match = artistsList.some((artists) => 
+          artists.some((name1) =>
+            target.artists.some((name2) =>
+              name1 === name2 || name1.includes(name2) || name2.includes(name1)
+            )
+          )
+        );
+        if (match) return true;
+      }
+    }
+
+    return false;
   },
 
   refreshRecent: async () => {

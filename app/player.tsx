@@ -26,9 +26,10 @@ export default function PlayerScreen() {
   const router = useRouter();
   const current = usePlayerStore((s) => s.current);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const { isLiked, toggleLike } = useLibraryStore();
-  const { timeLeft, setTimer } = useTimerStore();
-  const { currentContext } = usePlayerStore();
+  const isLiked = useLibraryStore((s) => s.isLiked);
+  const toggleLike = useLibraryStore((s) => s.toggleLike);
+  const setTimer = useTimerStore((s) => s.setTimer);
+  const currentContext = usePlayerStore((s) => s.currentContext);
   const [volume, setVolume] = useState(1.0);
   const [showLyrics, setShowLyrics] = useState(false);
 
@@ -76,9 +77,10 @@ export default function PlayerScreen() {
   };
 
   const showTimerOptions = () => {
+    const activeTimeLeft = useTimerStore.getState().timeLeft;
     Alert.alert(
       "Sleep Timer",
-      timeLeft ? `Current timer: ${Math.ceil(timeLeft / 60)}m left` : "Stop playback after:",
+      activeTimeLeft ? `Current timer: ${Math.ceil(activeTimeLeft / 60)}m left` : "Stop playback after:",
       [
         { text: "Cancel", style: "cancel" },
         { text: "15 Min", onPress: () => setTimer(15) },
@@ -133,23 +135,7 @@ export default function PlayerScreen() {
             <Icon name="chevron-down" size={24} />
           </Pressable>
           
-          <View className="items-center">
-            <Text className="text-text text-[10px] opacity-60 uppercase font-bold tracking-widest">
-              Now Playing
-            </Text>
-            {timeLeft ? (
-              <View className="flex-row items-center mt-0.5 px-2 py-0.5 bg-accent/20 rounded-full">
-                <Icon name="clock" size={10} color="#1DB954" />
-                <Text className="text-accent text-[9px] font-bold ml-1">
-                  {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          <Pressable onPress={showTimerOptions} hitSlop={12} className="p-2 bg-white/10 rounded-full">
-            <Icon name="clock" size={22} color={timeLeft ? "#1DB954" : "#FFFFFF"} />
-          </Pressable>
+          <SleepTimerHeader onTimerPress={showTimerOptions} />
         </View>
 
         {/* Big Artwork Section */}
@@ -321,3 +307,28 @@ const styles = StyleSheet.create({
     elevation: 24,
   },
 });
+
+function SleepTimerHeader({ onTimerPress }: { onTimerPress: () => void }) {
+  const timeLeft = useTimerStore((s) => s.timeLeft);
+  return (
+    <>
+      <View className="items-center">
+        <Text className="text-text text-[10px] opacity-60 uppercase font-bold tracking-widest">
+          Now Playing
+        </Text>
+        {timeLeft ? (
+          <View className="flex-row items-center mt-0.5 px-2 py-0.5 bg-accent/20 rounded-full">
+            <Icon name="clock" size={10} color="#1DB954" />
+            <Text className="text-accent text-[9px] font-bold ml-1">
+              {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+
+      <Pressable onPress={onTimerPress} hitSlop={12} className="p-2 bg-white/10 rounded-full">
+        <Icon name="clock" size={22} color={timeLeft ? "#1DB954" : "#FFFFFF"} />
+      </Pressable>
+    </>
+  );
+}

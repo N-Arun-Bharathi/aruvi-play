@@ -9,8 +9,11 @@ import { useScrollHandler } from "../../hooks/useScrollHandler";
 import { QueueManager } from "../../services/queueManager";
 
 export default function QueueScreen() {
-  const { queue, index, playSong } = usePlayerStore();
-  const { isLiked, toggleLike } = useLibraryStore();
+  const queue = usePlayerStore((s) => s.queue);
+  const index = usePlayerStore((s) => s.index);
+  const playSong = usePlayerStore((s) => s.playSong);
+  const isLiked = useLibraryStore((s) => s.isLiked);
+  const toggleLike = useLibraryStore((s) => s.toggleLike);
   const onScroll = useScrollHandler();
 
   const [isEditing, setIsEditing] = React.useState(false);
@@ -177,6 +180,11 @@ export default function QueueScreen() {
         scrollEventThrottle={16}
         data={upcomingQueue}
         keyExtractor={(item) => item.id}
+        getItemLayout={(data, index) => ({ length: 72, offset: 72 * index, index })}
+        removeClippedSubviews={Platform.OS !== "web"}
+        initialNumToRender={8}
+        maxToRenderPerBatch={8}
+        windowSize={5}
         ListHeaderComponent={
           <View className="mb-4">
             <Text className="text-muted text-xs uppercase font-bold tracking-wider px-5 mb-3">

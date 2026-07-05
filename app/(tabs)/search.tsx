@@ -26,8 +26,11 @@ const GENRES = ["Melodies", "Kuthu / Dance", "Romantic Hits", "Gaana Beat", "Dev
 export default function Search() {
   const router = useRouter();
   const params = useLocalSearchParams<{ prefill?: string }>();
-  const { playSong, addToQueue, playSmart } = usePlayerStore();
-  const { isLiked, toggleLike } = useLibraryStore();
+  const playSong = usePlayerStore((s) => s.playSong);
+  const addToQueue = usePlayerStore((s) => s.addToQueue);
+  const playSmart = usePlayerStore((s) => s.playSmart);
+  const isLiked = useLibraryStore((s) => s.isLiked);
+  const toggleLike = useLibraryStore((s) => s.toggleLike);
   const onScroll = useScrollHandler();
 
   const [q, setQ] = useState("");
@@ -51,23 +54,46 @@ export default function Search() {
     }
   }, [params?.prefill]);
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!q.trim()) {
       setResults([]);
+      setLoading(false);
       return;
     }
+    
+    // Cancel the previous active search request if any
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     setLoading(true);
     debounceRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      
       try {
-        const r = await searchSongs(q);
-        setResults(r);
-      } catch (err) {
-        console.error("Search fetch failed", err);
+        const r = await searchSongs(q, 20, controller.signal);
+        if (!controller.signal.aborted) {
+          setResults(r);
+        }
+      } catch (err: any) {
+        const isCancel = err?.name === "CanceledError" || err?.name === "AbortError" || err?.message === "canceled";
+        if (!isCancel) {
+          console.error("Search fetch failed", err);
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
-    }, 400);
+    }, 300); // 300ms debounce
+    
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [q]);
 
   const saveSearchHistory = async (query: string) => {
@@ -212,6 +238,11 @@ export default function Search() {
           keyExtractor={(item) => item.id}
           contentContainerStyle={{ paddingTop: 8, paddingBottom: 180 }}
           keyboardShouldPersistTaps="handled"
+          getItemLayout={(data, index) => ({ length: 72, offset: 72 * index, index })}
+          removeClippedSubviews={true}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           renderItem={({ item }) => (
             <SongRow
               song={item}
