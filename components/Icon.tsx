@@ -26,11 +26,51 @@ export type IconName =
   | "plus"
   | "list"
   | "clock"
-  | "folder";
+  | "folder"
+  | "profile"
+  | "share"
+  | "lyrics"
+  | "drag-handle";
 
 export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
   const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none" };
   switch (name) {
+    case "profile":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "share":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "lyrics":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M9 12h6M9 16h6M5 8h14M5 4h14M3 20h18"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
     case "play":
       return (
         <Svg {...props}>
@@ -209,6 +249,17 @@ export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
             strokeWidth={2}
             strokeLinejoin="round"
           />
+        </Svg>
+      );
+    case "drag-handle":
+      return (
+        <Svg {...props}>
+          <Circle cx="9" cy="5" r="1.5" fill={color} />
+          <Circle cx="9" cy="12" r="1.5" fill={color} />
+          <Circle cx="9" cy="19" r="1.5" fill={color} />
+          <Circle cx="15" cy="5" r="1.5" fill={color} />
+          <Circle cx="15" cy="12" r="1.5" fill={color} />
+          <Circle cx="15" cy="19" r="1.5" fill={color} />
         </Svg>
       );
   }

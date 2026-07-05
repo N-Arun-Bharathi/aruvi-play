@@ -21,7 +21,7 @@ export function MiniPlayer() {
 
   return (
     <View 
-      style={{ bottom: 65 + (insets.bottom > 0 ? insets.bottom - 10 : 0) }}
+      style={{ bottom: 96 + (insets.bottom > 0 ? insets.bottom - 10 : 0) }}
       className="absolute left-2 right-2 rounded-xl overflow-hidden bg-surface2 border border-white/5"
     >
       <Pressable

@@ -35,12 +35,46 @@ const songsMatch = (s1: Song, s2: Song) => {
   return a1.some((name1) => a2.some((name2) => name1 === name2 || name1.includes(name2) || name2.includes(name1)));
 };
 
+interface ParsedSong {
+  id: string;
+  normalizedTitle: string;
+  artists: string[];
+}
+
+const songParseCache = new Map<string, ParsedSong>();
+
+const parseSong = (song: Song): ParsedSong => {
+  const getArtists = (a: string) =>
+    a
+      .toLowerCase()
+      .split(/[;,]/)
+      .map((x) => normalize(x))
+      .filter((x) => x.length > 2);
+
+  return {
+    id: song.id,
+    normalizedTitle: normalize(song.title),
+    artists: getArtists(song.artist),
+  };
+};
+
+const getParsedSong = (song: Song): ParsedSong => {
+  const key = `${song.id}|${song.title}|${song.artist}`;
+  let cached = songParseCache.get(key);
+  if (!cached) {
+    cached = parseSong(song);
+    songParseCache.set(key, cached);
+  }
+  return cached;
+};
+
 interface LikedState {
   liked: Song[];
   likedJson: any[];
   recent: Song[];
   hydrated: boolean;
   resolvedCache: Record<string, Song>;
+  parsedLiked: ParsedSong[];
   hydrate: () => Promise<void>;
   toggleLike: (song: Song) => Promise<void>;
   isLiked: (song: Song) => boolean;
@@ -56,6 +90,7 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
   recent: [],
   hydrated: false,
   resolvedCache: {},
+  parsedLiked: [],
 
   hydrate: async () => {
     let liked = await loadLiked();
@@ -83,7 +118,8 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
     }
 
     const recent = await loadRecent();
-    set({ liked, likedJson, recent, hydrated: true });
+    const parsedLiked = liked.map(getParsedSong);
+    set({ liked, likedJson, recent, hydrated: true, parsedLiked });
   },
 
   toggleLike: async (song) => {
@@ -94,7 +130,8 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
       : [song, ...liked];
     
     await saveLiked(next);
-    set({ liked: next });
+    const parsedLiked = next.map(getParsedSong);
+    set({ liked: next, parsedLiked });
 
     const toast = useToastStore.getState();
     if (exists) {
@@ -105,8 +142,29 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
   },
 
   isLiked: (song) => {
-    const { liked } = get();
-    return liked.some((s) => songsMatch(s, song));
+    const { parsedLiked } = get();
+    if (!parsedLiked || parsedLiked.length === 0) return false;
+
+    const target = getParsedSong(song);
+
+    return parsedLiked.some((s) => {
+      if (s.id === target.id) return true;
+
+      // If titles don't match, they aren't the same song
+      if (
+        s.normalizedTitle !== target.normalizedTitle &&
+        !s.normalizedTitle.includes(target.normalizedTitle) &&
+        !target.normalizedTitle.includes(s.normalizedTitle)
+      ) {
+        return false;
+      }
+
+      return s.artists.some((name1) =>
+        target.artists.some((name2) =>
+          name1 === name2 || name1.includes(name2) || name2.includes(name1)
+        )
+      );
+    });
   },
 
   refreshRecent: async () => {

@@ -2,12 +2,10 @@ import { create } from "zustand";
 import { Song, RepeatMode } from "../types/song";
 import {
   clearLockScreen,
-  loadAndPlay,
   setupPlayer,
   tryGetPlayer,
 } from "../services/trackPlayer";
-import { getRelatedSongs } from "../services/saavn";
-import { pushRecent, saveLastPlayed } from "../services/storage";
+import { QueueManager } from "../services/queueManager";
 
 interface PlayerState {
   ready: boolean;
@@ -33,8 +31,8 @@ interface PlayerState {
   seekTo: (s: number) => Promise<void>;
   toggleShuffle: () => Promise<void>;
   cycleRepeat: () => Promise<void>;
-  appendRelatedIfNeeded: () => Promise<void>;
-  onTrackFinished: () => Promise<void>;
+  setQueue: (queue: Song[]) => void;
+  playNextImmediately: (song: Song) => void;
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
@@ -46,83 +44,42 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a;
 }
 
-async function loadIndex(queue: Song[], idx: number) {
-  const song = queue[idx];
-  if (!song) return;
-
-  const { usePlayerStore } = require("./playerStore");
-  const store = usePlayerStore.getState();
-
-  let songToPlay = song;
-
-  // If it's a JSON placeholder (no URL), resolve it
-  if (!songToPlay.url) {
-    store.setResolving(true);
-    const { resolveSong } = require("../services/saavn");
-    const resolved = await resolveSong(song.title, song.artist);
-    store.setResolving(false);
-
-    if (resolved) {
-      songToPlay = { ...resolved, id: song.id }; // Keep the unique queue ID
-      // Update the queue in place
-      const newQueue = [...queue];
-      newQueue[idx] = songToPlay;
-      store.setQueue(newQueue);
-    } else {
-      console.warn(`Could not resolve "${song.title}", skipping to next...`);
-      // Skip to next track rather than stopping
-      if (idx + 1 < queue.length) {
-        store.setCurrent(queue[idx + 1]);
-        usePlayerStore.setState({ index: idx + 1 });
-        // Small delay to prevent rapid-fire skipping if many fail
-        setTimeout(() => {
-          loadIndex(queue, idx + 1);
-        }, 500);
-      }
-      return;
-    }
-  }
-
-  loadAndPlay(songToPlay);
-  store.setCurrent(songToPlay);
-  pushRecent(songToPlay).catch(() => { });
-  saveLastPlayed(songToPlay, 0).catch(() => { });
-}
-
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   ready: false,
   current: null,
   queue: [],
-  index: 0,
+  index: -1,
   isPlaying: false,
   shuffle: false,
   repeat: "off",
   fetchingRelated: false,
   resolving: false,
-  smartMode: true, // Default to true as per premium vibe
+  smartMode: false,
   currentContext: null,
 
-  setResolving: (val: boolean) => set({ resolving: val }),
-  setQueue: (queue: Song[]) => set({ queue }),
-  setCurrent: (current: Song) => set({ current }),
+  setQueue: (queue: Song[]) => {
+    QueueManager.getInstance().syncQueue(queue);
+  },
+
   setSmartMode: (enabled: boolean) => set({ smartMode: enabled }),
 
   init: async () => {
     if (get().ready) return;
     await setupPlayer();
-    const p = tryGetPlayer();
-    if (p) {
-      p.addListener("playbackStatusUpdate", (status) => {
-        if (status.didJustFinish) {
-          get().onTrackFinished();
-        }
-      });
-      // Handle remote lock-screen actions (Next/Prev/Like)
-      (p as any).addListener("remoteAction", ({ action }: { action: string }) => {
-        if (action === "next") get().next();
-        if (action === "previous") get().prev();
+    
+    // Set up QueueManager singleton
+    const manager = QueueManager.getInstance();
+    await manager.init();
+
+    // Setup remote lock-screen events directly inside the setup process
+    const player = tryGetPlayer();
+    if (player) {
+      // @ts-ignore - native bridge extension
+      player.addListener("remoteAction", ({ action }: { action: string }) => {
+        if (action === "next") manager.playNext();
+        if (action === "previous") manager.playPrevious();
         if (action === "like") {
-          const { current } = get();
+          const current = manager.queue[manager.index];
           if (current) {
             const { useLibraryStore } = require("./likedStore");
             useLibraryStore.getState().toggleLike(current);
@@ -130,111 +87,59 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         }
       });
     }
+
     set({ ready: true });
   },
 
   playSong: async (song, contextQueue) => {
     await get().init();
-    let queue = contextQueue && contextQueue.length ? contextQueue : [song];
+    await QueueManager.getInstance().playSong(song, contextQueue);
+  },
 
-    // Deduplicate the queue by title and artist for an "organic" feel
-    const uniqueMap = new Map();
-    for (const s of queue) {
-      const key = `${s.title.toLowerCase().trim()}|${s.artist.toLowerCase().trim()}`;
-      if (!uniqueMap.has(key)) {
-        uniqueMap.set(key, s);
-      }
-    }
-    queue = Array.from(uniqueMap.values());
-
-    let idx = queue.findIndex((s) => s.id === song.id || (s.title === song.title && s.artist === song.artist));
-    if (idx < 0) {
-      queue = [song, ...queue];
-      idx = 0;
-    }
-    set({ queue, index: idx, current: queue[idx], isPlaying: true });
-    await loadIndex(queue, idx);
-    if (queue[idx]?.source === "online") get().appendRelatedIfNeeded();
+  playSmart: async (song) => {
+    await get().init();
+    const { fetchSmartSongs } = require("../services/smartQueue");
+    const { songs, context } = await fetchSmartSongs(song);
+    set({ currentContext: context });
+    await QueueManager.getInstance().playSong(song, [song, ...songs]);
   },
 
   addToQueue: async (song) => {
-    const { queue } = get();
-    const exists = queue.some(
-      (s) =>
-        s.id === song.id ||
-        (s.title.toLowerCase().trim() === song.title.toLowerCase().trim() &&
-          s.artist.toLowerCase().trim() === song.artist.toLowerCase().trim())
-    );
-    if (exists) {
-      const { useToastStore } = require("./toastStore");
-      useToastStore.getState().show("Already in Queue");
-      return;
-    }
+    await get().init();
+    QueueManager.getInstance().addToQueue(song);
+  },
 
-    const newQueue = [...queue, song];
-    set({ queue: newQueue });
-
-    const { useToastStore } = require("./toastStore");
-    useToastStore.getState().show("Added to Queue");
-
-    // If nothing is playing, maybe start playing this song?
-    // The prompt says "without interrupting playback", so if something IS playing, just append.
-    // If NOTHING is playing, it's safer to just append or maybe play if the user expects it.
-    // Usually "Add to Queue" means just append.
+  playNextImmediately: (song) => {
+    QueueManager.getInstance().playNextImmediately(song);
   },
 
   togglePlay: async () => {
-    const p = tryGetPlayer();
-    if (!p) return;
-    if (p.playing) {
-      p.pause();
-      set({ isPlaying: false });
-    } else {
-      p.play();
-      set({ isPlaying: true });
-    }
+    QueueManager.getInstance().togglePlay();
   },
 
   next: async () => {
-    const { queue, index, repeat } = get();
-    let nextIdx = index + 1;
-    if (nextIdx >= queue.length) {
-      if (repeat === "all") nextIdx = 0;
-      else return;
-    }
-    set({ index: nextIdx, current: queue[nextIdx], isPlaying: true });
-    await loadIndex(queue, nextIdx);
-    if (queue[nextIdx]?.source === "online") get().appendRelatedIfNeeded();
+    await QueueManager.getInstance().playNext();
   },
 
   prev: async () => {
-    const p = tryGetPlayer();
-    if (p && p.currentTime > 4) {
-      await p.seekTo(0);
-      return;
-    }
-    const { queue, index } = get();
-    const prevIdx = index - 1;
-    if (prevIdx < 0) {
-      if (p) await p.seekTo(0);
-      return;
-    }
-    set({ index: prevIdx, current: queue[prevIdx], isPlaying: true });
-    await loadIndex(queue, prevIdx);
+    await QueueManager.getInstance().playPrevious();
   },
 
   seekTo: async (s) => {
-    const p = tryGetPlayer();
-    if (p) await p.seekTo(s);
+    QueueManager.getInstance().seekTo(s);
   },
 
   toggleShuffle: async () => {
-    const { shuffle, queue, index } = get();
+    const { shuffle } = get();
+    const manager = QueueManager.getInstance();
+    
     if (!shuffle) {
-      const current = queue[index];
-      const rest = queue.filter((_, i) => i !== index);
+      if (manager.queue.length === 0) return;
+      const current = manager.queue[manager.index];
+      const rest = manager.queue.filter((_, i) => i !== manager.index);
       const shuffled = [current, ...shuffleArray(rest)];
-      set({ shuffle: true, queue: shuffled, index: 0, current: shuffled[0] });
+      manager.syncQueue(shuffled);
+      set({ shuffle: true });
     } else {
       set({ shuffle: false });
     }
@@ -246,80 +151,5 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const p = tryGetPlayer();
     if (p) p.loop = next === "one";
     set({ repeat: next });
-  },
-
-  playSmart: async (song) => {
-    const { fetchSmartSongs } = require("../services/smartQueue");
-    const { songs, context } = await fetchSmartSongs(song);
-    set({ currentContext: context });
-    await get().playSong(song, [song, ...songs]);
-  },
-
-  appendRelatedIfNeeded: async () => {
-    const { queue, index, current, fetchingRelated, smartMode, currentContext } = get();
-    if (fetchingRelated) return;
-    if (!current || current.source !== "online") return;
-
-    const songsAhead = queue.length - 1 - index;
-    if (songsAhead >= 10) return;
-
-    set({ fetchingRelated: true });
-    try {
-      let fresh: Song[] = [];
-
-      if (smartMode) {
-        const { fetchSmartSongs } = require("../services/smartQueue");
-        const { songs, context } = await fetchSmartSongs(current);
-        if (!currentContext) set({ currentContext: context });
-
-        fresh = songs.filter((s: any) => {
-          const inQueue = queue.some(q =>
-            q.id === s.id ||
-            (q.title.toLowerCase().trim() === s.title.toLowerCase().trim() &&
-              q.artist.toLowerCase().trim() === s.artist.toLowerCase().trim())
-          );
-          return !inQueue;
-        });
-      } else {
-        const related = await getRelatedSongs(current.id);
-        fresh = related.filter((s) => {
-          const inQueue = queue.some(q =>
-            q.id === s.id ||
-            (q.title.toLowerCase().trim() === s.title.toLowerCase().trim() &&
-              q.artist.toLowerCase().trim() === s.artist.toLowerCase().trim())
-          );
-          return !inQueue;
-        });
-      }
-
-      if (fresh.length) {
-        set({ queue: [...queue, ...fresh] });
-      }
-    } finally {
-      set({ fetchingRelated: false });
-    }
-  },
-
-  onTrackFinished: async () => {
-    const { repeat, current, queue, index } = get();
-    if (repeat === "one") {
-      // expo-audio's `loop` handles this natively — but if loop wasn't set,
-      // restart manually.
-      if (current) loadIndex(queue, index);
-      return;
-    }
-    if (current?.source === "online") {
-      await get().appendRelatedIfNeeded();
-    }
-    const updated = get();
-    if (updated.queue.length > updated.index + 1) {
-      await get().next();
-    } else if (repeat === "all" && updated.queue.length > 0) {
-      set({ index: 0, current: updated.queue[0], isPlaying: true });
-      loadIndex(updated.queue, 0);
-    } else {
-      set({ isPlaying: false });
-      clearLockScreen();
-    }
   },
 }));

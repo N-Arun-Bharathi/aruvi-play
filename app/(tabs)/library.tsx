@@ -7,6 +7,7 @@ import { SongRow } from "../../components/SongRow";
 import { Icon } from "../../components/Icon";
 import { Song } from "../../types/song";
 import { pickLocalSongs } from "../../services/localFiles";
+import { useScrollHandler } from "../../hooks/useScrollHandler";
 
 type Tab = "liked" | "collection" | "local";
 
@@ -17,6 +18,7 @@ export default function Library() {
   const [local, setLocal] = useState<Song[]>([]);
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const onScroll = useScrollHandler();
 
   const filteredData = useMemo(() => {
     const raw = tab === "collection" ? likedJson : tab === "liked" ? liked : local;
@@ -64,8 +66,6 @@ export default function Library() {
       source: "online",
     };
     
-    const isResolving = resolvingId === (item.title + item.artist);
-    
     return (
       <SongRow
         song={song}
@@ -78,10 +78,12 @@ export default function Library() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-bg">
+    <SafeAreaView className="flex-1 bg-bg" edges={["top"]}>
       <View className="px-5 pt-4">
-        <Text className="text-text text-3xl font-bold mb-4">Your library</Text>
-        <View className="flex-row mb-4 overflow-hidden">
+        <Text className="text-text text-3xl font-bold mb-4">Library</Text>
+        
+        {/* Tab Buttons with Capsule Pill styling */}
+        <View className="flex-row bg-surface p-1 rounded-2xl mb-4 border border-white/5">
           <TabButton
             active={tab === "collection"}
             label="Collection"
@@ -89,29 +91,32 @@ export default function Library() {
           />
           <TabButton
             active={tab === "liked"}
-            label="Liked"
+            label="Liked Songs"
             onPress={() => setTab("liked")}
           />
           <TabButton
             active={tab === "local"}
-            label="Local"
+            label="Local Files"
             onPress={() => setTab("local")}
           />
         </View>
 
-        <View className="flex-row items-center bg-surface px-4 py-2 rounded-xl mb-4 border border-white/5">
-          <Icon name="search" size={18} color="#A0A0A0" />
+        {/* Apple Music Style Minimalist Search Bar */}
+        <View className="flex-row items-center bg-surface px-4 py-2.5 rounded-xl mb-4 border border-white/5">
+          <Icon name="search" size={16} color="#A0A0A0" />
           <TextInput
             className="flex-1 ml-3 text-text text-sm"
             placeholder={`Search ${tab === "collection" ? "collection" : tab === "liked" ? "liked songs" : "local files"}...`}
-            placeholderTextColor="#A0A0A0"
+            placeholderTextColor="#7A7A7A"
             value={search}
             onChangeText={setSearch}
             autoCorrect={false}
           />
           {search.length > 0 && (
-            <Pressable onPress={() => setSearch("")}>
-              <Icon name="plus" size={18} color="#A0A0A0" style={{ transform: [{ rotate: "45deg" }] }} />
+            <Pressable onPress={() => setSearch("")} hitSlop={8}>
+              <View style={{ transform: [{ rotate: "45deg" }] }}>
+                <Icon name="plus" size={16} color="#A0A0A0" />
+              </View>
             </Pressable>
           )}
         </View>
@@ -121,17 +126,17 @@ export default function Library() {
         <View className="flex-row px-5 mb-4">
           <Pressable
             onPress={() => playAllJson(false)}
-            className="flex-1 flex-row items-center justify-center bg-accent py-3 rounded-lg mr-2"
+            className="flex-1 flex-row items-center justify-center bg-accent py-3 rounded-2xl mr-2.5 active:opacity-80"
           >
-            <Icon name="play" size={20} color="black" />
-            <Text className="text-black font-bold ml-2">Play All</Text>
+            <Icon name="play" size={18} color="black" />
+            <Text className="text-black font-bold ml-2 text-sm">Play All</Text>
           </Pressable>
           <Pressable
             onPress={() => playAllJson(true)}
-            className="flex-1 flex-row items-center justify-center bg-surface py-3 rounded-lg ml-2 border border-white/10"
+            className="flex-1 flex-row items-center justify-center bg-surface py-3 rounded-2xl ml-2.5 border border-white/10 active:bg-white/10"
           >
-            <Icon name="shuffle" size={20} color="white" />
-            <Text className="text-text font-bold ml-2">Shuffle</Text>
+            <Icon name="shuffle" size={18} color="white" />
+            <Text className="text-text font-bold ml-2 text-sm">Shuffle</Text>
           </Pressable>
         </View>
       )}
@@ -139,17 +144,19 @@ export default function Library() {
       {tab === "local" && (
         <Pressable
           onPress={importLocal}
-          className="mx-5 mb-4 flex-row items-center bg-surface rounded-lg p-4 active:opacity-70 border border-white/5"
+          className="mx-5 mb-4 flex-row items-center bg-surface rounded-2xl p-4 active:opacity-75 border border-white/5"
         >
-          <Icon name="folder" size={22} color="#EF4444" />
-          <Text className="text-text ml-3 font-medium">Import audio files</Text>
+          <Icon name="folder" size={20} color="#1DB954" />
+          <Text className="text-text ml-3 font-semibold text-sm">Import local audio files</Text>
         </Pressable>
       )}
 
       <FlatList
+        onScroll={onScroll}
+        scrollEventThrottle={16}
         data={filteredData}
         keyExtractor={(item, index) => item.id || `${item.title}-${index}`}
-        contentContainerStyle={{ paddingBottom: 140 }}
+        contentContainerStyle={{ paddingBottom: 180 }}
         renderItem={({ item, index }) => {
           if (tab === "collection") {
             return renderCollectionItem(item, index);
@@ -165,18 +172,18 @@ export default function Library() {
           );
         }}
         ListEmptyComponent={
-          <View className="px-5 mt-12 items-center">
+          <View className="px-5 mt-16 items-center justify-center">
             <Icon
-              name={tab === "liked" ? "heart" : tab === "collection" ? "library" : "music"}
+              name={tab === "liked" ? "heart" : tab === "collection" ? "library" : "folder"}
               size={48}
-              color="#222"
+              color="#333"
             />
-            <Text className="text-muted text-center mt-4">
+            <Text className="text-muted text-center mt-4 text-sm font-medium">
               {tab === "liked"
-                ? "Songs you like will appear here."
+                ? "Liked songs will appear here."
                 : tab === "collection"
-                ? "No songs found in your local collection."
-                : "No local files imported."}
+                ? "Your offline collection is empty."
+                : "No local audio files imported."}
             </Text>
           </View>
         }
@@ -197,11 +204,11 @@ function TabButton({
   return (
     <Pressable
       onPress={onPress}
-      className={`px-4 py-2 rounded-full mr-2 ${
-        active ? "bg-accent" : "bg-surface"
+      className={`flex-1 py-2 rounded-xl items-center ${
+        active ? "bg-white/10" : "bg-transparent"
       }`}
     >
-      <Text className={active ? "text-black font-semibold" : "text-text"}>
+      <Text className={`text-xs font-semibold ${active ? "text-text" : "text-muted"}`}>
         {label}
       </Text>
     </Pressable>

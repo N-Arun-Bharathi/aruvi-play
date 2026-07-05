@@ -12,7 +12,7 @@ let currentBaseIndex = 0;
 function createClient(baseURL: string): AxiosInstance {
   return axios.create({
     baseURL,
-    timeout: 10000,
+    timeout: 20000,
   });
 }
 
@@ -43,9 +43,10 @@ async function request(url: string, params: any = {}): Promise<any> {
     } catch (error: any) {
       lastError = error;
       // Only rotate on network errors or 404/500s. 
-      // 400s (Bad Request) usually mean our query is wrong, so don't rotate.
       if (!error.response || error.response.status >= 500 || error.response.status === 404) {
         rotateBase();
+        // Wait a bit before retry
+        await new Promise(r => setTimeout(r, 1000));
       } else {
         throw error;
       }

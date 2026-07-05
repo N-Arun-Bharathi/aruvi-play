@@ -1,33 +1,14 @@
 import { useEffect } from "react";
-import { tryGetPlayer } from "../services/trackPlayer";
 import { usePlayerStore } from "../store/playerStore";
 
+/**
+  * Hook mounted once globally to initialize the player store on app launch.
+  * Listeners and queue logic are driven in QueueManager to prevent duplicate event subscriptions.
+  */
 export function usePlaybackEvents() {
-  const ready = usePlayerStore((s) => s.ready);
+  const init = usePlayerStore((s) => s.init);
 
   useEffect(() => {
-    if (!ready) return;
-    const player = tryGetPlayer();
-    if (!player) return;
-
-    const sub = player.addListener("playbackStatusUpdate", (status) => {
-      const state = usePlayerStore.getState();
-      if (status.playing !== state.isPlaying) {
-        usePlayerStore.setState({ isPlaying: status.playing });
-      }
-      if (status.didJustFinish) state.onTrackFinished();
-    });
-
-    // @ts-ignore - newly patched event
-    const remoteSub = player.addListener("remoteAction", ({ action }) => {
-      const state = usePlayerStore.getState();
-      if (action === "next") state.next();
-      if (action === "previous") state.prev();
-    });
-
-    return () => {
-      sub.remove();
-      remoteSub.remove();
-    };
-  }, [ready]);
+    init().catch((err) => console.error("Error initializing playback store", err));
+  }, [init]);
 }

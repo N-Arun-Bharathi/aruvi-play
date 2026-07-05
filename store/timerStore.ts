@@ -9,7 +9,7 @@ interface TimerState {
   tick: () => void;
 }
 
-let tickInterval: NodeJS.Timeout | null = null;
+let tickInterval: any = null;
 
 export const useTimerStore = create<TimerState>((set, get) => ({
   timeLeft: null,
