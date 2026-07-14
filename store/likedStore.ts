@@ -170,6 +170,7 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
   },
 
   isLiked: (song) => {
+    if (!song || !song.id) return false;
     const { likedIds, titleToArtistsMap } = get();
     if (!likedIds || likedIds.size === 0) return false;
     if (likedIds.has(song.id)) return true;

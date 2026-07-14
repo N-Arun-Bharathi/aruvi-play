@@ -53,16 +53,33 @@ export class QueueManager {
     const player = tryGetPlayer();
     if (!player) return;
 
+    // Listen to native track transitions in the main thread
+    const { default: TrackPlayer, Event } = require("react-native-track-player");
+
+    // We only need PlaybackActiveTrackChanged to catch when the native player
+    // transitions into next-placeholder or prev-placeholder, which tells us to skip tracks.
+    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event: any) => {
+      const track = event.track;
+      if (track) {
+        console.log("QueueManager MainThread: PlaybackActiveTrackChanged ->", track.id);
+        if (track.id === "next-placeholder") {
+          this.playNext();
+        } else if (track.id === "prev-placeholder") {
+          this.playPrevious();
+        }
+      }
+    });
+
     // Single listener for playback status updates
-    player.addListener("playbackStatusUpdate", (status) => {
+    player.addListener("playbackStatusUpdate", (status: any) => {
       // Synchronize play state
       if (status.playing !== this.isPlaying) {
         this.isPlaying = status.playing;
         this.syncWithZustand();
       }
 
-      if ((status as any).error) {
-        console.error("Playback status error:", (status as any).error);
+      if (status.error) {
+        console.error("Playback status error:", status.error);
         this.handlePlaybackError(this.index);
         return;
       }
@@ -154,6 +171,11 @@ export class QueueManager {
   }
 
   public async playNext() {
+    if (this.isResolving) {
+      console.log("QueueManager: Already resolving, ignoring playNext request");
+      return;
+    }
+
     const { usePlayerStore } = require("../store/playerStore");
     const store = usePlayerStore.getState();
     let nextIdx = this.index + 1;
@@ -178,6 +200,11 @@ export class QueueManager {
   }
 
   public async playPrevious() {
+    if (this.isResolving) {
+      console.log("QueueManager: Already resolving, ignoring playPrevious request");
+      return;
+    }
+
     const player = tryGetPlayer();
     if (player && player.currentTime > 4) {
       await player.seekTo(0);
@@ -238,13 +265,13 @@ export class QueueManager {
     const song = this.queue[idx];
     if (!song) return;
 
+    this.isResolving = true;
+    this.syncWithZustand();
+
     let songToPlay = song;
 
     // Resolve URL if missing (e.g. for skeleton songs from local/online list)
     if (!songToPlay.url) {
-      this.isResolving = true;
-      this.syncWithZustand();
-
       try {
         const resolved = await resolveSong(song.title, song.artist);
         if (resolved) {
@@ -255,27 +282,29 @@ export class QueueManager {
         }
       } catch (err) {
         console.error("Resolution error:", err);
-        // Error Recovery: Skip only that song, play next immediately
         this.isResolving = false;
         this.syncWithZustand();
         await this.handlePlaybackError(idx);
         return;
       }
-
-      this.isResolving = false;
-      this.syncWithZustand();
     }
 
     try {
-      loadAndPlay(songToPlay);
+      await loadAndPlay(songToPlay);
       this.currentlyPlayingId = songToPlay.id;
       
       pushRecent(songToPlay).catch(() => {});
       saveLastPlayed(songToPlay, 0).catch(() => {});
     } catch (err) {
       console.error("Playback load error:", err);
+      this.isResolving = false;
+      this.syncWithZustand();
       await this.handlePlaybackError(idx);
+      return;
     }
+
+    this.isResolving = false;
+    this.syncWithZustand();
   }
 
   private async handlePlaybackError(failedIdx: number) {

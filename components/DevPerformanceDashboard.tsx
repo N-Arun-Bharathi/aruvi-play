@@ -10,20 +10,21 @@ export function DevPerformanceDashboard() {
   const [memoryHeap, setMemoryHeap] = useState("N/A");
   
   const frameCountRef = useRef(0);
-  const lastTimeRef = useRef(performance.now());
+  const lastTimeRef = useRef(typeof performance !== "undefined" ? performance.now() : Date.now());
   const rafRef = useRef<number | null>(null);
 
   // Measure JS thread FPS using requestAnimationFrame loop
   useEffect(() => {
     const loop = (now: number) => {
       frameCountRef.current += 1;
-      const delta = now - lastTimeRef.current;
+      const currentNow = typeof performance !== "undefined" ? performance.now() : Date.now();
+      const delta = currentNow - lastTimeRef.current;
 
       if (delta >= 1000) {
         const computedFps = Math.round((frameCountRef.current * 1000) / delta);
         setJsFps(Math.min(computedFps, 60)); // Cap at 60
         frameCountRef.current = 0;
-        lastTimeRef.current = now;
+        lastTimeRef.current = currentNow;
       }
       rafRef.current = requestAnimationFrame(loop);
     };
