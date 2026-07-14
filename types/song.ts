@@ -10,6 +10,13 @@ export interface Song {
   duration?: number;
   source: SongSource;
   primaryArtists?: string;
+  primaryArtist?: string;
+  artists?: string[];
+  musicDirector?: string;
+  language?: string;
+  genre?: string;
+  mood?: string;
+  energy?: string;
 }
 
 export type RepeatMode = "off" | "one" | "all";
@@ -28,6 +35,10 @@ export interface SaavnSong {
   image: Array<{ quality: string; url?: string; link?: string }> | string;
   downloadUrl: Array<{ quality: string; url?: string; link?: string }>;
   primaryArtists?: string;
-  artists?: { primary?: Array<{ name: string }> };
+  artists?: {
+    primary?: Array<{ name: string; id?: string; role?: string }>;
+    featured?: Array<{ name: string; id?: string; role?: string }>;
+    all?: Array<{ name: string; id?: string; role?: string }>;
+  };
   language?: string;
 }

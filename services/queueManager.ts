@@ -1,9 +1,16 @@
 import { Song } from "../types/song";
 import { tryGetPlayer, loadAndPlay, clearLockScreen } from "./trackPlayer";
-import { getRelatedSongs, resolveSong } from "./saavn";
+import { getRelatedSongs, resolveSong, searchSongs, getTrending } from "./saavn";
 import { fetchSmartSongs } from "./smartQueue";
-import { pushRecent, saveLastPlayed } from "./storage";
+import { pushRecent, saveLastPlayed, loadRecent } from "./storage";
 import { useToastStore } from "../store/toastStore";
+import {
+  normalizeSongTitle,
+  extractPrimaryArtist,
+  isAlternateVersion,
+  isDuplicateSong,
+  scoreRecommendation,
+} from "../utils/songUtils";
 
 export class QueueManager {
   private static instance: QueueManager | null = null;
@@ -354,16 +361,235 @@ export class QueueManager {
     await this.playNext();
   }
 
-  // Check queue size and append recommendations if < 3 songs remain
+  public normalizeSongTitle(title: string): string {
+    return normalizeSongTitle(title);
+  }
+
+  public extractPrimaryArtist(song: Song): string {
+    return extractPrimaryArtist(song);
+  }
+
+  public isAlternateVersion(candidate: Song, currentSong: Song): boolean {
+    return isAlternateVersion(candidate, currentSong);
+  }
+
+  public isDuplicateSong(candidate: Song, existingSongs: Song[]): boolean {
+    return isDuplicateSong(candidate, existingSongs);
+  }
+
+  public scoreRecommendation(candidate: Song, seedSong: Song): number {
+    return scoreRecommendation(candidate, seedSong);
+  }
+
+  public async buildArtistQueue(seedSong: Song): Promise<Song[]> {
+    const artistSeed = this.extractPrimaryArtist(seedSong);
+    const firstArtistWord = artistSeed ? artistSeed.split(/\s+/)[0] : "";
+    const lang = seedSong.language || "tamil";
+    const mood = seedSong.mood || "unknown";
+    const energy = seedSong.energy || "medium";
+    const genre = seedSong.genre || "unknown";
+
+    const queries: string[] = [];
+    if (artistSeed) {
+      queries.push(`${artistSeed} ${lang} songs`);
+    }
+    if (firstArtistWord) {
+      if (energy === "high") {
+        queries.push(`${firstArtistWord} high energy songs`);
+        queries.push(`${firstArtistWord} mass songs`);
+      } else if (mood && mood !== "unknown") {
+        queries.push(`${firstArtistWord} ${mood} songs`);
+      }
+    }
+    const cleanTitle = this.normalizeSongTitle(seedSong.title);
+    if (cleanTitle) {
+      queries.push(`${lang} songs similar to ${cleanTitle}`);
+    }
+    if (genre && genre !== "unknown") {
+      queries.push(`${lang} ${genre} songs`);
+    }
+    if (mood && mood !== "unknown") {
+      queries.push(`${lang} ${mood} songs`);
+    }
+
+    // Fallbacks
+    if (queries.length === 0) {
+      if (seedSong.album) {
+        queries.push(`${seedSong.album} ${lang} songs`);
+      }
+      if (genre && genre !== "unknown") {
+        queries.push(`${lang} ${genre} songs`);
+      }
+      if (mood && mood !== "unknown") {
+        queries.push(`${lang} ${mood} songs`);
+      }
+    }
+
+    console.log(`QueueManager: Fetching recommendations for: ${seedSong.title}`);
+    const searchPromises = queries.map(q => searchSongs(q, 15).catch(() => []));
+    const suggestionsPromise = getRelatedSongs(seedSong.id).catch(() => []);
+
+    const resultsArray = await Promise.all([...searchPromises, suggestionsPromise]);
+    
+    let candidatesPool: Song[] = [];
+    for (const list of resultsArray) {
+      if (Array.isArray(list)) {
+        candidatesPool.push(...list);
+      }
+    }
+
+    if (candidatesPool.length < 10) {
+      try {
+        const trending = await getTrending(lang);
+        candidatesPool.push(...trending);
+      } catch (e) {
+        console.error("Failed to fetch trending as fallback:", e);
+      }
+    }
+
+    // Deduplicate candidate pool
+    const uniqueCandidates = new Map<string, Song>();
+    for (const c of candidatesPool) {
+      const key = c.id || c.url || `${c.title.toLowerCase().trim()}|${c.artist.toLowerCase().trim()}`;
+      if (!uniqueCandidates.has(key)) {
+        uniqueCandidates.set(key, c);
+      }
+    }
+    const candidates = Array.from(uniqueCandidates.values());
+
+    // Score and sort candidates
+    const scoredCandidates = candidates
+      .map(candidate => {
+        const baseScore = this.scoreRecommendation(candidate, seedSong);
+        if (baseScore === -Infinity) {
+          return { song: candidate, score: -Infinity };
+        }
+        const score = baseScore + Math.random() * 5; // small diversity factor
+        return { song: candidate, score };
+      })
+      .filter(item => item.score > -Infinity && item.song.id !== seedSong.id);
+
+    scoredCandidates.sort((a, b) => b.score - a.score);
+
+    // Build the list of recommended songs applying diversity rules
+    const activeQueue = this.index >= 0 ? this.queue.slice(this.index) : [...this.queue];
+    const recommendedSongs: Song[] = [];
+
+    const recentSongs = await loadRecent();
+    const recentIds = new Set(recentSongs.map(s => s.id));
+
+    const canAdd = (candidate: Song, added: Song[]): boolean => {
+      const fullQueueSoFar = [...activeQueue, ...added];
+      
+      if (this.isDuplicateSong(candidate, fullQueueSoFar)) {
+        return false;
+      }
+
+      if (recentIds.has(candidate.id)) {
+        return false;
+      }
+
+      const candNorm = this.normalizeSongTitle(candidate.title);
+      const checkRange = fullQueueSoFar.slice(-20);
+      if (checkRange.some(s => this.normalizeSongTitle(s.title) === candNorm)) {
+        return false;
+      }
+
+      if (candidate.album) {
+        const len = fullQueueSoFar.length;
+        if (len >= 2) {
+          const last1 = fullQueueSoFar[len - 1];
+          const last2 = fullQueueSoFar[len - 2];
+          if (last1.album && last2.album &&
+              last1.album.toLowerCase().trim() === candidate.album.toLowerCase().trim() &&
+              last2.album.toLowerCase().trim() === candidate.album.toLowerCase().trim()) {
+            return false;
+          }
+        }
+      }
+
+      return true;
+    };
+
+    for (const item of scoredCandidates) {
+      if (canAdd(item.song, recommendedSongs)) {
+        recommendedSongs.push(item.song);
+      }
+      if (recommendedSongs.length >= 20) {
+        break;
+      }
+    }
+
+    return recommendedSongs;
+  }
+
+  public async appendRecommendations(seedSong: Song): Promise<void> {
+    if (this.isResolving) {
+      console.log("QueueManager: Cannot append, track is transitioning");
+      return;
+    }
+    
+    console.log(`QueueManager: Building recommendations seeded by: ${seedSong.title}`);
+    const recommendations = await this.buildArtistQueue(seedSong);
+    
+    if (recommendations.length > 0) {
+      const formattedRecs = recommendations.map(s => 
+        s.source === "local" ? s : { ...s, url: "" }
+      );
+      this.queue = [...this.queue, ...formattedRecs];
+      console.log(`QueueManager: Appended ${formattedRecs.length} songs.`);
+      this.syncWithZustand();
+    } else {
+      console.warn("QueueManager: No recommendations found to append.");
+    }
+  }
+
+  // Check queue size and append recommendations if < 15 tracks remain or total queue size is < 30
   public async appendRecommendedSongsIfNeeded() {
-    // Disabled as requested
-    return;
+    if (this.isResolving) {
+      console.log("QueueManager: Cannot append, track is transitioning");
+      return;
+    }
+    if (this.isFetchingRelated) {
+      console.log("QueueManager: Already fetching recommendations");
+      return;
+    }
+
+    const remaining = this.queue.length - 1 - this.index;
+    if (remaining < 15 || this.queue.length < 30) {
+      const currentSong = this.queue[this.index];
+      if (!currentSong) return;
+
+      this.isFetchingRelated = true;
+      this.syncWithZustand();
+
+      try {
+        await this.appendRecommendations(currentSong);
+      } catch (err) {
+        console.error("Failed to append recommendations:", err);
+      } finally {
+        this.isFetchingRelated = false;
+        this.syncWithZustand();
+      }
+    }
   }
 
   // Fetch and append recommended songs
   public async appendRecommendedSongs() {
-    // Disabled as requested
-    return;
+    const currentSong = this.queue[this.index];
+    if (!currentSong) return;
+
+    this.isFetchingRelated = true;
+    this.syncWithZustand();
+
+    try {
+      await this.appendRecommendations(currentSong);
+    } catch (err) {
+      console.error("Failed to append recommendations:", err);
+    } finally {
+      this.isFetchingRelated = false;
+      this.syncWithZustand();
+    }
   }
 
   private deduplicateQueue(songs: Song[]): Song[] {

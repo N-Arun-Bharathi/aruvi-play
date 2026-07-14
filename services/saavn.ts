@@ -1,5 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import { Song, SaavnSong } from "../types/song";
+import { detectSongContext } from "../utils/contextDetector";
+import { getSearchPriority } from "../utils/songUtils";
 
 export let apiCallCount = 0;
 export const getApiCallCount = () => apiCallCount;
@@ -97,16 +99,92 @@ function albumName(s: SaavnSong): string {
 export function mapSaavnToSong(s: SaavnSong): Song | null {
   const url = pickUrl(s.downloadUrl);
   if (!url) return null;
+
+  // Extract artists and musicDirector
+  let musicDirector = "";
+  let primaryArtist = "";
+  const artistsList: string[] = [];
+
+  if (s.artists) {
+    if (Array.isArray(s.artists.all)) {
+      s.artists.all.forEach((a: any) => {
+        if (a.name) {
+          const name = decodeHtml(a.name).trim();
+          if (name && !artistsList.includes(name)) {
+            artistsList.push(name);
+          }
+          if (a.role === "music" && !musicDirector) {
+            musicDirector = name;
+          }
+        }
+      });
+    }
+
+    if (Array.isArray(s.artists.primary)) {
+      s.artists.primary.forEach((a: any) => {
+        if (a.name) {
+          const name = decodeHtml(a.name).trim();
+          if (name && !artistsList.includes(name)) {
+            artistsList.push(name);
+          }
+          if (a.role === "music" && !musicDirector) {
+            musicDirector = name;
+          }
+          if (!primaryArtist) {
+            primaryArtist = name;
+          }
+        }
+      });
+    }
+  }
+
+  // Fallbacks for primaryArtist:
+  const primaryArtistsStr = s.primaryArtists ? decodeHtml(s.primaryArtists) : "";
+  if (!primaryArtist && primaryArtistsStr) {
+    primaryArtist = primaryArtistsStr.split(/[;,]/)[0].trim();
+  }
+
+  const mappedArtist = decodeHtml(artistName(s));
+  if (!primaryArtist && mappedArtist) {
+    primaryArtist = mappedArtist.split(/[;,]/)[0].trim();
+  }
+
+  if (artistsList.length === 0 && mappedArtist) {
+    mappedArtist.split(/[;,]/).forEach((a) => {
+      const name = a.trim();
+      if (name && !artistsList.includes(name)) {
+        artistsList.push(name);
+      }
+    });
+  }
+
+  // Use context detector to extract language, energy, genre, mood
+  const tempSongForContext = {
+    title: decodeHtml(s.name),
+    artist: mappedArtist,
+  } as Song;
+  const context = detectSongContext(tempSongForContext);
+
+  const lang = s.language ? s.language.toLowerCase() : context.language;
+
   return {
     id: s.id,
     title: decodeHtml(s.name),
-    artist: decodeHtml(artistName(s)),
+    artist: mappedArtist,
     album: decodeHtml(albumName(s)),
     artwork: pickImage(s.image),
     url,
     duration: typeof s.duration === "string" ? parseInt(s.duration, 10) : s.duration,
     source: "online",
-    primaryArtists: typeof s.primaryArtists === "string" ? s.primaryArtists : undefined,
+    primaryArtists: primaryArtistsStr || undefined,
+
+    primaryArtist,
+    artists: artistsList,
+    musicDirector: musicDirector || undefined,
+    language: lang,
+    genre: context.type,
+    mood: context.mood,
+    energy: context.energy,
   };
 }
 
@@ -131,8 +209,12 @@ export async function searchSongs(query: string, limit = 20, signal?: AbortSigna
     const data = await request(`/search/songs`, { query, limit }, signal);
     const results: SaavnSong[] = data?.data?.results ?? [];
     const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
-    searchCache.set(cacheKey, mapped);
-    return mapped;
+    
+    // Sort search results based on search priority
+    const sorted = mapped.sort((a, b) => getSearchPriority(b.title) - getSearchPriority(a.title));
+    
+    searchCache.set(cacheKey, sorted);
+    return sorted;
   } catch (error) {
     if (axios.isCancel(error)) {
       throw error;

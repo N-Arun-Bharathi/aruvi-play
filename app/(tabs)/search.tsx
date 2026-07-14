@@ -116,12 +116,7 @@ export default function Search() {
 
   const handleSongPlay = (song: Song) => {
     saveSearchHistory(q || song.title);
-    const { smartMode } = usePlayerStore.getState();
-    if (smartMode) {
-      playSmart(song);
-    } else {
-      playSong(song, results);
-    }
+    playSong(song, [song]);
     router.push("/player");
   };
 
