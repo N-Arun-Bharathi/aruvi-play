@@ -11,6 +11,7 @@ export interface Song {
   source: SongSource;
   primaryArtists?: string;
   primaryArtist?: string;
+  normalized_title?: string;
   artists?: string[];
   musicDirector?: string;
   language?: string;

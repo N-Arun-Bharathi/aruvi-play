@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, ScrollView, Pressable, Switch, TextInput, Modal, KeyboardAvoidingView, Platform, FlatList } from "react-native";
+import { View, Text, ScrollView, Pressable, Switch, TextInput, Modal, KeyboardAvoidingView, Platform, FlatList, Share, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import { Icon } from "../../components/Icon";
@@ -9,6 +9,7 @@ import { useScrollHandler } from "../../hooks/useScrollHandler";
 import { useSettingsStore } from "../../store/settingsStore";
 import { useRoomStore } from "../../store/roomStore";
 import { DevPerformanceDashboard } from "../../components/DevPerformanceDashboard";
+import { useAuthStore } from "../../store/authStore";
 
 const REACTION_EMOJIS = ["❤️", "🔥", "👏", "😂", "🎉", "🚀"];
 
@@ -23,6 +24,41 @@ export default function ProfileScreen() {
   // Settings states
   const [offlineMode, setOfflineMode] = useState(false);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
+
+  // Auth states
+  const userProfile = useAuthStore((s) => s.userProfile);
+  const elevateToAdmin = useAuthStore((s) => s.elevateToAdmin);
+  const [adminKey, setAdminKey] = useState(userProfile?.is_owner ? "5868" : "");
+  const [syncingLikes, setSyncingLikes] = useState(false);
+
+  const handleAdminKeyChange = async (text: string) => {
+    setAdminKey(text);
+    if (text.trim() === "5868") {
+      await elevateToAdmin("5868");
+    } else if (userProfile?.is_owner && text.trim() === "") {
+      await elevateToAdmin("");
+    }
+  };
+
+  const handleAdminSync = async () => {
+    if (!userProfile) return;
+    setSyncingLikes(true);
+    try {
+      const { useLibraryStore } = require("../../store/likedStore");
+      const { dbGetLikedSongs, dbRemoveLikedSong } = require("../../services/sqlite");
+      const current = await dbGetLikedSongs(userProfile.id);
+      for (const s of current) {
+        await dbRemoveLikedSong(userProfile.id, s.id);
+      }
+      await useLibraryStore.getState().hydrate();
+      const { useToastStore } = require("../../store/toastStore");
+      useToastStore.getState().show("Admin liked list synced!");
+    } catch (e) {
+      console.error("Admin liked list sync error:", e);
+    } finally {
+      setSyncingLikes(false);
+    }
+  };
 
   // Room states
   const {
@@ -47,6 +83,26 @@ export default function ProfileScreen() {
   const [guestName, setGuestName] = useState("");
   const [inputCode, setInputCode] = useState("");
   const [chatInput, setChatInput] = useState("");
+
+  const handleAutoCreateRoom = async () => {
+    try {
+      const defaultHostName = userProfile?.name || "Aruvi User";
+      await createRoom(defaultHostName);
+    } catch (e) {
+      console.error("Auto create room error:", e);
+    }
+  };
+
+  const handleShareRoom = async () => {
+    if (!roomCode) return;
+    try {
+      await Share.share({
+        message: `Join my music room on Aruvi Play!\nRoom Code: ${roomCode}`,
+      });
+    } catch (e) {
+      console.error("Share failed", e);
+    }
+  };
 
   const handleCreateRoom = async () => {
     if (!hostName.trim()) return;
@@ -90,11 +146,19 @@ export default function ProfileScreen() {
           className="flex-1"
         >
           <View className="flex-row items-center justify-between px-5 py-4 border-b border-white/5 bg-surface/50">
-            <View>
-              <Text className="text-accent text-[10px] uppercase font-bold tracking-widest">
-                Music Room Active
-              </Text>
-              <Text className="text-text text-2xl font-black mt-0.5">{roomCode}</Text>
+            <View className="flex-row items-center flex-1 pr-4">
+              <View>
+                <Text className="text-accent text-[10px] uppercase font-bold tracking-widest">
+                  Music Room Active
+                </Text>
+                <Text className="text-text text-2xl font-black mt-0.5">{roomCode}</Text>
+              </View>
+              <Pressable
+                onPress={handleShareRoom}
+                className="ml-4 p-2 bg-white/5 border border-white/10 rounded-full active:bg-white/10"
+              >
+                <Icon name="share" size={18} color="#1DB954" />
+              </Pressable>
             </View>
             <Pressable
               onPress={leaveRoom}
@@ -256,8 +320,8 @@ export default function ProfileScreen() {
             <View className="w-24 h-24 rounded-full bg-surface2 overflow-hidden border border-white/10 items-center justify-center mb-4">
               <Icon name="profile" size={48} color="#A0A0A0" />
             </View>
-            <Text className="text-text text-2xl font-bold">Premium User</Text>
-            <Text className="text-muted text-sm mt-1">Free Tier Sync Active</Text>
+            <Text className="text-text text-2xl font-bold">{userProfile?.name || "Aruvi User"}</Text>
+            <Text className="text-muted text-sm mt-1">{userProfile?.phone || "Free Tier Sync Active"}</Text>
           </View>
 
           {/* Listen Stats */}
@@ -290,7 +354,7 @@ export default function ProfileScreen() {
             </Text>
             <View className="bg-surface rounded-2xl overflow-hidden border border-white/5">
               <Pressable
-                onPress={() => setCreateModalVisible(true)}
+                onPress={handleAutoCreateRoom}
                 className="flex-row items-center justify-between p-4 border-b border-white/5 active:bg-white/5"
               >
                 <View className="flex-row items-center">
@@ -348,6 +412,37 @@ export default function ProfileScreen() {
             </Text>
             <View className="bg-surface rounded-2xl overflow-hidden border border-white/5">
               <View className="flex-row items-center justify-between p-4 border-b border-white/5">
+                <View className="flex-row items-center flex-1 pr-4">
+                  <Icon name="lock" size={20} color="#A0A0A0" />
+                  <TextInput
+                    value={adminKey}
+                    onChangeText={handleAdminKeyChange}
+                    placeholder="Enter Admin Access Key"
+                    placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                    secureTextEntry
+                    className="text-text text-sm ml-3 flex-1 py-1"
+                  />
+                </View>
+                {userProfile?.is_owner && (
+                  <View className="flex-row items-center">
+                    <Pressable
+                      onPress={handleAdminSync}
+                      disabled={syncingLikes}
+                      className="mr-3 px-3 py-1.5 bg-accent rounded-xl active:bg-accent/80 flex-row items-center justify-center"
+                    >
+                      {syncingLikes ? (
+                        <ActivityIndicator size="small" color="#000000" style={{ width: 12, height: 12 }} />
+                      ) : (
+                        <Text className="text-black text-[10px] font-extrabold uppercase">Sync</Text>
+                      )}
+                    </Pressable>
+                    <View className="bg-accent/15 px-2.5 py-1 rounded-full border border-accent/20">
+                      <Text className="text-accent text-[9px] font-extrabold uppercase tracking-widest">Admin</Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+              <View className="flex-row items-center justify-between p-4 border-b border-white/5">
                 <View className="flex-row items-center">
                   <Icon name="folder" size={20} color="#A0A0A0" />
                   <Text className="text-text font-medium ml-3">Offline Cache Only</Text>
@@ -359,7 +454,7 @@ export default function ProfileScreen() {
                   thumbColor="#FFF"
                 />
               </View>
-              <View className="flex-row items-center justify-between p-4">
+              <View className="flex-row items-center justify-between p-4 border-b border-white/5">
                 <View className="flex-row items-center">
                   <Icon name="clock" size={20} color="#A0A0A0" />
                   <Text className="text-text font-medium ml-3">Haptic Feedback</Text>
@@ -371,6 +466,19 @@ export default function ProfileScreen() {
                   thumbColor="#FFF"
                 />
               </View>
+              <Pressable
+                onPress={() => {
+                  const { runUpdateCheckFlow } = require("../../services/updatesService");
+                  runUpdateCheckFlow(true).catch(() => {});
+                }}
+                className="flex-row items-center justify-between p-4 active:bg-white/5"
+              >
+                <View className="flex-row items-center">
+                  <Icon name="search" size={20} color="#A0A0A0" />
+                  <Text className="text-text font-medium ml-3">Check for Updates</Text>
+                </View>
+                <Icon name="next" size={16} color="#A0A0A0" />
+              </Pressable>
             </View>
           </View>
 

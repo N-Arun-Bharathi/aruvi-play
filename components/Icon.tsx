@@ -21,6 +21,7 @@ export type IconName =
   | "heart"
   | "heart-filled"
   | "chevron-down"
+  | "chevron-right"
   | "more"
   | "music"
   | "plus"
@@ -30,11 +31,46 @@ export type IconName =
   | "profile"
   | "share"
   | "lyrics"
-  | "drag-handle";
+  | "drag-handle"
+  | "phone"
+  | "lock";
 
 export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
   const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none" };
   switch (name) {
+    case "phone":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "lock":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M12 2a5 5 0 00-5 5v4H6a2 2 0 00-2 2v7a2 2 0 002 2h12a2 2 0 002-2v-7a2 2 0 00-2-2h-1V7a5 5 0 00-5-5zm-3 5a3 3 0 016 0v4H9V7zm3 9a1.5 1.5 0 110-3 1.5 1.5 0 010 3z"
+            fill={color}
+          />
+        </Svg>
+      );
+    case "chevron-right":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M9 18l6-6-6-6"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
     case "profile":
       return (
         <Svg {...props}>

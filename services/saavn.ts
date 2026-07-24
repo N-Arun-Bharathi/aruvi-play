@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import { Song, SaavnSong } from "../types/song";
 import { detectSongContext } from "../utils/contextDetector";
-import { getSearchPriority } from "../utils/songUtils";
+import { getSearchPriority, normalizeSongTitle } from "../utils/songUtils";
 
 export let apiCallCount = 0;
 export const getApiCallCount = () => apiCallCount;
@@ -179,6 +179,7 @@ export function mapSaavnToSong(s: SaavnSong): Song | null {
     primaryArtists: primaryArtistsStr || undefined,
 
     primaryArtist,
+    normalized_title: normalizeSongTitle(decodeHtml(s.name)),
     artists: artistsList,
     musicDirector: musicDirector || undefined,
     language: lang,

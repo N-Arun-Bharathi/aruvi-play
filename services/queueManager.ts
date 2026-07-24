@@ -4,6 +4,8 @@ import { getRelatedSongs, resolveSong, searchSongs, getTrending } from "./saavn"
 import { fetchSmartSongs } from "./smartQueue";
 import { pushRecent, saveLastPlayed, loadRecent } from "./storage";
 import { useToastStore } from "../store/toastStore";
+import { dbSaveQueue, dbGetQueue, dbSavePlaybackSession } from "./sqlite";
+import { useAuthStore } from "../store/authStore";
 import {
   normalizeSongTitle,
   extractPrimaryArtist,
@@ -22,6 +24,8 @@ export class QueueManager {
   public isResolving: boolean = false;
   public currentlyPlayingId: string | null = null;
   private isFetchingRelated: boolean = false;
+  private isTransitioning: boolean = false;
+  private lastSessionSyncTime: number = 0;
 
   private constructor() {
     // Private constructor for singleton
@@ -34,10 +38,16 @@ export class QueueManager {
     return QueueManager.instance;
   }
 
+  private getActiveUserId(): string {
+    const user = useAuthStore.getState().userProfile;
+    return user?.id || "guest-user";
+  }
+
   private syncWithZustand() {
     const { usePlayerStore } = require("../store/playerStore");
     const store = usePlayerStore.getState();
-    // We update Zustand so it's a reactive reflection of QueueManager
+    const userId = this.getActiveUserId();
+
     usePlayerStore.setState({
       queue: this.queue,
       index: this.index,
@@ -51,20 +61,44 @@ export class QueueManager {
     try {
       const { syncPlaybackWithRoom } = require("../store/roomStore");
       syncPlaybackWithRoom();
-    } catch (e) {
-      // Room store might not be initialized or imported yet
+    } catch (e) {}
+
+    // Save active queue to SQLite
+    dbSaveQueue(userId, "active-queue-session", this.index, this.queue)
+      .catch((e) => console.error("Failed to save active queue to SQLite", e));
+
+    // Sync playback session (throttled or forced on state change)
+    this.syncPlaybackSession(false);
+  }
+
+  public async syncPlaybackSession(force = false) {
+    const now = Date.now();
+    if (!force && now - this.lastSessionSyncTime < 15000) {
+      return; // Throttle to 15s
     }
+    this.lastSessionSyncTime = now;
+
+    const userId = this.getActiveUserId();
+    const currentSong = this.index >= 0 && this.index < this.queue.length ? this.queue[this.index] : null;
+    const player = tryGetPlayer();
+
+    dbSavePlaybackSession({
+      userId,
+      currentSongId: currentSong ? currentSong.id : null,
+      positionSeconds: player ? player.currentTime : 0,
+      isPlaying: this.isPlaying,
+      repeatMode: "off", // Sync repeat modes if needed
+      shuffleEnabled: false,
+    }).catch((e) => console.error("Failed to sync playback session to SQLite", e));
   }
 
   public async init() {
     const player = tryGetPlayer();
     if (!player) return;
 
-    // Listen to native track transitions in the main thread
     const { default: TrackPlayer, Event } = require("react-native-track-player");
 
-    // We only need PlaybackActiveTrackChanged to catch when the native player
-    // transitions into next-placeholder or prev-placeholder, which tells us to skip tracks.
+    // Listen to native track transitions - only advance if not already transitioning
     TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event: any) => {
       const track = event.track;
       if (track) {
@@ -79,7 +113,6 @@ export class QueueManager {
 
     // Single listener for playback status updates
     player.addListener("playbackStatusUpdate", (status: any) => {
-      // Synchronize play state
       if (status.playing !== this.isPlaying) {
         this.isPlaying = status.playing;
         this.syncWithZustand();
@@ -95,50 +128,59 @@ export class QueueManager {
         this.onTrackFinished();
       }
     });
-  }
 
-  // Play a song and optionally set a new context queue
-  // Play a song and optionally set a new context queue
-  public async playSong(song: Song, contextQueue?: Song[]) {
-    let newQueue = contextQueue && contextQueue.length ? [...contextQueue] : [song];
-
-    // Deduplicate incoming context queue
-    newQueue = this.deduplicateQueue(newQueue);
-
-    let idx = newQueue.findIndex(
-      (s) => s.id === song.id || (s.title.toLowerCase().trim() === song.title.toLowerCase().trim() && s.artist.toLowerCase().trim() === song.artist.toLowerCase().trim())
-    );
-
-    if (idx < 0) {
-      newQueue = [song, ...newQueue];
-      idx = 0;
+    // Restore queue from SQLite on startup
+    try {
+      const userId = this.getActiveUserId();
+      const saved = await dbGetQueue(userId);
+      if (saved && saved.songs.length > 0) {
+        this.queue = saved.songs;
+        this.index = saved.index;
+        this.syncWithZustand();
+        console.log(`QueueManager: Restored queue with ${saved.songs.length} songs at index ${saved.index}`);
+      }
+    } catch (e) {
+      console.error("QueueManager: Failed to restore active queue from SQLite", e);
     }
-
-    // Keep active song's URL intact, strip URLs for other online songs in the queue
-    // to force fresh URL resolution when they are played (preventing expired URL skips).
-    newQueue = newQueue.map((s, i) => {
-      if (i === idx) return s;
-      if (s.source === "local") return s;
-      return { ...s, url: "" };
-    });
-
-    this.queue = newQueue;
-    this.index = idx;
-    this.isPlaying = true;
-    this.syncWithZustand();
-
-    await this.loadIndex(idx);
-    
-    // Check if we need to auto-append recommendations
-    await this.appendRecommendedSongsIfNeeded();
   }
 
-  // Play a song next in queue (immediately after current song)
-  public playNextImmediately(song: Song) {
-    // If the song is already in the queue, remove it to prevent duplicates
-    this.queue = this.queue.filter((s) => !this.isDuplicate(s, song));
+  public async playSong(song: Song, contextQueue?: Song[]) {
+    if (this.isTransitioning) return;
+    this.isTransitioning = true;
 
-    // Strip URL for future playback if it's not local
+    try {
+      let newQueue = contextQueue && contextQueue.length ? [...contextQueue] : [song];
+      newQueue = this.deduplicateQueue(newQueue);
+
+      let idx = newQueue.findIndex(
+        (s) => s.id === song.id || (s.title.toLowerCase().trim() === song.title.toLowerCase().trim() && s.artist.toLowerCase().trim() === song.artist.toLowerCase().trim())
+      );
+
+      if (idx < 0) {
+        newQueue = [song, ...newQueue];
+        idx = 0;
+      }
+
+      newQueue = newQueue.map((s, i) => {
+        if (i === idx) return s;
+        if (s.source === "local") return s;
+        return { ...s, url: "" };
+      });
+
+      this.queue = newQueue;
+      this.index = idx;
+      this.isPlaying = true;
+      this.syncWithZustand();
+
+      await this.loadIndex(idx);
+      await this.appendRecommendedSongsIfNeeded();
+    } finally {
+      this.isTransitioning = false;
+    }
+  }
+
+  public playNextImmediately(song: Song) {
+    this.queue = this.queue.filter((s) => !this.isDuplicate(s, song));
     const songToInsert = song.source === "local" ? song : { ...song, url: "" };
 
     if (this.index === -1) {
@@ -152,7 +194,6 @@ export class QueueManager {
     useToastStore.getState().show("Playing Next");
   }
 
-  // Add song to the queue (immediately after the current song)
   public addToQueue(song: Song) {
     const exists = this.queue.some((s) => this.isDuplicate(s, song));
     if (exists) {
@@ -160,7 +201,6 @@ export class QueueManager {
       return;
     }
 
-    // Strip URL for future playback if it's not local
     const songToInsert = song.source === "local" ? song : { ...song, url: "" };
 
     if (this.index === -1) {
@@ -178,57 +218,61 @@ export class QueueManager {
   }
 
   public async playNext() {
-    if (this.isResolving) {
-      console.log("QueueManager: Already resolving, ignoring playNext request");
-      return;
-    }
+    if (this.isTransitioning) return;
+    this.isTransitioning = true;
 
-    const { usePlayerStore } = require("../store/playerStore");
-    const store = usePlayerStore.getState();
-    let nextIdx = this.index + 1;
+    try {
+      const { usePlayerStore } = require("../store/playerStore");
+      const store = usePlayerStore.getState();
+      let nextIdx = this.index + 1;
 
-    if (nextIdx >= this.queue.length) {
-      if (store.repeat === "all") {
-        nextIdx = 0;
-      } else {
-        this.isPlaying = false;
-        this.syncWithZustand();
-        clearLockScreen();
-        return;
+      if (nextIdx >= this.queue.length) {
+        if (store.repeat === "all") {
+          nextIdx = 0;
+        } else {
+          this.isPlaying = false;
+          this.syncWithZustand();
+          clearLockScreen();
+          return;
+        }
       }
+
+      this.index = nextIdx;
+      this.isPlaying = true;
+      this.syncWithZustand();
+
+      await this.loadIndex(nextIdx);
+      await this.appendRecommendedSongsIfNeeded();
+    } finally {
+      this.isTransitioning = false;
     }
-
-    this.index = nextIdx;
-    this.isPlaying = true;
-    this.syncWithZustand();
-
-    await this.loadIndex(nextIdx);
-    await this.appendRecommendedSongsIfNeeded();
   }
 
   public async playPrevious() {
-    if (this.isResolving) {
-      console.log("QueueManager: Already resolving, ignoring playPrevious request");
-      return;
+    if (this.isTransitioning) return;
+    this.isTransitioning = true;
+
+    try {
+      const player = tryGetPlayer();
+      if (player && player.currentTime > 4) {
+        await player.seekTo(0);
+        return;
+      }
+
+      const prevIdx = this.index - 1;
+      if (prevIdx < 0) {
+        if (player) await player.seekTo(0);
+        return;
+      }
+
+      this.index = prevIdx;
+      this.isPlaying = true;
+      this.syncWithZustand();
+
+      await this.loadIndex(prevIdx);
+    } finally {
+      this.isTransitioning = false;
     }
-
-    const player = tryGetPlayer();
-    if (player && player.currentTime > 4) {
-      await player.seekTo(0);
-      return;
-    }
-
-    const prevIdx = this.index - 1;
-    if (prevIdx < 0) {
-      if (player) await player.seekTo(0);
-      return;
-    }
-
-    this.index = prevIdx;
-    this.isPlaying = true;
-    this.syncWithZustand();
-
-    await this.loadIndex(prevIdx);
   }
 
   public togglePlay() {
@@ -243,21 +287,21 @@ export class QueueManager {
       this.isPlaying = true;
     }
     this.syncWithZustand();
+    this.syncPlaybackSession(true); // Force sync on state switch
   }
 
   public seekTo(seconds: number) {
     const player = tryGetPlayer();
     if (player) {
       player.seekTo(seconds);
+      this.syncPlaybackSession(true);
     }
   }
 
   public syncQueue(newQueue: Song[]) {
-    // Safely update queue (e.g. from drag to reorder)
     const currentSong = this.queue[this.index];
     this.queue = newQueue;
     
-    // Find new index of current song to keep playback synchronized
     if (currentSong) {
       const newIdx = newQueue.findIndex((s) => s.id === currentSong.id);
       if (newIdx !== -1) {
@@ -267,7 +311,6 @@ export class QueueManager {
     this.syncWithZustand();
   }
 
-  // Load song at index and play it, handling errors and resolution
   private async loadIndex(idx: number) {
     const song = this.queue[idx];
     if (!song) return;
@@ -277,7 +320,6 @@ export class QueueManager {
 
     let songToPlay = song;
 
-    // Resolve URL if missing (e.g. for skeleton songs from local/online list)
     if (!songToPlay.url) {
       try {
         const resolved = await resolveSong(song.title, song.artist);
@@ -316,16 +358,13 @@ export class QueueManager {
 
   private async handlePlaybackError(failedIdx: number) {
     console.warn(`Song at index ${failedIdx} failed. Skipping...`);
-    // Check if next song is available
     if (failedIdx + 1 < this.queue.length) {
       this.index = failedIdx + 1;
       this.syncWithZustand();
-      // Add small timeout to avoid rapid loop
       setTimeout(() => {
         this.loadIndex(this.index);
       }, 800);
     } else {
-      // Queue ended with failure, try to append and play
       await this.appendRecommendedSongs();
       if (this.queue.length > failedIdx + 1) {
         this.index = failedIdx + 1;
@@ -344,8 +383,6 @@ export class QueueManager {
     const currentSong = this.queue[this.index];
     if (!currentSong) return;
 
-    // Guard: Only advance if the song that just finished is the one that was actually loaded and playing,
-    // and prevent duplicate processing of the same finished track.
     if (currentSong.id !== this.currentlyPlayingId || currentSong.id === this.lastFinishedId) {
       return;
     }
@@ -357,7 +394,6 @@ export class QueueManager {
       return;
     }
 
-    // Auto-advance
     await this.playNext();
   }
 
@@ -412,7 +448,6 @@ export class QueueManager {
       queries.push(`${lang} ${mood} songs`);
     }
 
-    // Fallbacks
     if (queries.length === 0) {
       if (seedSong.album) {
         queries.push(`${seedSong.album} ${lang} songs`);
@@ -447,7 +482,6 @@ export class QueueManager {
       }
     }
 
-    // Deduplicate candidate pool
     const uniqueCandidates = new Map<string, Song>();
     for (const c of candidatesPool) {
       const key = c.id || c.url || `${c.title.toLowerCase().trim()}|${c.artist.toLowerCase().trim()}`;
@@ -457,21 +491,19 @@ export class QueueManager {
     }
     const candidates = Array.from(uniqueCandidates.values());
 
-    // Score and sort candidates
     const scoredCandidates = candidates
       .map(candidate => {
         const baseScore = this.scoreRecommendation(candidate, seedSong);
         if (baseScore === -Infinity) {
           return { song: candidate, score: -Infinity };
         }
-        const score = baseScore + Math.random() * 5; // small diversity factor
+        const score = baseScore + Math.random() * 5;
         return { song: candidate, score };
       })
       .filter(item => item.score > -Infinity && item.song.id !== seedSong.id);
 
     scoredCandidates.sort((a, b) => b.score - a.score);
 
-    // Build the list of recommended songs applying diversity rules
     const activeQueue = this.index >= 0 ? this.queue.slice(this.index) : [...this.queue];
     const recommendedSongs: Song[] = [];
 
@@ -524,10 +556,7 @@ export class QueueManager {
   }
 
   public async appendRecommendations(seedSong: Song): Promise<void> {
-    if (this.isResolving) {
-      console.log("QueueManager: Cannot append, track is transitioning");
-      return;
-    }
+    if (this.isResolving) return;
     
     console.log(`QueueManager: Building recommendations seeded by: ${seedSong.title}`);
     const recommendations = await this.buildArtistQueue(seedSong);
@@ -539,21 +568,11 @@ export class QueueManager {
       this.queue = [...this.queue, ...formattedRecs];
       console.log(`QueueManager: Appended ${formattedRecs.length} songs.`);
       this.syncWithZustand();
-    } else {
-      console.warn("QueueManager: No recommendations found to append.");
     }
   }
 
-  // Check queue size and append recommendations if < 15 tracks remain or total queue size is < 30
   public async appendRecommendedSongsIfNeeded() {
-    if (this.isResolving) {
-      console.log("QueueManager: Cannot append, track is transitioning");
-      return;
-    }
-    if (this.isFetchingRelated) {
-      console.log("QueueManager: Already fetching recommendations");
-      return;
-    }
+    if (this.isResolving || this.isFetchingRelated) return;
 
     const remaining = this.queue.length - 1 - this.index;
     if (remaining < 15 || this.queue.length < 30) {
@@ -574,7 +593,6 @@ export class QueueManager {
     }
   }
 
-  // Fetch and append recommended songs
   public async appendRecommendedSongs() {
     const currentSong = this.queue[this.index];
     if (!currentSong) return;

@@ -1,37 +1,73 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Song } from "../types/song";
+import { useAuthStore } from "../store/authStore";
+import {
+  dbGetLikedSongs,
+  dbSaveLikedSong,
+  dbRemoveLikedSong,
+  dbGetHistory,
+  dbSaveHistory,
+  dbSaveUser,
+} from "./sqlite";
+
+// Fetch the active authenticated user ID
+function getActiveUserId(): string {
+  const user = useAuthStore.getState().userProfile;
+  return user?.id || "guest-user";
+}
 
 const KEYS = {
-  liked: "aruvi:liked",
-  recent: "aruvi:recent",
   lastPlayed: "aruvi:lastPlayed",
 } as const;
 
 export async function loadLiked(): Promise<Song[]> {
-  const raw = await AsyncStorage.getItem(KEYS.liked);
-  return raw ? JSON.parse(raw) : [];
+  try {
+    const userId = getActiveUserId();
+    return await dbGetLikedSongs(userId);
+  } catch (e) {
+    console.error("Failed to load liked songs from SQLite", e);
+    return [];
+  }
 }
 
 export async function saveLiked(songs: Song[]): Promise<void> {
-  await AsyncStorage.setItem(KEYS.liked, JSON.stringify(songs));
+  try {
+    const userId = getActiveUserId();
+    const current = await dbGetLikedSongs(userId);
+    for (const song of current) {
+      await dbRemoveLikedSong(userId, song.id);
+    }
+    for (const song of songs) {
+      await dbSaveLikedSong(userId, song);
+    }
+  } catch (e) {
+    console.error("Failed to save liked songs to SQLite", e);
+  }
 }
 
 export async function loadRecent(): Promise<Song[]> {
-  const raw = await AsyncStorage.getItem(KEYS.recent);
-  return raw ? JSON.parse(raw) : [];
+  try {
+    const userId = getActiveUserId();
+    return await dbGetHistory(userId, 30);
+  } catch (e) {
+    console.error("Failed to load history from SQLite", e);
+    return [];
+  }
 }
 
 export async function saveRecent(songs: Song[]): Promise<void> {
-  await AsyncStorage.setItem(KEYS.recent, JSON.stringify(songs.slice(0, 30)));
+  // Handled dynamically via pushRecent/dbSaveHistory
 }
 
 export async function pushRecent(song: Song): Promise<Song[]> {
-  const list = await loadRecent();
-  const filtered = list.filter((s) => s.id !== song.id);
-  filtered.unshift(song);
-  const trimmed = filtered.slice(0, 30);
-  await saveRecent(trimmed);
-  return trimmed;
+  try {
+    const userId = getActiveUserId();
+    await dbSaveHistory(userId, song, 100.0, "online");
+    return await dbGetHistory(userId, 30);
+  } catch (e) {
+    console.error("Failed to push history to SQLite", e);
+    return [];
+  }
 }
 
 export async function loadLastPlayed(): Promise<{
