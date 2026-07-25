@@ -1,6 +1,7 @@
 import React from "react";
 import { View, TextInput, Pressable } from "react-native";
 import { Icon } from "./Icon";
+import { useTheme } from "../utils/theme";
 
 interface Props {
   value: string;
@@ -14,15 +15,24 @@ export function SearchBar({
   value,
   onChangeText,
   onSubmit,
-  placeholder = "Songs, artists, albums",
+  placeholder = "What do you want to listen to?",
   autoFocus,
 }: Props) {
+  const theme = useTheme();
+
   return (
-    <View className="flex-row items-center bg-surface rounded-full px-4 py-3">
-      <Icon name="search" size={18} color="#A0A0A0" />
+    <View 
+      className="flex-row items-center rounded-2xl px-4 py-3 border"
+      style={{
+        backgroundColor: theme.card,
+        borderColor: theme.border
+      }}
+    >
+      <Icon name="search" size={18} color={theme.secondaryText} />
       <TextInput
-        className="flex-1 ml-3 text-text text-base"
-        placeholderTextColor="#7A7A7A"
+        className="flex-1 ml-3 text-base"
+        style={{ color: theme.primaryText }}
+        placeholderTextColor={theme.mutedText}
         placeholder={placeholder}
         value={value}
         onChangeText={onChangeText}
@@ -31,8 +41,8 @@ export function SearchBar({
         autoFocus={autoFocus}
       />
       {value.length > 0 ? (
-        <Pressable onPress={() => onChangeText("")} hitSlop={12}>
-          <Icon name="chevron-down" size={18} color="#A0A0A0" />
+        <Pressable onPress={() => onChangeText("")} hitSlop={12} className="p-1">
+          <Icon name="close" size={16} color={theme.secondaryText} />
         </Pressable>
       ) : null}
     </View>

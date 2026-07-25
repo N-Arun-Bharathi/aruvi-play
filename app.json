@@ -4,14 +4,14 @@
     "slug": "aruvi-play",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/aruvi-play.png",
     "scheme": "aruviplay",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/logo.png",
+      "image": "./assets/aruvi-play.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A0A0A"
+      "backgroundColor": "#09090B"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -27,6 +27,7 @@
     },
     "android": {
       "package": "com.aruvi.play",
+      "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "INTERNET",
         "FOREGROUND_SERVICE",

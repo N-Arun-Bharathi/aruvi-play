@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { Song } from "../types/song";
 import { Icon } from "./Icon";
 import { AnimatedHeart } from "./AnimatedHeart";
+import { useAuthStore } from "../store/authStore";
 
 interface Props {
   song: Song;
@@ -14,7 +15,18 @@ interface Props {
   onAddToQueue?: () => void;
 }
 
-export const SongRow = React.memo(function SongRow({ song, onPress, isActive, onLike, liked, onAddToQueue }: Props) {
+export const SongRow = React.memo(function SongRow({
+  song,
+  onPress,
+  isActive,
+  onLike,
+  liked,
+  onAddToQueue,
+}: Props) {
+  // Never show the heart button for guest users
+  const authMode = useAuthStore((s) => s.authMode);
+  const canLike = authMode === "authenticated" && !!onLike;
+
   return (
     <Pressable
       onPress={onPress}
@@ -43,14 +55,14 @@ export const SongRow = React.memo(function SongRow({ song, onPress, isActive, on
           {song.source === "local" ? " • Local" : ""}
         </Text>
       </View>
-      
+
       <View className="flex-row items-center">
         {onAddToQueue && (
           <Pressable hitSlop={12} onPress={onAddToQueue} className="p-2 mr-1">
             <Icon name="plus" size={20} color="#A0A0A0" />
           </Pressable>
         )}
-        {onLike && (
+        {canLike && (
           <AnimatedHeart
             liked={!!liked}
             onPress={onLike}

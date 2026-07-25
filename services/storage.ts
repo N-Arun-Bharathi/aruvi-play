@@ -61,6 +61,11 @@ export async function saveRecent(songs: Song[]): Promise<void> {
 
 export async function pushRecent(song: Song): Promise<Song[]> {
   try {
+    const { useAuthStore } = require("../store/authStore");
+    const userProfile = useAuthStore.getState().userProfile;
+    if (userProfile?.is_guest) {
+      return [];
+    }
     const userId = getActiveUserId();
     await dbSaveHistory(userId, song, 100.0, "online");
     return await dbGetHistory(userId, 30);

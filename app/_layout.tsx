@@ -5,83 +5,112 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
-import { useLibraryStore } from "../store/likedStore";
 import { usePlayerStore } from "../store/playerStore";
 import { useAuthStore } from "../store/authStore";
 import { enableFreeze } from "react-native-screens";
 import { Toast } from "../components/Toast";
 
-// Enable screen freeze to optimize navigation memory
 enableFreeze(true);
 
-// Set app startup benchmark timestamp
 if (typeof global !== "undefined" && !(global as any).appStartTime) {
   (global as any).appStartTime = Date.now();
 }
 
+const GUEST_BLOCKED_SEGMENTS = new Set([
+  "library",
+  "rooms",
+  "liked-songs",
+  "history",
+  "recently-played",
+  "playlists",
+  "downloads",
+]);
+
 function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
-  
-  const hydrateLiked = useLibraryStore((s) => s.hydrate);
+
   const initPlayer = usePlayerStore((s) => s.init);
   const hydrateAuth = useAuthStore((s) => s.hydrate);
-  
-  const authenticated = useAuthStore((s) => s.authenticated);
-  const authLoading = useAuthStore((s) => s.loading);
+  const authMode = useAuthStore((s) => s.authMode);
 
+  // ── Startup: init player + resolve auth session (once) ───────
   useEffect(() => {
-    // Hydrate liked, player, and auth stores in parallel
-    Promise.all([
-      hydrateAuth(),
-      hydrateLiked(),
-      initPlayer(),
-    ]).then(() => {
-      if (typeof global !== "undefined" && !(global as any).appReadyTime) {
-        (global as any).appReadyTime = Date.now();
-      }
-      // Check for app updates automatically on startup
-      try {
-        const { runUpdateCheckFlow } = require("../services/updatesService");
-        runUpdateCheckFlow(false).catch((err: any) => console.error("Update check failed on launch:", err));
-      } catch (err) {
-        console.error("Updates module loading failed:", err);
-      }
-    });
+    initPlayer().catch((e) => console.warn("initPlayer warning:", e));
+
+    hydrateAuth()
+      .then(() => {
+        if (typeof global !== "undefined" && !(global as any).appReadyTime) {
+          (global as any).appReadyTime = Date.now();
+        }
+        try {
+          const { runUpdateCheckFlow } = require("../services/updatesService");
+          runUpdateCheckFlow(false).catch(() => {});
+        } catch (_) {}
+      })
+      .catch((err) => console.error("Auth hydration error:", err));
   }, []);
 
+  // ── Navigation guard — runs on every authMode / segment change ─
   useEffect(() => {
-    // Force redirect any navigation to /auth back to the main tabs dashboard
-    const inAuthGroup = (segments[0] as string) === "auth";
-    if (inAuthGroup) {
-      router.replace("/(tabs)" as any);
+    if (authMode === "loading") return;
+
+    const seg0 = (segments[0] as string) || "";
+    const seg1 = (segments[1] as string) || "";
+    const inAuthScreen = seg0 === "auth";
+
+    if (authMode === "unauthenticated") {
+      if (!inAuthScreen) {
+        router.replace("/auth" as any);
+      }
+      return;
     }
-  }, [segments]);
+
+    if (authMode === "authenticated" || authMode === "guest") {
+      // If on auth screen, push into app
+      if (inAuthScreen) {
+        router.replace("/(tabs)" as any);
+        return;
+      }
+
+      if (authMode === "guest") {
+        const blocked = GUEST_BLOCKED_SEGMENTS.has(seg0) || GUEST_BLOCKED_SEGMENTS.has(seg1);
+        if (blocked) {
+          router.replace("/auth" as any);
+        }
+      }
+    }
+  }, [authMode, segments]);
 
   return (
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: "#0A0A0A" },
-        animation: "slide_from_bottom",
+        contentStyle: { backgroundColor: "#09090B" },
+        animation: "slide_from_right",
       }}
     >
       <Stack.Screen name="auth" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen
         name="player"
-        options={{
-          presentation: "modal",
-          animation: "slide_from_bottom",
-        }}
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
       <Stack.Screen
         name="queue"
-        options={{
-          presentation: "modal",
-          animation: "slide_from_bottom",
-        }}
+        options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
+      <Stack.Screen name="playlists/[id]" />
+      <Stack.Screen name="playlists/create" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="playlists/edit/[id]" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="rooms/create" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="rooms/join" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="rooms/[id]" />
+      <Stack.Screen name="profile/edit" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
+      <Stack.Screen name="profile/appearance" />
+      <Stack.Screen name="profile/playback" />
+      <Stack.Screen name="updates/available" options={{ presentation: "modal", gestureEnabled: false, animation: "slide_from_bottom" }} />
+      <Stack.Screen name="updates/required" options={{ presentation: "transparentModal", gestureEnabled: false }} />
     </Stack>
   );
 }

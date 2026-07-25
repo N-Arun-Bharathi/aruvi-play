@@ -71,4 +71,44 @@ if (isPlaceholder) {
   }
 }
 
+export async function ensureGuestSession() {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      return session;
+    }
+
+    const { data, error } = await supabase.auth.signInAnonymously();
+
+    if (error) {
+      console.warn("Unable to start anonymous guest session:", error?.message);
+      // Fallback guest signup strategy if anonymous auth is disabled on dashboard
+      const randomId = Math.floor(1000 + Math.random() * 9000);
+      const guestEmail = `guest-${randomId}-${Date.now()}@aruvi-play.com`;
+      const guestPassword = "AruviGuestUserPassword#5868";
+      const { data: signUpData, error: signUpErr } = await supabase.auth.signUp({
+        email: guestEmail,
+        password: guestPassword,
+      });
+      if (!signUpErr && signUpData?.session) {
+        return signUpData.session;
+      }
+      throw new Error(`Unable to start guest session: ${error?.message || "Auth error"}`);
+    }
+
+    if (!data?.session) {
+      throw new Error("Guest session was not created.");
+    }
+
+    return data.session;
+  } catch (err: any) {
+    console.error("ensureGuestSession error:", err);
+    throw err;
+  }
+}
+
+export function isAnonymousUser(user: { is_anonymous?: boolean } | null | undefined): boolean {
+  return user?.is_anonymous === true;
+}
+
 export { supabase, useMockSupabase };

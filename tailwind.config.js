@@ -5,13 +5,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        bg: "#0A0A0A",
-        surface: "#161616",
-        surface2: "#1F1F1F",
-        accent: "#1DB954",
-        accent2: "#1ED760",
-        muted: "#A0A0A0",
+        bg: "#09090B",
+        surface: "#121216",
+        surface2: "#1A1A20",
+        card: "#18181D",
+        accent: "#10B981",
+        accent2: "#34D399",
         text: "#FFFFFF",
+        secondary: "#A1A1AA",
+        muted: "#71717A",
+        border: "rgba(255, 255, 255, 0.08)",
+        success: "#22C55E",
+        error: "#EF4444",
+        warning: "#F59E0B",
       },
       fontFamily: {
         sans: ["System"],

@@ -42,14 +42,24 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   email TEXT,
   display_name TEXT,
   avatar_url TEXT,
-  preferred_language TEXT DEFAULT 'tamil',
-  theme TEXT DEFAULT 'dark',
+  preferred_language TEXT DEFAULT 'en',
+  theme TEXT DEFAULT 'system',
   is_owner BOOLEAN DEFAULT false,
   initial_likes_imported BOOLEAN DEFAULT false,
+  is_guest BOOLEAN NOT NULL DEFAULT false,
+  guest_created_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now(),
-  last_active_at TIMESTAMPTZ DEFAULT now()
+  last_active_at TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT profiles_display_name_length CHECK (
+    display_name IS NULL
+    OR char_length(trim(display_name)) BETWEEN 2 AND 40
+  )
 );
+
+-- Migrations for existing profiles table instances
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS is_guest BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS guest_created_at TIMESTAMPTZ;
 
 -- songs
 CREATE TABLE IF NOT EXISTS public.songs (
@@ -169,42 +179,7 @@ CREATE TABLE IF NOT EXISTS public.search_history (
   searched_at TIMESTAMPTZ DEFAULT now()
 );
 
--- rooms
-CREATE TABLE IF NOT EXISTS public.rooms (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_code TEXT UNIQUE NOT NULL,
-  host_user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  current_song_id TEXT REFERENCES public.songs(id) ON DELETE SET NULL,
-  playback_position REAL DEFAULT 0.0,
-  playback_state TEXT DEFAULT 'paused',
-  repeat_mode TEXT DEFAULT 'off',
-  shuffle_enabled BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  expires_at TIMESTAMPTZ DEFAULT (now() + interval '24 hours'),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
 
--- room_members
-CREATE TABLE IF NOT EXISTS public.room_members (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_id UUID NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  role TEXT DEFAULT 'guest',
-  joined_at TIMESTAMPTZ DEFAULT now(),
-  last_seen_at TIMESTAMPTZ DEFAULT now(),
-  CONSTRAINT unique_room_member UNIQUE (room_id, user_id)
-);
-
--- room_queue
-CREATE TABLE IF NOT EXISTS public.room_queue (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_id UUID NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
-  song_id TEXT NOT NULL REFERENCES public.songs(id) ON DELETE CASCADE,
-  position INTEGER NOT NULL,
-  added_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  votes INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
 
 -- app_versions
 CREATE TABLE IF NOT EXISTS public.app_versions (
@@ -230,6 +205,56 @@ CREATE TABLE IF NOT EXISTS public.playback_errors (
   device_model TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+-- ==========================================
+-- Music Rooms
+-- ==========================================
+
+-- rooms
+CREATE TABLE IF NOT EXISTS public.rooms (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  code TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  host_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  host_name TEXT NOT NULL,
+  is_active BOOLEAN DEFAULT true,
+  current_song_id TEXT REFERENCES public.songs(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rooms_code ON public.rooms(code);
+CREATE INDEX IF NOT EXISTS idx_rooms_host_id ON public.rooms(host_id);
+
+-- room_members
+CREATE TABLE IF NOT EXISTS public.room_members (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id UUID NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  display_name TEXT,
+  joined_at TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT unique_room_member UNIQUE (room_id, user_id)
+);
+
+-- room_queue
+CREATE TABLE IF NOT EXISTS public.room_queue (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id UUID NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
+  song_id TEXT NOT NULL REFERENCES public.songs(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  added_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  added_at TIMESTAMPTZ DEFAULT now(),
+  CONSTRAINT unique_room_queue_song UNIQUE (room_id, song_id)
+);
+
+-- room_actions (synchronized playback events)
+CREATE TABLE IF NOT EXISTS public.room_actions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  room_id UUID NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  action_type TEXT NOT NULL, -- 'play', 'pause', 'seek', 'next', 'prev', 'add_song', 'remove_song'
+  payload JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
 
 
 -- ==========================================
@@ -246,97 +271,170 @@ ALTER TABLE public.playback_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_queues ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.queue_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.search_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_versions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.playback_errors ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.room_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.room_queue ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.app_versions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.playback_errors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.room_actions ENABLE ROW LEVEL SECURITY;
 
--- Profiles: Users can view and update their own profile
-CREATE POLICY profiles_user_policy ON public.profiles
+-- Helper macro: non-anonymous authenticated user
+-- (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE
+
+-- Rooms: Only non-anonymous authenticated users can see active rooms and manage their own
+DROP POLICY IF EXISTS rooms_read_policy ON public.rooms;
+CREATE POLICY rooms_read_policy ON public.rooms
+  FOR SELECT TO authenticated
+  USING (is_active = true AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE);
+
+DROP POLICY IF EXISTS rooms_write_policy ON public.rooms;
+CREATE POLICY rooms_write_policy ON public.rooms
+  FOR ALL TO authenticated
+  USING (auth.uid() = host_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE)
+  WITH CHECK (auth.uid() = host_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE);
+
+-- Room Members: Non-anonymous authenticated users can join/view rooms
+DROP POLICY IF EXISTS room_members_policy ON public.room_members;
+CREATE POLICY room_members_policy ON public.room_members
+  FOR ALL TO authenticated
+  USING ((auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE)
+  WITH CHECK ((auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE);
+
+-- Room Queue: Non-anonymous authenticated members of the room can manage queue
+DROP POLICY IF EXISTS room_queue_policy ON public.room_queue;
+CREATE POLICY room_queue_policy ON public.room_queue
+  FOR ALL TO authenticated
+  USING (
+    (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE AND
+    EXISTS (SELECT 1 FROM public.room_members WHERE room_id = room_queue.room_id AND user_id = auth.uid())
+  )
+  WITH CHECK (
+    (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE AND
+    EXISTS (SELECT 1 FROM public.room_members WHERE room_id = room_queue.room_id AND user_id = auth.uid())
+  );
+
+-- Room Actions: Non-anonymous authenticated members can post actions
+DROP POLICY IF EXISTS room_actions_policy ON public.room_actions;
+CREATE POLICY room_actions_policy ON public.room_actions
+  FOR ALL TO authenticated
+  USING (
+    (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE AND
+    EXISTS (SELECT 1 FROM public.room_members WHERE room_id = room_actions.room_id AND user_id = auth.uid())
+  )
+  WITH CHECK (
+    (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE AND
+    EXISTS (SELECT 1 FROM public.room_members WHERE room_id = room_actions.room_id AND user_id = auth.uid())
+  );
+
+
+-- Profiles: Safe SELECT policies and column-level privileges to hide phone/email from unrelated users
+REVOKE SELECT ON public.profiles FROM public, authenticated, anon;
+GRANT SELECT (id, display_name, avatar_url, preferred_language, theme, is_owner, initial_likes_imported, is_guest, guest_created_at, created_at, updated_at, last_active_at) 
+  ON public.profiles TO authenticated, anon;
+GRANT INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
+
+-- Allow select check for rows (PostgreSQL column-level security will filter out restricted columns)
+DROP POLICY IF EXISTS profiles_select_policy ON public.profiles;
+CREATE POLICY profiles_select_policy ON public.profiles
+  FOR SELECT TO authenticated, anon USING (true);
+
+-- Allow updates ONLY on user's own profile row
+DROP POLICY IF EXISTS profiles_write_policy ON public.profiles;
+CREATE POLICY profiles_write_policy ON public.profiles
   FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
+-- Create security-definer view to allow authenticated users to fetch their own full private profile safely
+CREATE OR REPLACE VIEW public.my_profile AS
+  SELECT * FROM public.profiles WHERE id = auth.uid();
+GRANT SELECT ON public.my_profile TO authenticated;
+
+-- Avatars storage bucket setup and policies
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('avatars', 'avatars', true)
+ON CONFLICT (id) DO NOTHING;
+
+DROP POLICY IF EXISTS "Public Access" ON storage.objects;
+CREATE POLICY "Public Access" ON storage.objects
+  FOR SELECT TO public USING (bucket_id = 'avatars');
+
+DROP POLICY IF EXISTS "Insert Own Avatar" ON storage.objects;
+CREATE POLICY "Insert Own Avatar" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'avatars' AND name LIKE (auth.uid()::text || '/%'));
+
+DROP POLICY IF EXISTS "Update Own Avatar" ON storage.objects;
+CREATE POLICY "Update Own Avatar" ON storage.objects
+  FOR UPDATE TO authenticated USING (bucket_id = 'avatars' AND name LIKE (auth.uid()::text || '/%')) WITH CHECK (bucket_id = 'avatars' AND name LIKE (auth.uid()::text || '/%'));
+
+DROP POLICY IF EXISTS "Delete Own Avatar" ON storage.objects;
+CREATE POLICY "Delete Own Avatar" ON storage.objects
+  FOR DELETE TO authenticated USING (bucket_id = 'avatars' AND name LIKE (auth.uid()::text || '/%'));
+
 -- Songs: Read only for everyone, write only for authenticated (dynamic additions)
+DROP POLICY IF EXISTS songs_read_policy ON public.songs;
 CREATE POLICY songs_read_policy ON public.songs
   FOR SELECT TO authenticated, anon USING (true);
+
+DROP POLICY IF EXISTS songs_insert_policy ON public.songs;
 CREATE POLICY songs_insert_policy ON public.songs
   FOR INSERT TO authenticated WITH CHECK (true);
 
--- Liked Songs: Users can read, insert, delete ONLY their own liked songs
+-- Liked Songs: Non-anonymous registered users can read, insert, delete their own liked songs
+DROP POLICY IF EXISTS liked_songs_user_policy ON public.liked_songs;
 CREATE POLICY liked_songs_user_policy ON public.liked_songs
-  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  FOR ALL TO authenticated USING (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE)
+  WITH CHECK (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE);
 
--- Playlists: Private playlists only by owner, public by anyone authenticated
+-- Playlists: Private playlists only by non-anonymous owner, public by anyone authenticated
+DROP POLICY IF EXISTS playlists_read_policy ON public.playlists;
 CREATE POLICY playlists_read_policy ON public.playlists
-  FOR SELECT TO authenticated USING (auth.uid() = user_id OR is_public = true);
+  FOR SELECT TO authenticated USING ((auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE) OR is_public = true);
+
+DROP POLICY IF EXISTS playlists_write_policy ON public.playlists;
 CREATE POLICY playlists_write_policy ON public.playlists
-  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  FOR ALL TO authenticated USING (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE)
+  WITH CHECK (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE);
 
 -- Playlist Songs: Linked to playlist access
+DROP POLICY IF EXISTS playlist_songs_policy ON public.playlist_songs;
 CREATE POLICY playlist_songs_policy ON public.playlist_songs
   FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM public.playlists WHERE id = playlist_id AND (user_id = auth.uid() OR is_public = true)))
   WITH CHECK (EXISTS (SELECT 1 FROM public.playlists WHERE id = playlist_id AND user_id = auth.uid()));
 
--- Listening History: Only owner can view or write
+-- Listening History: Only non-anonymous registered owner can view or write
+DROP POLICY IF EXISTS history_user_policy ON public.listening_history;
 CREATE POLICY history_user_policy ON public.listening_history
-  FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+  FOR ALL TO authenticated USING (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE)
+  WITH CHECK (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE);
 
 -- Playback Sessions: Only owner can view or write
+DROP POLICY IF EXISTS playback_session_user_policy ON public.playback_sessions;
 CREATE POLICY playback_session_user_policy ON public.playback_sessions
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- User Queues & items: Only owner
+DROP POLICY IF EXISTS user_queues_policy ON public.user_queues;
 CREATE POLICY user_queues_policy ON public.user_queues
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS queue_items_policy ON public.queue_items;
 CREATE POLICY queue_items_policy ON public.queue_items
   FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM public.user_queues WHERE id = queue_id AND user_id = auth.uid()))
   WITH CHECK (EXISTS (SELECT 1 FROM public.user_queues WHERE id = queue_id AND user_id = auth.uid()));
 
 -- Search History: Only owner
+DROP POLICY IF EXISTS search_history_user_policy ON public.search_history;
 CREATE POLICY search_history_user_policy ON public.search_history
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
--- Rooms: Only joined members can read room fields
-CREATE POLICY rooms_read_policy ON public.rooms
-  FOR SELECT TO authenticated
-  USING (host_user_id = auth.uid() OR EXISTS (SELECT 1 FROM public.room_members WHERE room_id = id AND user_id = auth.uid()));
-
--- Room Host control: Only the host can modify room parameters (sync states)
-CREATE POLICY rooms_write_policy ON public.rooms
-  FOR UPDATE TO authenticated
-  USING (host_user_id = auth.uid())
-  WITH CHECK (host_user_id = auth.uid());
-
-CREATE POLICY rooms_insert_policy ON public.rooms
-  FOR INSERT TO authenticated
-  WITH CHECK (host_user_id = auth.uid());
-
--- Room Members: Members can view members, join room, hosts can manage
-CREATE POLICY room_members_read_policy ON public.room_members
-  FOR SELECT TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.room_members rm WHERE rm.room_id = room_id AND rm.user_id = auth.uid()) OR EXISTS (SELECT 1 FROM public.rooms r WHERE r.id = room_id AND r.host_user_id = auth.uid()));
-
-CREATE POLICY room_members_insert_policy ON public.room_members
-  FOR INSERT TO authenticated
-  WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY room_members_delete_policy ON public.room_members
-  FOR DELETE TO authenticated
-  USING (auth.uid() = user_id OR EXISTS (SELECT 1 FROM public.rooms WHERE id = room_id AND host_user_id = auth.uid()));
-
--- Room Queue: Room members can read/write room queue items
-CREATE POLICY room_queue_policy ON public.room_queue
-  FOR ALL TO authenticated
-  USING (EXISTS (SELECT 1 FROM public.room_members WHERE room_id = room_id AND user_id = auth.uid()) OR EXISTS (SELECT 1 FROM public.rooms WHERE id = room_id AND host_user_id = auth.uid()))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.room_members WHERE room_id = room_id AND user_id = auth.uid()) OR EXISTS (SELECT 1 FROM public.rooms WHERE id = room_id AND host_user_id = auth.uid()));
-
 -- App versions: Read-only for authenticated and anon, no write
+DROP POLICY IF EXISTS app_versions_read_policy ON public.app_versions;
 CREATE POLICY app_versions_read_policy ON public.app_versions
   FOR SELECT TO authenticated, anon USING (true);
 
 -- Playback Errors: Write-only for users, no read except service_role
+DROP POLICY IF EXISTS playback_errors_insert ON public.playback_errors;
 CREATE POLICY playback_errors_insert ON public.playback_errors
   FOR INSERT TO authenticated, anon WITH CHECK (true);
 
@@ -348,7 +446,21 @@ CREATE POLICY playback_errors_insert ON public.playback_errors
 -- Provision profiles on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_is_anon boolean := false;
+  v_guest_num integer;
+  v_display text;
 BEGIN
+  v_is_anon := COALESCE((NEW.raw_app_meta_data->>'provider' = 'anonymous'), false) 
+               OR COALESCE((NEW.raw_user_meta_data->>'is_anonymous')::boolean, false);
+
+  IF v_is_anon THEN
+    v_guest_num := floor(1000 + random() * 9000)::integer;
+    v_display := 'Guest ' || v_guest_num;
+  ELSE
+    v_display := COALESCE(NEW.raw_user_meta_data->>'name', NEW.raw_user_meta_data->>'display_name', 'Aruvi User');
+  END IF;
+
   INSERT INTO public.profiles (
     id,
     phone,
@@ -358,17 +470,21 @@ BEGIN
     preferred_language,
     theme,
     is_owner,
-    initial_likes_imported
+    initial_likes_imported,
+    is_guest,
+    guest_created_at
   ) VALUES (
     NEW.id,
     NEW.phone,
     NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'name', NEW.raw_user_meta_data->>'display_name', 'Aruvi User'),
+    v_display,
     NEW.raw_user_meta_data->>'avatar_url',
-    'tamil',
-    'dark',
-    CASE WHEN NEW.phone = '+917806885868' THEN true ELSE false END,
-    false
+    'en',
+    'system',
+    CASE WHEN NEW.phone = '+917806885868' AND NOT v_is_anon THEN true ELSE false END,
+    false,
+    v_is_anon,
+    CASE WHEN v_is_anon THEN now() ELSE null END
   );
   RETURN NEW;
 END;

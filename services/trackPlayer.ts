@@ -10,39 +10,43 @@ class TrackPlayerWrapper {
   private currentUri: string = "";
   private isInitialized = false;
 
-  constructor() {
-    this.setupListeners();
-  }
+  constructor() {}
 
   private async ensureInitialized() {
     if (this.isInitialized) return;
     try {
       await TrackPlayer.setupPlayer();
       this.isInitialized = true;
+      this.setupListeners();
     } catch (e) {
       this.isInitialized = true;
+      console.warn("TrackPlayer setup warning:", e);
     }
   }
 
   private setupListeners() {
-    // Listen to react-native-track-player progress update events
-    TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (data) => {
-      this.currentTime = data.position;
-      this.duration = data.duration;
-      this.emitPlaybackStatus();
-    });
-
-    // Listen to state changes
-    TrackPlayer.addEventListener(Event.PlaybackState, (data) => {
-      const isPlaying = (data.state as any) === State.Playing || (data.state as any) === 3;
-      if (this.playing !== isPlaying) {
-        this.playing = isPlaying;
+    try {
+      // Listen to react-native-track-player progress update events
+      TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (data) => {
+        this.currentTime = data.position;
+        this.duration = data.duration;
         this.emitPlaybackStatus();
-      }
-      if ((data.state as any) === State.Ended || (data.state as any) === 6) {
-        this.emitPlaybackStatus(true);
-      }
-    });
+      });
+
+      // Listen to state changes
+      TrackPlayer.addEventListener(Event.PlaybackState, (data) => {
+        const isPlaying = (data.state as any) === State.Playing || (data.state as any) === 3;
+        if (this.playing !== isPlaying) {
+          this.playing = isPlaying;
+          this.emitPlaybackStatus();
+        }
+        if ((data.state as any) === State.Ended || (data.state as any) === 6) {
+          this.emitPlaybackStatus(true);
+        }
+      });
+    } catch (e) {
+      console.warn("TrackPlayer setupListeners warning:", e);
+    }
   }
 
   private emitPlaybackStatus(didJustFinish = false) {

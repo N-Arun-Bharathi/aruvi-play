@@ -33,7 +33,16 @@ export type IconName =
   | "lyrics"
   | "drag-handle"
   | "phone"
-  | "lock";
+  | "lock"
+  | "arrow-left"
+  | "settings"
+  | "trash"
+  | "edit"
+  | "close"
+  | "image"
+  | "room"
+  | "queue"
+  | "check";
 
 export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
   const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none" };
@@ -296,6 +305,115 @@ export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
           <Circle cx="15" cy="5" r="1.5" fill={color} />
           <Circle cx="15" cy="12" r="1.5" fill={color} />
           <Circle cx="15" cy="19" r="1.5" fill={color} />
+        </Svg>
+      );
+    case "arrow-left":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M19 12H5M12 19l-7-7 7-7"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "settings":
+      return (
+        <Svg {...props}>
+          <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={2} />
+          <Path
+            d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "trash":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "edit":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "close":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M18 6L6 18M6 6l12 12"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "image":
+      return (
+        <Svg {...props}>
+          <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={2} />
+          <Circle cx="12" cy="10" r="3" stroke={color} strokeWidth={2} />
+          <Path
+            d="M12 15c-4 0-6 2-6 2v.5a.5.5 0 00.5.5h11a.5.5 0 00.5-.5V17s-2-2-6-2z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+          />
+        </Svg>
+      );
+    case "check":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M20 6L9 17l-5-5"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "room":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "queue":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </Svg>
       );
   }

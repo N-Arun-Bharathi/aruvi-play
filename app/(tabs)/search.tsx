@@ -2,36 +2,39 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
-  ActivityIndicator,
   FlatList,
   Keyboard,
   Pressable,
   ScrollView,
+  Alert,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter, useLocalSearchParams } from "expo-router";
+import { Image } from "expo-image";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SearchBar } from "../../components/SearchBar";
 import { SongRow } from "../../components/SongRow";
 import { searchSongs } from "../../services/saavn";
 import { Song } from "../../types/song";
 import { usePlayerStore } from "../../store/playerStore";
 import { useLibraryStore } from "../../store/likedStore";
+import { useTheme } from "../../utils/theme";
 import { Icon } from "../../components/Icon";
-import { useScrollHandler } from "../../hooks/useScrollHandler";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { AppScreen } from "../../components/AppScreen";
+import { AppHeader } from "../../components/AppHeader";
+import { SkeletonRow } from "../../components/SkeletonRow";
+import { EmptyState } from "../../components/EmptyState";
 
 const TRENDING_SEARCHES = ["Kaavala", "Hukum", "Anirudh Hits", "A.R. Rahman", "Harris Melody", "Leo Theme"];
 const GENRES = ["Melodies", "Kuthu / Dance", "Romantic Hits", "Gaana Beat", "Devotional", "90s Golden"];
 
 export default function Search() {
   const router = useRouter();
+  const theme = useTheme();
   const params = useLocalSearchParams<{ prefill?: string }>();
   const playSong = usePlayerStore((s) => s.playSong);
   const addToQueue = usePlayerStore((s) => s.addToQueue);
-  const playSmart = usePlayerStore((s) => s.playSmart);
   const isLiked = useLibraryStore((s) => s.isLiked);
   const toggleLike = useLibraryStore((s) => s.toggleLike);
-  const onScroll = useScrollHandler();
 
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Song[]>([]);
@@ -39,6 +42,7 @@ export default function Search() {
   const [history, setHistory] = useState<string[]>([]);
   
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load history on mount
   useEffect(() => {
@@ -53,8 +57,6 @@ export default function Search() {
       setQ(params.prefill);
     }
   }, [params?.prefill]);
-
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -89,7 +91,7 @@ export default function Search() {
           setLoading(false);
         }
       }
-    }, 300); // 300ms debounce
+    }, 350); // 350ms debounce
     
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -116,147 +118,198 @@ export default function Search() {
 
   const handleSongPlay = (song: Song) => {
     saveSearchHistory(q || song.title);
-    playSong(song, [song]);
+    playSong(song, results.length > 0 ? results : [song]);
     router.push("/player");
   };
 
+  const handleClear = () => {
+    setQ("");
+    setResults([]);
+  };
+
+  const currentSong = usePlayerStore((s) => s.current);
+  const bottomPadding = currentSong ? 170 : 120;
+
+  const topResult = results[0];
+  const remainingSongs = results.slice(1);
+
   return (
-    <SafeAreaView className="flex-1 bg-bg" edges={["top"]}>
-      {/* Top Header & SearchBar */}
-      <View className="px-5 pt-4 pb-2">
-        <Text className="text-text text-3xl font-bold mb-4">Search</Text>
-        <View className="flex-row items-center">
-          <View className="flex-1">
-            <SearchBar
-              value={q}
-              onChangeText={setQ}
-              onSubmit={() => {
-                Keyboard.dismiss();
-                saveSearchHistory(q);
-              }}
-            />
-          </View>
-          {/* Voice Search Placeholder */}
-          <Pressable
-            onPress={() => Alert.alert("Voice Search", "Microphone permission is required for voice search.")}
-            className="p-3 bg-surface rounded-full border border-white/5 ml-2.5"
-          >
-            <Icon name="music" size={18} color="#1DB954" />
-          </Pressable>
+    <AppScreen edges={["top"]}>
+      <AppHeader title="Search" />
+      
+      {/* Search Input Bar */}
+      <View className="px-5 py-3 flex-row items-center">
+        <View className="flex-1">
+          <SearchBar
+            value={q}
+            onChangeText={setQ}
+            onSubmit={() => {
+              Keyboard.dismiss();
+              saveSearchHistory(q);
+            }}
+          />
+          {q.length > 0 && (
+            <Pressable onPress={handleClear} hitSlop={10}>
+              <Icon name="close" size={18} color={theme.secondaryText} />
+            </Pressable>
+          )}
         </View>
       </View>
 
       {loading && (
-        <View className="py-6 items-center">
-          <ActivityIndicator color="#1DB954" />
+        <View className="px-5 pt-2">
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
         </View>
       )}
 
-      {/* Conditional layout: show suggestions/recent searches or search results */}
-      {q.length === 0 ? (
-        <ScrollView
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 180, paddingTop: 10 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Search History */}
-          {history.length > 0 && (
-            <View className="mb-6">
-              <View className="flex-row justify-between items-center mb-3">
-                <Text className="text-muted text-xs uppercase font-bold tracking-wider">
-                  Recent Searches
+      {!loading && (
+        <React.Fragment>
+          {q.length === 0 ? (
+            <ScrollView
+              contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: bottomPadding, paddingTop: 10 }}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {history.length > 0 && (
+                <View className="mb-6">
+                  <View className="flex-row justify-between items-center mb-3">
+                    <Text className="text-xs uppercase font-bold tracking-wider" style={{ color: theme.secondaryText }}>
+                      Recent Searches
+                    </Text>
+                    <Pressable onPress={clearHistory} hitSlop={12}>
+                      <Text className="text-xs font-semibold" style={{ color: theme.accent }}>
+                        Clear
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <View className="flex-row flex-wrap">
+                    {history.map((h, i) => (
+                      <Pressable
+                        key={i}
+                        onPress={() => handleSelectQuery(h)}
+                        className="px-4 py-1.5 rounded-full mr-2.5 mb-2.5 border active:bg-white/10"
+                        style={{ backgroundColor: theme.card, borderColor: theme.border }}
+                      >
+                        <Text className="text-xs font-medium" style={{ color: theme.primaryText }}>{h}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <View className="mb-6">
+                <Text className="text-xs uppercase font-bold tracking-wider mb-3" style={{ color: theme.secondaryText }}>
+                  Trending Searches
                 </Text>
-                <Pressable onPress={clearHistory} hitSlop={12}>
-                  <Text className="text-accent text-xs font-semibold">Clear</Text>
-                </Pressable>
+                <View className="flex-row flex-wrap">
+                  {TRENDING_SEARCHES.map((term, idx) => (
+                    <Pressable
+                      key={idx}
+                      onPress={() => handleSelectQuery(term)}
+                      className="flex-row items-center px-3.5 py-2 rounded-2xl mr-2 mb-2 border active:bg-white/10"
+                      style={{ backgroundColor: theme.card, borderColor: theme.border }}
+                    >
+                      <Icon name="search" size={14} color={theme.accent} />
+                      <Text className="text-xs font-semibold ml-2" style={{ color: theme.primaryText }}>
+                        {term}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
-              <View className="flex-row flex-wrap">
-                {history.map((h, i) => (
-                  <Pressable
-                    key={i}
-                    onPress={() => handleSelectQuery(h)}
-                    className="px-3.5 py-1.5 bg-surface rounded-full border border-white/5 mr-2 mb-2 active:bg-white/10"
-                  >
-                    <Text className="text-text text-xs">{h}</Text>
-                  </Pressable>
-                ))}
+
+              <View className="mb-6">
+                <Text className="text-xs uppercase font-bold tracking-wider mb-3" style={{ color: theme.secondaryText }}>
+                  Browse Categories
+                </Text>
+                <View className="flex-row flex-wrap justify-between">
+                  {GENRES.map((g, idx) => (
+                    <Pressable
+                      key={idx}
+                      onPress={() => handleSelectQuery(g)}
+                      className="w-[48%] p-4 rounded-2xl mb-3 border justify-between h-20 active:opacity-90"
+                      style={{ backgroundColor: theme.card, borderColor: theme.border }}
+                    >
+                      <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>
+                        {g}
+                      </Text>
+                      <View className="items-end">
+                        <Icon name="music" size={16} color={theme.accent} />
+                      </View>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
-            </View>
-          )}
-
-          {/* Trending Searches */}
-          <View className="mb-6">
-            <Text className="text-muted text-xs uppercase font-bold tracking-wider mb-3">
-              Trending Searches
-            </Text>
-            <View className="bg-surface rounded-2xl overflow-hidden border border-white/5">
-              {TRENDING_SEARCHES.map((t, idx) => (
-                <Pressable
-                  key={t}
-                  onPress={() => handleSelectQuery(t)}
-                  className={`flex-row items-center p-4 active:bg-white/5 ${
-                    idx < TRENDING_SEARCHES.length - 1 ? "border-b border-white/5" : ""
-                  }`}
-                >
-                  <Icon name="search" size={14} color="#1DB954" />
-                  <Text className="text-text font-semibold ml-3 text-sm">{t}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-
-          {/* Genre Chips */}
-          <View>
-            <Text className="text-muted text-xs uppercase font-bold tracking-wider mb-3">
-              Browse Categories
-            </Text>
-            <View className="flex-row flex-wrap justify-between">
-              {GENRES.map((g) => (
-                <Pressable
-                  key={g}
-                  onPress={() => handleSelectQuery(g.replace(" / ", " "))}
-                  style={{ width: "48%" }}
-                  className="h-20 bg-surface rounded-2xl p-4 mb-4 border border-white/5 justify-end active:bg-white/10"
-                >
-                  <Text className="text-text font-bold text-base leading-snug">{g}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </ScrollView>
-      ) : (
-        <FlatList
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          data={results}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingTop: 8, paddingBottom: 180 }}
-          keyboardShouldPersistTaps="handled"
-          getItemLayout={(data, index) => ({ length: 72, offset: 72 * index, index })}
-          removeClippedSubviews={true}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          renderItem={({ item }) => (
-            <SongRow
-              song={item}
-              liked={isLiked(item)}
-              onLike={() => toggleLike(item)}
-              onAddToQueue={() => addToQueue(item)}
-              onPress={() => handleSongPlay(item)}
+            </ScrollView>
+          ) : (
+            <FlatList
+              data={remainingSongs}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingBottom: bottomPadding }}
+              keyboardShouldPersistTaps="handled"
+              ListHeaderComponent={
+                topResult ? (
+                  <View className="mb-4">
+                    <Text className="text-xs uppercase font-bold tracking-wider px-5 mb-3" style={{ color: theme.secondaryText }}>
+                      Top Result
+                    </Text>
+                    <Pressable
+                      onPress={() => handleSongPlay(topResult)}
+                      className="mx-5 p-4 rounded-3xl border flex-row items-center active:bg-white/5 mb-5 relative overflow-hidden"
+                      style={{ backgroundColor: theme.card, borderColor: theme.border }}
+                    >
+                      <Image
+                        source={{ uri: topResult.artwork }}
+                        style={{ width: 68, height: 68, borderRadius: 16 }}
+                        className="border border-white/5"
+                      />
+                      <View className="flex-1 ml-4 justify-center pr-8">
+                        <Text className="text-base font-bold" numberOfLines={1} style={{ color: theme.primaryText }}>
+                          {topResult.title}
+                        </Text>
+                        <Text className="text-xs font-semibold mt-0.5" style={{ color: theme.accent }}>
+                          Song • {topResult.artist}
+                        </Text>
+                      </View>
+                      <View 
+                        className="w-10 h-10 rounded-full items-center justify-center absolute right-4" 
+                        style={{ backgroundColor: theme.accent }}
+                      >
+                        <Icon name="play" size={16} color="#000000" />
+                      </View>
+                    </Pressable>
+                    {remainingSongs.length > 0 && (
+                      <Text className="text-xs uppercase font-bold tracking-wider px-5 mb-2" style={{ color: theme.secondaryText }}>
+                        Songs
+                      </Text>
+                    )}
+                  </View>
+                ) : null
+              }
+              renderItem={({ item }) => (
+                <SongRow
+                  song={item}
+                  liked={isLiked(item)}
+                  onLike={() => toggleLike(item)}
+                  onAddToQueue={() => addToQueue(item)}
+                  onPress={() => handleSongPlay(item)}
+                />
+              )}
+              ListEmptyComponent={
+                results.length === 0 ? (
+                  <EmptyState
+                    iconName="search"
+                    title="No results found"
+                    description={`We couldn't find any songs matching "${q}". Try checking the spelling or use another search term.`}
+                  />
+                ) : null
+              }
             />
           )}
-          ListEmptyComponent={
-            !loading ? (
-              <Text className="text-muted text-center mt-12">No results found</Text>
-            ) : null
-          }
-        />
+        </React.Fragment>
       )}
-    </SafeAreaView>
+    </AppScreen>
   );
 }
-
-// Alert helper block mock
-import { Alert } from "react-native";

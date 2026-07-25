@@ -20,30 +20,14 @@ export function initLocalDatabase() {
 
   console.log("SQLite: Running database initialization and migration check...");
 
-  try {
-    // Drop old deprecated tables if they exist with conflicting definitions
-    db.execSync(`
-      PRAGMA foreign_keys = OFF;
-      DROP TABLE IF EXISTS queue_items;
-      DROP TABLE IF EXISTS queue;
-      DROP TABLE IF EXISTS liked_songs;
-      DROP TABLE IF EXISTS playlist_songs;
-      DROP TABLE IF EXISTS playlists;
-      DROP TABLE IF EXISTS listening_history;
-      DROP TABLE IF EXISTS search_history;
-      DROP TABLE IF EXISTS users;
-      DROP TABLE IF EXISTS songs_metadata;
-      PRAGMA foreign_keys = ON;
-    `);
-  } catch (e) {
-    console.warn("SQLite: Clear old schemas warning:", e);
-  }
+  const schemaStatements = [
+    "PRAGMA foreign_keys = OFF;",
+    "DROP TABLE IF EXISTS queue;",
+    "DROP TABLE IF EXISTS users;",
+    "DROP TABLE IF EXISTS songs_metadata;",
+    "PRAGMA foreign_keys = ON;",
 
-  // Schema creation
-  db.execSync(`
-    PRAGMA foreign_keys = ON;
-
-    CREATE TABLE IF NOT EXISTS profiles (
+    `CREATE TABLE IF NOT EXISTS profiles (
       id TEXT PRIMARY KEY,
       phone TEXT,
       email TEXT,
@@ -56,9 +40,9 @@ export function initLocalDatabase() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       last_active_at TEXT DEFAULT (datetime('now'))
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS songs (
+    `CREATE TABLE IF NOT EXISTS songs (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       normalized_title TEXT NOT NULL,
@@ -79,9 +63,9 @@ export function initLocalDatabase() {
       source_url TEXT,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS liked_songs (
+    `CREATE TABLE IF NOT EXISTS liked_songs (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       song_id TEXT NOT NULL,
@@ -89,9 +73,9 @@ export function initLocalDatabase() {
       FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE,
       FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE,
       UNIQUE (user_id, song_id)
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS playlists (
+    `CREATE TABLE IF NOT EXISTS playlists (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       name TEXT NOT NULL,
@@ -101,9 +85,9 @@ export function initLocalDatabase() {
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS playlist_songs (
+    `CREATE TABLE IF NOT EXISTS playlist_songs (
       id TEXT PRIMARY KEY,
       playlist_id TEXT NOT NULL,
       song_id TEXT NOT NULL,
@@ -113,9 +97,9 @@ export function initLocalDatabase() {
       FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE,
       FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE,
       UNIQUE (playlist_id, song_id)
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS listening_history (
+    `CREATE TABLE IF NOT EXISTS listening_history (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       song_id TEXT NOT NULL,
@@ -126,9 +110,9 @@ export function initLocalDatabase() {
       device_id TEXT,
       FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE,
       FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS playback_sessions (
+    `CREATE TABLE IF NOT EXISTS playback_sessions (
       user_id TEXT PRIMARY KEY,
       current_song_id TEXT,
       position_seconds REAL DEFAULT 0.0,
@@ -138,9 +122,9 @@ export function initLocalDatabase() {
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE,
       FOREIGN KEY (current_song_id) REFERENCES songs(id) ON DELETE SET NULL
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS user_queues (
+    `CREATE TABLE IF NOT EXISTS user_queues (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       current_index INTEGER DEFAULT -1,
@@ -148,9 +132,9 @@ export function initLocalDatabase() {
       source_id TEXT,
       updated_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS queue_items (
+    `CREATE TABLE IF NOT EXISTS queue_items (
       id TEXT PRIMARY KEY,
       queue_id TEXT NOT NULL,
       song_id TEXT NOT NULL,
@@ -160,9 +144,9 @@ export function initLocalDatabase() {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (queue_id) REFERENCES user_queues(id) ON DELETE CASCADE,
       FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS search_history (
+    `CREATE TABLE IF NOT EXISTS search_history (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
       query TEXT NOT NULL,
@@ -170,24 +154,36 @@ export function initLocalDatabase() {
       searched_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE,
       FOREIGN KEY (selected_song_id) REFERENCES songs(id) ON DELETE SET NULL
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS downloads (
+    `CREATE TABLE IF NOT EXISTS downloads (
       song_id TEXT PRIMARY KEY,
       local_uri TEXT NOT NULL,
       downloaded_at TEXT DEFAULT (datetime('now')),
       file_size INTEGER DEFAULT 0,
       FOREIGN KEY (song_id) REFERENCES songs(id) ON DELETE CASCADE
-    );
+    );`,
 
-    CREATE TABLE IF NOT EXISTS pending_sync_actions (
+    `CREATE TABLE IF NOT EXISTS pending_sync_actions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id TEXT NOT NULL,
       action_type TEXT NOT NULL,
       payload TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
-    );
-  `);
+    );`,
+
+    // Pre-seed default fallback profile records to prevent FK constraints from ever throwing errors
+    `INSERT OR IGNORE INTO profiles (id, display_name, is_owner) VALUES ('guest-user', 'Guest User', 0);`,
+    `INSERT OR IGNORE INTO profiles (id, display_name, phone, is_owner) VALUES ('local-owner-user-id', 'Aruvi User', '+917806885868', 0);`
+  ];
+
+  for (const stmt of schemaStatements) {
+    try {
+      db.execSync(stmt);
+    } catch (e) {
+      console.warn("SQLite statement execution warning:", stmt.substring(0, 40), e);
+    }
+  }
   console.log("SQLite: Database initialization completed successfully.");
 }
 
