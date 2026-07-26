@@ -9,6 +9,8 @@ import { usePlayerStore } from "../store/playerStore";
 import { useAuthStore } from "../store/authStore";
 import { enableFreeze } from "react-native-screens";
 import { Toast } from "../components/Toast";
+import { useToastStore } from "../store/toastStore";
+import * as Linking from "expo-linking";
 
 enableFreeze(true);
 
@@ -50,6 +52,20 @@ function RootLayoutNav() {
       })
       .catch((err) => console.error("Auth hydration error:", err));
   }, []);
+
+  // ── Deep Link handler for email verification ─────────────────
+  const url = Linking.useURL();
+  useEffect(() => {
+    if (url && (url.includes("type=signup") || url.includes("type=invite"))) {
+      // Give Supabase a moment to process the URL internally and establish the session
+      setTimeout(async () => {
+        await hydrateAuth();
+        const profile = useAuthStore.getState().userProfile;
+        const name = profile?.display_name || profile?.name || "User";
+        useToastStore.getState().show(`Congrats ${name}! Your account is verified.`);
+      }, 1000);
+    }
+  }, [url]);
 
   // ── Navigation guard — runs on every authMode / segment change ─
   useEffect(() => {

@@ -87,14 +87,16 @@ export function isAlternateVersion(candidate: Song, currentSong: Song): boolean 
  * Compares by track ID, URL, or title-artist combination.
  */
 export function isDuplicateSong(candidate: Song, existingSongs: Song[]): boolean {
-  const cTitle = candidate.title.toLowerCase().trim();
-  const cArtist = candidate.artist.toLowerCase().trim();
+  const cTitle = normalizeSongTitle(candidate.title);
+  const cArtist = extractPrimaryArtist(candidate).toLowerCase().trim();
 
   return existingSongs.some(s => {
     if (s.id === candidate.id) return true;
     if (s.url && candidate.url && s.url === candidate.url) return true;
-    const sTitle = s.title.toLowerCase().trim();
-    const sArtist = s.artist.toLowerCase().trim();
+    const sTitle = normalizeSongTitle(s.title);
+    const sArtist = extractPrimaryArtist(s).toLowerCase().trim();
+    // Sometimes artist might differ slightly (like feat.), so if cTitle matches and artists overlap, it's a dupe.
+    // But for simplicity, we check equality of primary artist.
     return sTitle === cTitle && sArtist === cArtist;
   });
 }

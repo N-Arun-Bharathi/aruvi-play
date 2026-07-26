@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -16,14 +16,16 @@ import { Image } from "expo-image";
 import { useAuthStore } from "../store/authStore";
 import { useToastStore } from "../store/toastStore";
 import { Icon } from "../components/Icon";
+import * as Linking from "expo-linking";
 
-type AuthTabMode = "login" | "signup" | "reset";
+type AuthTabMode = "login" | "signup" | "reset" | "update_password";
 
 export default function AuthScreen() {
   const {
     loginWithEmail,
     signUpWithEmail,
     resetPassword,
+    updatePassword,
     continueAsGuest,
     authMode,
   } = useAuthStore();
@@ -35,7 +37,17 @@ export default function AuthScreen() {
   // Form State
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
+  const url = Linking.useURL();
+
+  useEffect(() => {
+    if (url && url.includes("type=recovery")) {
+      setMode("update_password");
+    }
+  }, [url]);
 
   const handleSubmit = async () => {
     Keyboard.dismiss();
@@ -45,10 +57,24 @@ export default function AuthScreen() {
       if (mode === "login") {
         await loginWithEmail(email, password);
       } else if (mode === "signup") {
-        await signUpWithEmail(email, password, displayName);
+        const success = await signUpWithEmail(email, password, displayName);
+        if (success) {
+          setMode("login");
+        }
       } else if (mode === "reset") {
         await resetPassword(email);
         setMode("login");
+      } else if (mode === "update_password") {
+        if (password !== confirmPassword) {
+          useToastStore.getState().show("Passwords do not match");
+          return;
+        }
+        const success = await updatePassword(password);
+        if (success) {
+          setMode("login");
+          setPassword("");
+          setConfirmPassword("");
+        }
       }
     } finally {
       setSubmitting(false);
@@ -136,10 +162,13 @@ export default function AuthScreen() {
                       onChangeText={setPassword}
                       placeholder="Password"
                       placeholderTextColor="rgba(255, 255, 255, 0.3)"
-                      secureTextEntry
+                      secureTextEntry={!showPassword}
                       className="flex-1 text-text text-base ml-3 py-1.5"
                       editable={!submitting}
                     />
+                    <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={15} className="p-1">
+                      <Icon name={showPassword ? "eye-off" : "eye"} size={18} color="#A0A0A0" />
+                    </Pressable>
                   </View>
 
                   {/* Forgot Password Link */}
@@ -228,10 +257,13 @@ export default function AuthScreen() {
                       onChangeText={setPassword}
                       placeholder="Password (min 6 characters)"
                       placeholderTextColor="rgba(255, 255, 255, 0.3)"
-                      secureTextEntry
+                      secureTextEntry={!showPassword}
                       className="flex-1 text-text text-base ml-3 py-1.5"
                       editable={!submitting}
                     />
+                    <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={15} className="p-1">
+                      <Icon name={showPassword ? "eye-off" : "eye"} size={18} color="#A0A0A0" />
+                    </Pressable>
                   </View>
 
                   {/* Register Button */}
@@ -306,6 +338,74 @@ export default function AuthScreen() {
                   >
                     <Text className="text-muted text-xs font-semibold">
                       Back to <Text className="text-accent font-bold">Log In</Text>
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+
+              {mode === "update_password" && (
+                <View>
+                  <Text className="text-text text-xl font-bold mb-1">Update Password</Text>
+                  <Text className="text-muted text-xs mb-5">
+                    Enter your new password below.
+                  </Text>
+
+                  {/* Password */}
+                  <View className="flex-row items-center bg-white/5 rounded-2xl border border-white/10 px-4 py-2 mb-3">
+                    <Icon name="lock" size={18} color="#A0A0A0" />
+                    <TextInput
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder="New Password"
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                      secureTextEntry={!showPassword}
+                      className="flex-1 text-text text-base ml-3 py-1.5"
+                      editable={!submitting}
+                    />
+                    <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={15} className="p-1">
+                      <Icon name={showPassword ? "eye-off" : "eye"} size={18} color="#A0A0A0" />
+                    </Pressable>
+                  </View>
+
+                  {/* Confirm Password */}
+                  <View className="flex-row items-center bg-white/5 rounded-2xl border border-white/10 px-4 py-2 mb-5">
+                    <Icon name="lock" size={18} color="#A0A0A0" />
+                    <TextInput
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      placeholder="Confirm New Password"
+                      placeholderTextColor="rgba(255, 255, 255, 0.3)"
+                      secureTextEntry={!showPassword}
+                      className="flex-1 text-text text-base ml-3 py-1.5"
+                      editable={!submitting}
+                    />
+                    <Pressable onPress={() => setShowPassword(!showPassword)} hitSlop={15} className="p-1">
+                      <Icon name={showPassword ? "eye-off" : "eye"} size={18} color="#A0A0A0" />
+                    </Pressable>
+                  </View>
+
+                  {/* Update Button */}
+                  <Pressable
+                    onPress={handleSubmit}
+                    disabled={submitting}
+                    className="bg-accent active:bg-accent/85 rounded-2xl py-3.5 items-center justify-center flex-row shadow-lg mb-4"
+                  >
+                    {submitting ? (
+                      <ActivityIndicator color="#000000" size="small" />
+                    ) : (
+                      <Text className="text-black font-extrabold text-base">
+                        Save New Password
+                      </Text>
+                    )}
+                  </Pressable>
+
+                  {/* Back to Login */}
+                  <Pressable
+                    onPress={() => setMode("login")}
+                    className="py-2 items-center mb-2"
+                  >
+                    <Text className="text-muted text-xs font-semibold">
+                      Cancel & <Text className="text-accent font-bold">Log In</Text>
                     </Text>
                   </Pressable>
                 </View>

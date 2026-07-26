@@ -19,34 +19,21 @@ import { ProfileAvatar } from "../../components/ProfileAvatar";
 import { useAuthStore } from "../../store/authStore";
 import { usePlayerStore } from "../../store/playerStore";
 import { useTheme } from "../../utils/theme";
-import { DevPerformanceDashboard } from "../../components/DevPerformanceDashboard";
 
 export default function ProfileScreen() {
   const router = useRouter();
   const theme = useTheme();
   const userProfile = useAuthStore((s) => s.userProfile);
-  const elevateToAdmin = useAuthStore((s) => s.elevateToAdmin);
   const upgradeGuestAccount = useAuthStore((s) => s.upgradeGuestAccount);
   const logout = useAuthStore((s) => s.logout);
 
   const currentSong = usePlayerStore((s) => s.current);
   const bottomPadding = currentSong ? 210 : 150;
 
-  const [adminKey, setAdminKey] = useState("");
-  const [showDevPanel, setShowDevPanel] = useState(false);
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveEmail, setSaveEmail] = useState("");
   const [savePassword, setSavePassword] = useState("");
   const [saveFavourites, setSaveFavourites] = useState(true);
-
-  const handleAdminKeyChange = async (text: string) => {
-    setAdminKey(text);
-    if (text.trim() === "5868") {
-      await elevateToAdmin("5868");
-    } else {
-      await elevateToAdmin(text);
-    }
-  };
 
   const handleUpdateCheck = () => {
     try {
@@ -158,32 +145,14 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {/* Dev Tools Card */}
+        {/* App Updates Card */}
         <View className="mx-5 mb-6 p-5 rounded-3xl border" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
-          <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>Dev Tools & Keys</Text>
-            <Switch value={showDevPanel} onValueChange={setShowDevPanel} trackColor={{ false: "#27272A", true: theme.accent }} />
-          </View>
+          <Text className="text-sm font-bold mb-3" style={{ color: theme.primaryText }}>App Version</Text>
 
-          <TextInput
-            value={adminKey}
-            onChangeText={handleAdminKeyChange}
-            placeholder="Enter admin key"
-            placeholderTextColor={theme.mutedText}
-            className="px-4 py-3 rounded-xl border text-sm mb-3 font-mono"
-            style={{
-              backgroundColor: theme.elevatedSurface,
-              borderColor: theme.border,
-              color: theme.primaryText,
-            }}
-          />
-
-          <Pressable onPress={handleUpdateCheck} className="py-3 rounded-xl border items-center bg-white/5 border-white/10">
+          <Pressable onPress={handleUpdateCheck} className="py-3 rounded-xl border items-center bg-white/5 border-white/10 active:bg-white/10">
             <Text className="text-xs font-bold text-white">Check for App Updates</Text>
           </Pressable>
         </View>
-
-        {showDevPanel && <DevPerformanceDashboard />}
       </ScrollView>
 
       {/* Save Account Modal */}

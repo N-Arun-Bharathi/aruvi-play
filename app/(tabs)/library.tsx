@@ -42,6 +42,7 @@ export default function Library() {
   const userId = user?.id || "guest-user";
 
   useEffect(() => {
+    useLibraryStore.getState().hydrate();
     if (tab === "playlists") {
       fetchPlaylists();
     }

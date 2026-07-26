@@ -30,10 +30,10 @@ interface AuthStoreState {
   loginWithEmail: (email: string, password: string) => Promise<boolean>;
   signUpWithEmail: (email: string, password: string, displayName: string) => Promise<boolean>;
   resetPassword: (email: string) => Promise<boolean>;
-  continueAsGuest: () => void;
+  updatePassword: (password: string) => Promise<boolean>;
+  continueAsGuest: () => Promise<void>;
   upgradeGuestAccount: (credentials: { email: string; password: string; saveFavourites?: boolean }) => Promise<boolean>;
   updateGuestDisplayName: (name: string) => Promise<boolean>;
-  elevateToAdmin: (code: string) => Promise<boolean>;
   logout: () => Promise<void>;
 }
 
@@ -71,9 +71,9 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
 
         let profileData: UserProfile | null = null;
         try {
-          const { data: dbProfile } = await supabase
+          const { data: dbProfile, error: profileErr } = await supabase
             .from("profiles")
-            .select("*")
+            .select("id, display_name, phone, avatar_url, is_owner, initial_likes_imported, is_guest")
             .eq("id", user.id)
             .single();
 
@@ -106,7 +106,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
             id: user.id,
             display_name: profileData.name,
             is_guest: false,
-          }).catch(() => {});
+          });
         }
 
         await dbSaveUser(profileData);
@@ -116,7 +116,20 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         return;
       }
 
-      // No session → unauthenticated. Never restore guest from storage.
+      // No session → Check for persistent guest user
+      const localUserStr = await AsyncStorage.getItem("aruvi:user");
+      if (localUserStr) {
+        try {
+          const localUser = JSON.parse(localUserStr);
+          if (localUser.is_guest) {
+            set({ authMode: "guest", userProfile: localUser });
+            return;
+          }
+        } catch (e) {
+          console.warn("Failed to parse local user JSON");
+        }
+      }
+
       set({ authMode: "unauthenticated", userProfile: null });
     } catch (e) {
       console.error("AuthStore hydrate error:", e);
@@ -161,7 +174,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         try {
           const { data: dbProfile } = await supabase
             .from("profiles")
-            .select("*")
+            .select("id, display_name, phone, avatar_url, is_owner, initial_likes_imported, is_guest")
             .eq("id", user.id)
             .single();
           if (dbProfile) {
@@ -237,9 +250,16 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
           display_name: cleanName,
           is_guest: false,
           updated_at: new Date().toISOString(),
-        }).catch(() => {});
+        });
 
         await dbSaveUser(profile);
+
+        if (!data.session) {
+          // Email confirmation is required
+          toast.show("Please check your email to verify your account.");
+          return true;
+        }
+
         await AsyncStorage.setItem("aruvi:user", JSON.stringify(profile));
         set({ authMode: "authenticated", userProfile: profile });
         toast.show("Account created successfully!");
@@ -277,15 +297,53 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     }
   },
 
+  // ─── UPDATE PASSWORD ─────────────────────────────────────────
+  updatePassword: async (password: string) => {
+    const toast = useToastStore.getState();
+    const cleanPass = password.trim();
+    if (cleanPass.length < 6) {
+      toast.show("Password must be at least 6 characters.");
+      return false;
+    }
+    try {
+      const { error } = await supabase.auth.updateUser({ password: cleanPass });
+      if (error) {
+        toast.show(`Failed to update password: ${error.message}`);
+        return false;
+      }
+      toast.show("Password updated successfully!");
+      return true;
+    } catch (err: any) {
+      toast.show(err.message || "Failed to update password.");
+      return false;
+    }
+  },
+
   // ─── CONTINUE AS GUEST ── local only, no Supabase call ───────
-  continueAsGuest: () => {
-    const guestProfile: UserProfile = {
-      id: "local-guest",
-      name: `Guest ${Math.floor(1000 + Math.random() * 9000)}`,
-      is_owner: false,
-      is_guest: true,
-    };
-    // Not persisted — cleared on restart per spec
+  continueAsGuest: async () => {
+    // Attempt to keep existing guest profile if present
+    const localUserStr = await AsyncStorage.getItem("aruvi:user").catch(() => null);
+    let guestProfile: UserProfile | null = null;
+    
+    if (localUserStr) {
+      try {
+        const localUser = JSON.parse(localUserStr);
+        if (localUser.is_guest) {
+          guestProfile = localUser;
+        }
+      } catch(e) {}
+    }
+
+    if (!guestProfile) {
+      guestProfile = {
+        id: "local-guest",
+        name: `Guest ${Math.floor(1000 + Math.random() * 9000)}`,
+        is_owner: false,
+        is_guest: true,
+      };
+    }
+    
+    await AsyncStorage.setItem("aruvi:user", JSON.stringify(guestProfile));
     set({ authMode: "guest", userProfile: guestProfile });
   },
 
@@ -343,7 +401,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
           display_name: registeredProfile.name,
           is_guest: false,
           updated_at: new Date().toISOString(),
-        }).catch(() => {});
+        });
       }
 
       await dbSaveUser(registeredProfile);
@@ -388,31 +446,6 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     return true;
   },
 
-  // ─── ELEVATE TO ADMIN ─────────────────────────────────────────
-  elevateToAdmin: async (code: string) => {
-    const toast = useToastStore.getState();
-    const { userProfile } = get();
-    if (!userProfile) return false;
-
-    if (code.trim() === "5868") {
-      const updatedProfile = {
-        ...userProfile,
-        name: userProfile.name === "Aruvi User" ? "Aruvi Admin" : userProfile.name,
-        is_owner: true,
-      };
-      await dbSaveUser(updatedProfile);
-      await AsyncStorage.setItem("aruvi:user", JSON.stringify(updatedProfile));
-      set({ userProfile: updatedProfile });
-      toast.show("Elevated to Admin Profile!");
-      return true;
-    } else {
-      const revertedProfile = { ...userProfile, is_owner: false };
-      await dbSaveUser(revertedProfile);
-      await AsyncStorage.setItem("aruvi:user", JSON.stringify(revertedProfile));
-      set({ userProfile: revertedProfile });
-      return false;
-    }
-  },
 
   // ─── LOGOUT ──────────────────────────────────────────────────
   logout: async () => {

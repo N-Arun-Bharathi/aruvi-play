@@ -613,7 +613,9 @@ export class QueueManager {
   private deduplicateQueue(songs: Song[]): Song[] {
     const uniqueMap = new Map<string, Song>();
     for (const s of songs) {
-      const key = `${s.title.toLowerCase().trim()}|${s.artist.toLowerCase().trim()}`;
+      const normTitle = this.normalizeSongTitle(s.title);
+      const artistPart = this.extractPrimaryArtist(s).toLowerCase().trim();
+      const key = `${normTitle}|${artistPart}`;
       if (!uniqueMap.has(key)) {
         uniqueMap.set(key, s);
       }
@@ -623,10 +625,10 @@ export class QueueManager {
 
   private isDuplicate(s1: Song, s2: Song): boolean {
     if (s1.id === s2.id) return true;
-    const t1 = s1.title.toLowerCase().trim();
-    const t2 = s2.title.toLowerCase().trim();
-    const a1 = s1.artist.toLowerCase().trim();
-    const a2 = s2.artist.toLowerCase().trim();
+    const t1 = this.normalizeSongTitle(s1.title);
+    const t2 = this.normalizeSongTitle(s2.title);
+    const a1 = this.extractPrimaryArtist(s1).toLowerCase().trim();
+    const a2 = this.extractPrimaryArtist(s2).toLowerCase().trim();
     return t1 === t2 && a1 === a2;
   }
 }

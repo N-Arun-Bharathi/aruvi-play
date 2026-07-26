@@ -30,6 +30,27 @@ const ARTISTS = [
   { name: "Harris Jayaraj", img: "https://c.saavncdn.com/artists/Harris_Jayaraj_150x150.jpg" },
 ];
 
+const ContinueListeningProgressBar = ({ songId }: { songId: string }) => {
+  const current = usePlayerStore((s) => s.current);
+  const progress = useProgress();
+  const theme = useTheme();
+
+  if (!current || current.id !== songId || progress.duration === 0) return null;
+
+  return (
+    <View className="w-full bg-white/10 h-1 rounded-full mt-3 overflow-hidden" style={{ backgroundColor: theme.border }}>
+      <View 
+        className="h-full rounded-full" 
+        style={{ 
+          backgroundColor: theme.accent,
+          width: `${(progress.position / progress.duration) * 100}%` 
+        }}
+      />
+    </View>
+  );
+};
+
+
 export default function Home() {
   const router = useRouter();
   const theme = useTheme();
@@ -54,7 +75,7 @@ export default function Home() {
     }
   };
 
-  const progress = useProgress();
+
 
   const [trending, setTrending] = useState<Song[]>([]);
   const [recommended, setRecommended] = useState<Song[]>([]);
@@ -230,17 +251,7 @@ export default function Home() {
                       {lastPlayed.artist}
                     </Text>
                     
-                    {current && current.id === lastPlayed.id && progress.duration > 0 && (
-                      <View className="w-full bg-white/10 h-1 rounded-full mt-3 overflow-hidden" style={{ backgroundColor: theme.border }}>
-                        <View 
-                          className="h-full rounded-full" 
-                          style={{ 
-                            backgroundColor: theme.accent,
-                            width: `${(progress.position / progress.duration) * 100}%` 
-                          }}
-                        />
-                      </View>
-                    )}
+                    <ContinueListeningProgressBar songId={lastPlayed.id} />
                   </View>
 
                   <Pressable

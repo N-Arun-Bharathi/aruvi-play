@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { generateRoomCode } from "../services/firebase";
+import { generateRoomCode } from "../utils/random";
 import { supabase } from "../services/supabase";
 import { useToastStore } from "./toastStore";
 import { Song } from "../types/song";

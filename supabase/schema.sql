@@ -222,6 +222,16 @@ CREATE TABLE IF NOT EXISTS public.rooms (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Migration for existing rooms table
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS code TEXT;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS host_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS host_name TEXT;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS current_song_id TEXT REFERENCES public.songs(id) ON DELETE SET NULL;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
+
 CREATE INDEX IF NOT EXISTS idx_rooms_code ON public.rooms(code);
 CREATE INDEX IF NOT EXISTS idx_rooms_host_id ON public.rooms(host_id);
 
@@ -481,7 +491,7 @@ BEGIN
     NEW.raw_user_meta_data->>'avatar_url',
     'en',
     'system',
-    CASE WHEN NEW.phone = '+917806885868' AND NOT v_is_anon THEN true ELSE false END,
+    false,
     false,
     v_is_anon,
     CASE WHEN v_is_anon THEN now() ELSE null END
@@ -529,7 +539,7 @@ BEGIN
   SELECT id INTO v_owner_id 
     FROM public.profiles 
    WHERE id = auth.uid() 
-     AND phone = '+917806885868' 
+     AND is_owner = true 
      AND initial_likes_imported = false;
      
   IF NOT FOUND THEN

@@ -196,18 +196,40 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
             })
             .filter(Boolean) as Song[];
 
-          const currentLocal = await dbGetLikedSongs(userId);
-          for (const lSong of currentLocal) {
-            if (!serverSongs.some((s) => s.id === lSong.id)) {
-              await dbRemoveLikedSong(userId, lSong.id);
+          if (serverSongs.length > 0) {
+            const currentLocal = await dbGetLikedSongs(userId);
+            for (const lSong of currentLocal) {
+              if (!serverSongs.some((s) => s.id === lSong.id)) {
+                await dbRemoveLikedSong(userId, lSong.id);
+              }
+            }
+            for (const sSong of serverSongs) {
+              await dbSaveLikedSong(userId, sSong);
+            }
+
+            liked = serverSongs;
+            rebuildMaps(liked);
+          } else if (isOwner && liked.length > 0) {
+            // Upload pre-seeded admin liked songs to Supabase
+            for (const song of liked) {
+              await supabase.from("songs").upsert({
+                id: song.id,
+                title: song.title,
+                normalized_title: song.normalized_title || song.title.toLowerCase().trim(),
+                artist: song.artist,
+                album: song.album || null,
+                artwork_url: song.artwork || null,
+                duration_seconds: song.duration || null,
+                source_type: song.source || "online",
+                source_url: song.url || null
+              });
+
+              await supabase.from("liked_songs").upsert({
+                user_id: userId,
+                song_id: song.id
+              });
             }
           }
-          for (const sSong of serverSongs) {
-            await dbSaveLikedSong(userId, sSong);
-          }
-
-          liked = serverSongs;
-          rebuildMaps(liked);
         }
       }
     } catch (e) {}
