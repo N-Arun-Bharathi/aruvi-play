@@ -61,7 +61,7 @@ function RootLayoutNav() {
       setTimeout(async () => {
         await hydrateAuth();
         const profile = useAuthStore.getState().userProfile;
-        const name = profile?.display_name || profile?.name || "User";
+        const name = (profile as any)?.display_name || profile?.name || "User";
         useToastStore.getState().show(`Congrats ${name}! Your account is verified.`);
       }, 1000);
     }

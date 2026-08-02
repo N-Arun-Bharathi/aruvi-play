@@ -99,8 +99,7 @@ export default function QueueScreen() {
     <AppScreen edges={["top", "bottom"]}>
       <AppHeader
         title="Queue"
-        showBack
-        onBackPress={() => router.back()}
+        showBack={false}
         rightActions={
           <View className="flex-row items-center">
             {remainingSongs > 0 && !isEditing && (

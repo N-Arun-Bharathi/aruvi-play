@@ -58,7 +58,33 @@ export const SongRow = React.memo(function SongRow({
 
       <View className="flex-row items-center">
         {onAddToQueue && (
-          <Pressable hitSlop={12} onPress={onAddToQueue} className="p-2 mr-1">
+          <Pressable
+            hitSlop={12}
+            onPress={() => {
+              const { Alert } = require("react-native");
+              const { usePlayerStore } = require("../store/playerStore");
+              Alert.alert(
+                song.title,
+                "Queue Options",
+                [
+                  {
+                    text: "Play Next",
+                    onPress: () => {
+                      usePlayerStore.getState().playNextImmediately(song);
+                    },
+                  },
+                  {
+                    text: "Add to Queue End",
+                    onPress: () => {
+                      usePlayerStore.getState().addToQueue(song);
+                    },
+                  },
+                  { text: "Cancel", style: "cancel" },
+                ]
+              );
+            }}
+            className="p-2 mr-1"
+          >
             <Icon name="plus" size={20} color="#A0A0A0" />
           </Pressable>
         )}

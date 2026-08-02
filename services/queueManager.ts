@@ -26,6 +26,7 @@ export class QueueManager {
   private isFetchingRelated: boolean = false;
   private isTransitioning: boolean = false;
   private lastSessionSyncTime: number = 0;
+  private queueSaveTimer: any = null;
 
   private constructor() {
     // Private constructor for singleton
@@ -43,10 +44,18 @@ export class QueueManager {
     return user?.id || "guest-user";
   }
 
+  private scheduleQueueSave() {
+    if (this.queueSaveTimer) clearTimeout(this.queueSaveTimer);
+    this.queueSaveTimer = setTimeout(() => {
+      const userId = this.getActiveUserId();
+      dbSaveQueue(userId, "active-queue-session", this.index, this.queue)
+        .catch((e) => console.error("Failed to save active queue to SQLite", e));
+    }, 2000);
+  }
+
   private syncWithZustand() {
     const { usePlayerStore } = require("../store/playerStore");
     const store = usePlayerStore.getState();
-    const userId = this.getActiveUserId();
 
     usePlayerStore.setState({
       queue: this.queue,
@@ -63,9 +72,8 @@ export class QueueManager {
       syncPlaybackWithRoom();
     } catch (e) {}
 
-    // Save active queue to SQLite
-    dbSaveQueue(userId, "active-queue-session", this.index, this.queue)
-      .catch((e) => console.error("Failed to save active queue to SQLite", e));
+    // Debounce active queue save to SQLite (2s)
+    this.scheduleQueueSave();
 
     // Sync playback session (throttled or forced on state change)
     this.syncPlaybackSession(false);
@@ -98,19 +106,6 @@ export class QueueManager {
 
     const { default: TrackPlayer, Event } = require("react-native-track-player");
 
-    // Listen to native track transitions - only advance if not already transitioning
-    TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (event: any) => {
-      const track = event.track;
-      if (track) {
-        console.log("QueueManager MainThread: PlaybackActiveTrackChanged ->", track.id);
-        if (track.id === "next-placeholder") {
-          this.playNext();
-        } else if (track.id === "prev-placeholder") {
-          this.playPrevious();
-        }
-      }
-    });
-
     // Single listener for playback status updates
     player.addListener("playbackStatusUpdate", (status: any) => {
       if (status.playing !== this.isPlaying) {
@@ -129,18 +124,39 @@ export class QueueManager {
       }
     });
 
-    // Restore queue from SQLite on startup
+    // Restore queue and last played song from SQLite/AsyncStorage on startup
     try {
+      const { loadLastPlayed, loadRecent } = require("./storage");
       const userId = this.getActiveUserId();
       const saved = await dbGetQueue(userId);
+
       if (saved && saved.songs.length > 0) {
         this.queue = saved.songs;
-        this.index = saved.index;
+        this.index = saved.index >= 0 && saved.index < saved.songs.length ? saved.index : 0;
+        this.isPlaying = false;
         this.syncWithZustand();
-        console.log(`QueueManager: Restored queue with ${saved.songs.length} songs at index ${saved.index}`);
+        console.log(`QueueManager: Restored queue with ${saved.songs.length} songs at index ${this.index}`);
+      } else {
+        const lastPlayed = await loadLastPlayed();
+        if (lastPlayed && lastPlayed.song) {
+          this.queue = [lastPlayed.song];
+          this.index = 0;
+          this.isPlaying = false;
+          this.syncWithZustand();
+          console.log(`QueueManager: Restored last played song: ${lastPlayed.song.title}`);
+        } else {
+          const recents = await loadRecent();
+          if (recents && recents.length > 0) {
+            this.queue = recents;
+            this.index = 0;
+            this.isPlaying = false;
+            this.syncWithZustand();
+            console.log(`QueueManager: Restored last played song from recents: ${recents[0].title}`);
+          }
+        }
       }
     } catch (e) {
-      console.error("QueueManager: Failed to restore active queue from SQLite", e);
+      console.error("QueueManager: Failed to restore active queue or last played song", e);
     }
   }
 
@@ -180,41 +196,52 @@ export class QueueManager {
   }
 
   public playNextImmediately(song: Song) {
-    this.queue = this.queue.filter((s) => !this.isDuplicate(s, song));
     const songToInsert = song.source === "local" ? song : { ...song, url: "" };
 
-    if (this.index === -1) {
-      this.queue = [song];
+    if (this.index === -1 || this.queue.length === 0) {
+      this.queue = [songToInsert];
       this.index = 0;
+      this.isPlaying = true;
+      this.syncWithZustand();
+      this.loadIndex(0);
     } else {
-      this.queue.splice(this.index + 1, 0, songToInsert);
+      const currentSong = this.queue[this.index];
+      // Filter out duplicate if it exists elsewhere in queue (excluding current playing song)
+      const filteredQueue = this.queue.filter((s, idx) => idx === this.index || !this.isDuplicate(s, song));
+      const newCurrentIdx = filteredQueue.findIndex((s) => s.id === currentSong?.id);
+      this.index = newCurrentIdx !== -1 ? newCurrentIdx : this.index;
+
+      // Insert song as the NEXT item right after current playing song
+      filteredQueue.splice(this.index + 1, 0, songToInsert);
+      this.queue = filteredQueue;
+      this.syncWithZustand();
     }
-    
-    this.syncWithZustand();
-    useToastStore.getState().show("Playing Next");
+    useToastStore.getState().show("Will Play Next");
   }
 
   public addToQueue(song: Song) {
+    const songToInsert = song.source === "local" ? song : { ...song, url: "" };
+
+    if (this.index === -1 || this.queue.length === 0) {
+      this.queue = [songToInsert];
+      this.index = 0;
+      this.isPlaying = true;
+      this.syncWithZustand();
+      this.loadIndex(0);
+      useToastStore.getState().show("Added to Queue");
+      return;
+    }
+
     const exists = this.queue.some((s) => this.isDuplicate(s, song));
     if (exists) {
       useToastStore.getState().show("Already in Queue");
       return;
     }
 
-    const songToInsert = song.source === "local" ? song : { ...song, url: "" };
-
-    if (this.index === -1) {
-      this.queue = [song];
-      this.index = 0;
-      this.isPlaying = true;
-      this.syncWithZustand();
-      this.loadIndex(0);
-    } else {
-      this.queue.splice(this.index + 1, 0, songToInsert);
-      this.syncWithZustand();
-      this.appendRecommendedSongsIfNeeded();
-    }
-    useToastStore.getState().show("Added to Queue");
+    // Append song to the end of the queue
+    this.queue.push(songToInsert);
+    this.syncWithZustand();
+    useToastStore.getState().show("Added to End of Queue");
   }
 
   public async playNext() {
@@ -227,7 +254,12 @@ export class QueueManager {
       let nextIdx = this.index + 1;
 
       if (nextIdx >= this.queue.length) {
-        if (store.repeat === "all") {
+        console.log("QueueManager: playNext reached end of queue, attempting recommendations...");
+        await this.appendRecommendedSongs();
+      }
+
+      if (nextIdx >= this.queue.length) {
+        if (store.repeat === "all" && this.queue.length > 0) {
           nextIdx = 0;
         } else {
           this.isPlaying = false;
@@ -279,6 +311,11 @@ export class QueueManager {
     const player = tryGetPlayer();
     if (!player) return;
 
+    if (this.currentlyPlayingId === null && this.index >= 0 && this.index < this.queue.length) {
+      this.loadIndex(this.index);
+      return;
+    }
+
     if (player.playing) {
       player.pause();
       this.isPlaying = false;
@@ -315,6 +352,8 @@ export class QueueManager {
     const song = this.queue[idx];
     if (!song) return;
 
+    this.lastFinishedId = null;
+    this.currentlyPlayingId = song.id;
     this.isResolving = true;
     this.syncWithZustand();
 
@@ -354,6 +393,24 @@ export class QueueManager {
 
     this.isResolving = false;
     this.syncWithZustand();
+    
+    // Prefetch URL for the next song in queue so playback transition is instant
+    this.prefetchNextSongUrl(idx + 1);
+  }
+
+  private prefetchNextSongUrl(nextIdx: number) {
+    const nextSong = this.queue[nextIdx];
+    if (nextSong && !nextSong.url && nextSong.source !== "local") {
+      console.log("QueueManager: Prefetching URL for next song:", nextSong.title);
+      resolveSong(nextSong.title, nextSong.artist).then((resolved) => {
+        if (resolved && this.queue[nextIdx] && (this.queue[nextIdx].id === nextSong.id || this.queue[nextIdx].title === nextSong.title)) {
+          this.queue[nextIdx] = { ...resolved, id: nextSong.id };
+          console.log("QueueManager: Successfully prefetched URL for:", nextSong.title);
+        }
+      }).catch((e) => {
+        console.warn("QueueManager: Prefetch error:", e);
+      });
+    }
   }
 
   private async handlePlaybackError(failedIdx: number) {
@@ -377,13 +434,21 @@ export class QueueManager {
     }
   }
 
-  private async onTrackFinished() {
+  public async onTrackFinished() {
+    if (this.isResolving || this.isTransitioning) {
+      console.log("QueueManager: Skipping onTrackFinished because player is resolving/transitioning");
+      return;
+    }
+
     const { usePlayerStore } = require("../store/playerStore");
     const store = usePlayerStore.getState();
     const currentSong = this.queue[this.index];
     if (!currentSong) return;
 
-    if (currentSong.id !== this.currentlyPlayingId || currentSong.id === this.lastFinishedId) {
+    console.log("QueueManager: onTrackFinished called for song:", currentSong.title, currentSong.id);
+
+    if (this.lastFinishedId === currentSong.id) {
+      console.log("QueueManager: Skipping onTrackFinished because song already finished:", currentSong.id);
       return;
     }
 

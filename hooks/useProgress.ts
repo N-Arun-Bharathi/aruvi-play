@@ -4,7 +4,7 @@ import { usePlayerStore } from "../store/playerStore";
 
 export function useProgress() {
   const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const current = usePlayerStore((s) => s.current);
+  const currentId = usePlayerStore((s) => s.current?.id);
   const [state, setState] = useState({ position: 0, duration: 0 });
 
   useEffect(() => {
@@ -15,17 +15,19 @@ export function useProgress() {
       try {
         const progress = await TrackPlayer.getProgress();
         if (mounted) {
-          setState({
-            position: progress.position || 0,
-            duration: progress.duration || 0,
+          const newPos = Math.round(progress.position || 0);
+          const newDur = Math.round(progress.duration || 0);
+          setState((prev) => {
+            if (prev.position === newPos && prev.duration === newDur) return prev;
+            return { position: newPos, duration: newDur };
           });
         }
       } catch (e) {
-        // Ignore initialization or unbound service errors
+        // Ignore unbound service errors
       }
-      
-      if (mounted) {
-        timerId = setTimeout(tick, 250);
+
+      if (mounted && isPlaying) {
+        timerId = setTimeout(tick, 500);
       }
     };
 
@@ -37,7 +39,7 @@ export function useProgress() {
         clearTimeout(timerId);
       }
     };
-  }, [isPlaying, current]);
+  }, [isPlaying, currentId]);
 
   return state;
 }

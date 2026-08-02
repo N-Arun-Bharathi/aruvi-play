@@ -172,6 +172,12 @@ export function initLocalDatabase() {
       created_at TEXT DEFAULT (datetime('now'))
     );`,
 
+    `CREATE INDEX IF NOT EXISTS idx_liked_songs_user_song ON liked_songs(user_id, song_id);`,
+    `CREATE INDEX IF NOT EXISTS idx_songs_norm_title ON songs(normalized_title, primary_artist);`,
+    `CREATE INDEX IF NOT EXISTS idx_history_user_time ON listening_history(user_id, played_at DESC);`,
+    `CREATE INDEX IF NOT EXISTS idx_queue_items_pos ON queue_items(queue_id, position);`,
+    `CREATE INDEX IF NOT EXISTS idx_playlists_user ON playlists(user_id);`,
+
     // Pre-seed default fallback profile records to prevent FK constraints from ever throwing errors
     `INSERT OR IGNORE INTO profiles (id, display_name, is_owner) VALUES ('guest-user', 'Guest User', 0);`,
     `INSERT OR IGNORE INTO profiles (id, display_name, phone, is_owner) VALUES ('local-owner-user-id', 'Aruvi User', '+917806885868', 0);`
@@ -516,7 +522,7 @@ export async function dbSaveQueue(userId: string, queueId: string, index: number
     
     const itemId = `${queueId}_${s.id}_${i}`;
     await db.runAsync(`
-      INSERT INTO queue_items (id, queue_id, song_id, position, queue_type)
+      INSERT OR REPLACE INTO queue_items (id, queue_id, song_id, position, queue_type)
       VALUES (?, ?, ?, ?, ?);
     `, [itemId, queueId, s.id, i, s.source === "local" ? "local" : "online"]);
   }

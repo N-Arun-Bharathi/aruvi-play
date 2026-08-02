@@ -7,7 +7,7 @@ import { Icon } from "./Icon";
 import { useProgress } from "../hooks/useProgress";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-export function MiniPlayer() {
+export const MiniPlayer = React.memo(function MiniPlayer() {
   const current = usePlayerStore((s) => s.current);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const togglePlay = usePlayerStore((s) => s.togglePlay);
@@ -62,4 +62,4 @@ export function MiniPlayer() {
       </View>
     </View>
   );
-}
+});

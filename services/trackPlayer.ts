@@ -34,15 +34,26 @@ class TrackPlayerWrapper {
       });
 
       // Listen to state changes
-      TrackPlayer.addEventListener(Event.PlaybackState, (data) => {
-        const isPlaying = (data.state as any) === State.Playing || (data.state as any) === 3;
+      TrackPlayer.addEventListener(Event.PlaybackState, (data: any) => {
+        const stateStr = typeof data.state === "string" ? data.state : String(data.state);
+        const isPlaying = stateStr === State.Playing || (data.state as any) === 3 || stateStr === "playing";
         if (this.playing !== isPlaying) {
           this.playing = isPlaying;
           this.emitPlaybackStatus();
         }
-        if ((data.state as any) === State.Ended || (data.state as any) === 6) {
+        const isEnded = stateStr === State.Ended || (data.state as any) === 6 || stateStr === "ended";
+        const isNearEnd = this.duration > 0 && this.currentTime >= Math.max(1, this.duration - 3);
+        if (isEnded || (isNearEnd && (stateStr === State.Stopped || stateStr === "stopped"))) {
+          console.log("TrackPlayerWrapper: Event.PlaybackState ended received:", data.state);
           this.emitPlaybackStatus(true);
         }
+      });
+
+      // Listen to queue ended event
+      TrackPlayer.addEventListener(Event.PlaybackQueueEnded, (data) => {
+        console.log("TrackPlayerWrapper: Event.PlaybackQueueEnded received", data);
+        this.playing = false;
+        this.emitPlaybackStatus(true);
       });
     } catch (e) {
       console.warn("TrackPlayer setupListeners warning:", e);
@@ -115,13 +126,6 @@ class TrackPlayerWrapper {
     if (active && metadata) {
       await TrackPlayer.reset();
       
-      const prevTrack = {
-        id: "prev-placeholder",
-        url: this.currentUri,
-        title: "Previous",
-        artist: metadata.artist,
-      };
-
       const currentTrack = {
         id: metadata.title || "track",
         url: this.currentUri,
@@ -130,16 +134,8 @@ class TrackPlayerWrapper {
         album: metadata.albumTitle,
         artwork: metadata.artworkUrl,
       };
-
-      const nextTrack = {
-        id: "next-placeholder",
-        url: this.currentUri,
-        title: "Next",
-        artist: metadata.artist,
-      };
       
-      await TrackPlayer.add([prevTrack, currentTrack, nextTrack]);
-      await TrackPlayer.skip(1);
+      await TrackPlayer.add([currentTrack]);
       
       await TrackPlayer.updateOptions({
         progressUpdateEventInterval: 0.25,

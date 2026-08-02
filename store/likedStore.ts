@@ -109,7 +109,8 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
 
     const isGuest = user?.is_guest ?? false;
     const userId = user?.id || "guest-user";
-    const isOwner = user?.is_owner || false;
+    const adminEmail = (process.env.EXPO_PUBLIC_ADMIN_EMAIL || "").toLowerCase().trim();
+    const isOwner = user?.is_owner || (!!adminEmail && user?.email?.toLowerCase().trim() === adminEmail) || false;
 
     // For Guest Users: Do NOT fetch from database or load recent history
     if (isGuest) {

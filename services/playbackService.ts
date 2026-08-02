@@ -27,4 +27,14 @@ export async function playbackService() {
     console.log("PlaybackService: RemoteSeek triggered to:", event.position);
     TrackPlayer.seekTo(event.position).catch((err) => console.error("PlaybackService: seekTo error:", err));
   });
+
+  TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+    console.log("PlaybackService: PlaybackQueueEnded triggered");
+    try {
+      const { QueueManager } = require("./queueManager");
+      QueueManager.getInstance().onTrackFinished();
+    } catch (e) {
+      console.error("PlaybackService: Error on PlaybackQueueEnded handler:", e);
+    }
+  });
 }

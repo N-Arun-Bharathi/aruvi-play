@@ -22,10 +22,10 @@ export default function TabsLayout() {
         <Tabs.Screen name="index" options={{ title: "Home" }} />
         <Tabs.Screen name="search" options={{ title: "Search" }} />
 
-        {/* Queue — only for guests */}
+        {/* Queue tab */}
         <Tabs.Screen
           name="queue"
-          options={{ title: "Queue", href: isGuest ? undefined : null }}
+          options={{ title: "Queue" }}
         />
 
         {/* Library — only for authenticated */}

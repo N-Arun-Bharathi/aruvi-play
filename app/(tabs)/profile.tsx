@@ -87,7 +87,7 @@ export default function ProfileScreen() {
                   }}
                 >
                   {userProfile?.is_owner
-                    ? "Admin Owner"
+                    ? "Admin"
                     : userProfile?.is_guest
                     ? "Guest Account"
                     : "Registered User"}

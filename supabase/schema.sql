@@ -338,9 +338,7 @@ CREATE POLICY room_actions_policy ON public.room_actions
 
 
 -- Profiles: Safe SELECT policies and column-level privileges to hide phone/email from unrelated users
-REVOKE SELECT ON public.profiles FROM public, authenticated, anon;
-GRANT SELECT (id, display_name, avatar_url, preferred_language, theme, is_owner, initial_likes_imported, is_guest, guest_created_at, created_at, updated_at, last_active_at) 
-  ON public.profiles TO authenticated, anon;
+GRANT SELECT ON public.profiles TO authenticated, anon;
 GRANT INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
 
 -- Allow select check for rows (PostgreSQL column-level security will filter out restricted columns)

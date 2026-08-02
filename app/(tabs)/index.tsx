@@ -30,12 +30,12 @@ const ARTISTS = [
   { name: "Harris Jayaraj", img: "https://c.saavncdn.com/artists/Harris_Jayaraj_150x150.jpg" },
 ];
 
-const ContinueListeningProgressBar = ({ songId }: { songId: string }) => {
-  const current = usePlayerStore((s) => s.current);
+const ContinueListeningProgressBar = React.memo(({ songId }: { songId: string }) => {
+  const currentId = usePlayerStore((s) => s.current?.id);
   const progress = useProgress();
   const theme = useTheme();
 
-  if (!current || current.id !== songId || progress.duration === 0) return null;
+  if (currentId !== songId || progress.duration === 0) return null;
 
   return (
     <View className="w-full bg-white/10 h-1 rounded-full mt-3 overflow-hidden" style={{ backgroundColor: theme.border }}>
@@ -48,7 +48,7 @@ const ContinueListeningProgressBar = ({ songId }: { songId: string }) => {
       />
     </View>
   );
-};
+});
 
 
 export default function Home() {
@@ -230,7 +230,7 @@ export default function Home() {
                   style={{ backgroundColor: theme.card, borderColor: theme.border }}
                 >
                   <View 
-                    className="absolute -right-20 -bottom-20 w-44 h-44 rounded-full opacity-10 blur-3xl" 
+                    className="absolute -right-20 -bottom-20 w-44 h-44 rounded-full opacity-10" 
                     style={{ backgroundColor: theme.accent }}
                   />
                   

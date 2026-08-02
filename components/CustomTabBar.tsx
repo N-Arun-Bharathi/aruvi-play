@@ -27,13 +27,12 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   const authMode = useAuthStore((s) => s.authMode);
   const isGuest = authMode === "guest";
 
-  // Filter out routes robustly based on authMode
+  // Filter out routes based on authMode
   const visibleRoutes = state.routes.filter((route) => {
     if (isGuest) {
       return route.name !== "library" && route.name !== "rooms";
     }
-    // Registered users don't see the Queue tab (they have it in the Player)
-    return route.name !== "queue";
+    return true;
   });
 
   const tabWidth = (width - 32) / (visibleRoutes.length || 5);

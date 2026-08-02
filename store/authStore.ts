@@ -5,6 +5,15 @@ import { dbSaveUser } from "../services/sqlite";
 import { useToastStore } from "./toastStore";
 import * as Linking from "expo-linking";
 
+const ADMIN_EMAIL = (process.env.EXPO_PUBLIC_ADMIN_EMAIL || "").toLowerCase().trim();
+
+const checkIsAdmin = (email?: string | null, isOwner?: boolean | null, metadata?: any) => {
+  if (isOwner === true) return true;
+  if (metadata?.role === "admin" || metadata?.is_owner === true) return true;
+  if (ADMIN_EMAIL && email && email.toLowerCase().trim() === ADMIN_EMAIL) return true;
+  return false;
+};
+
 // Central auth state — resolved once at startup
 export type AuthState = "loading" | "unauthenticated" | "guest" | "authenticated";
 
@@ -84,7 +93,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
               email: user.email,
               phone: user.phone || dbProfile.phone,
               avatar_url: dbProfile.avatar_url,
-              is_owner: dbProfile.is_owner || false,
+              is_owner: checkIsAdmin(user.email, dbProfile.is_owner, user.user_metadata),
               is_guest: false,
               initial_likes_imported: dbProfile.initial_likes_imported || false,
             };
@@ -98,7 +107,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
             email: user.email,
             phone: user.phone,
             avatar_url: null,
-            is_owner: false,
+            is_owner: checkIsAdmin(user.email, false, user.user_metadata),
             is_guest: false,
             initial_likes_imported: false,
           };
@@ -116,13 +125,17 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         return;
       }
 
-      // No session → Check for persistent guest user
+      // No live session yet → Restore persistent local user (both registered & guest)
       const localUserStr = await AsyncStorage.getItem("aruvi:user");
       if (localUserStr) {
         try {
           const localUser = JSON.parse(localUserStr);
-          if (localUser.is_guest) {
-            set({ authMode: "guest", userProfile: localUser });
+          if (localUser && localUser.id) {
+            const isOwner = checkIsAdmin(localUser.email, localUser.is_owner);
+            const updatedUser = { ...localUser, is_owner: isOwner };
+            const mode = localUser.is_guest ? "guest" : "authenticated";
+            set({ authMode: mode, userProfile: updatedUser });
+            hydrateLibrary();
             return;
           }
         } catch (e) {
@@ -182,7 +195,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
               ...profile,
               name: dbProfile.display_name || profile.name,
               avatar_url: dbProfile.avatar_url,
-              is_owner: dbProfile.is_owner || false,
+              is_owner: checkIsAdmin(user.email, dbProfile.is_owner, user.user_metadata),
               initial_likes_imported: dbProfile.initial_likes_imported || false,
             };
           }
@@ -241,7 +254,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
           email: user.email,
           phone: user.phone,
           avatar_url: null,
-          is_owner: false,
+          is_owner: checkIsAdmin(user.email, false, user.user_metadata),
           is_guest: false,
         };
 
