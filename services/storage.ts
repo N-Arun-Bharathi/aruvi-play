@@ -18,6 +18,7 @@ function getActiveUserId(): string {
 
 const KEYS = {
   lastPlayed: "aruvi:lastPlayed",
+  activeQueue: "aruvi:activeQueue",
 } as const;
 
 export async function loadLiked(): Promise<Song[]> {
@@ -88,4 +89,35 @@ export async function saveLastPlayed(song: Song, position: number) {
     KEYS.lastPlayed,
     JSON.stringify({ song, position })
   );
+}
+
+export async function loadActiveQueue(): Promise<{
+  songs: Song[];
+  index: number;
+} | null> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.activeQueue);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed && Array.isArray(parsed.songs)) {
+      parsed.songs = parsed.songs.map((s: Song) =>
+        s.source === "local" ? s : { ...s, url: "" }
+      );
+    }
+    return parsed;
+  } catch (e) {
+    console.error("Failed to load active queue from AsyncStorage", e);
+    return null;
+  }
+}
+
+export async function saveActiveQueue(songs: Song[], index: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(
+      KEYS.activeQueue,
+      JSON.stringify({ songs, index })
+    );
+  } catch (e) {
+    console.error("Failed to save active queue to AsyncStorage", e);
+  }
 }

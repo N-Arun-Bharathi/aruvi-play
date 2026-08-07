@@ -47,10 +47,31 @@ export class QueueManager {
   private scheduleQueueSave() {
     if (this.queueSaveTimer) clearTimeout(this.queueSaveTimer);
     this.queueSaveTimer = setTimeout(() => {
-      const userId = this.getActiveUserId();
-      dbSaveQueue(userId, "active-queue-session", this.index, this.queue)
-        .catch((e) => console.error("Failed to save active queue to SQLite", e));
-    }, 2000);
+      this.saveQueueImmediately();
+    }, 300);
+  }
+
+  public saveQueueImmediately() {
+    if (this.queueSaveTimer) {
+      clearTimeout(this.queueSaveTimer);
+      this.queueSaveTimer = null;
+    }
+    if (this.queue.length === 0) return;
+
+    const userId = this.getActiveUserId();
+    const currentQueue = [...this.queue];
+    const currentIndex = this.index;
+
+    // Fast atomic save to AsyncStorage
+    const { saveActiveQueue } = require("./storage");
+    saveActiveQueue(currentQueue, currentIndex).catch((e: any) =>
+      console.error("Failed to save active queue to AsyncStorage", e)
+    );
+
+    // Save to SQLite
+    dbSaveQueue(userId, "active-queue-session", currentIndex, currentQueue).catch(
+      (e) => console.error("Failed to save active queue to SQLite", e)
+    );
   }
 
   private syncWithZustand() {
@@ -72,7 +93,7 @@ export class QueueManager {
       syncPlaybackWithRoom();
     } catch (e) {}
 
-    // Debounce active queue save to SQLite (2s)
+    // Debounce active queue save to SQLite/AsyncStorage (300ms)
     this.scheduleQueueSave();
 
     // Sync playback session (throttled or forced on state change)
@@ -104,7 +125,15 @@ export class QueueManager {
     const player = tryGetPlayer();
     if (!player) return;
 
-    const { default: TrackPlayer, Event } = require("react-native-track-player");
+    const { AppState } = require("react-native");
+
+    // Flush active queue save whenever app transitions to background or inactive
+    AppState.addEventListener("change", (nextAppState: string) => {
+      if (nextAppState === "background" || nextAppState === "inactive") {
+        console.log("QueueManager: App going to background/inactive, saving active queue immediately...");
+        this.saveQueueImmediately();
+      }
+    });
 
     // Single listener for playback status updates
     player.addListener("playbackStatusUpdate", (status: any) => {
@@ -126,16 +155,30 @@ export class QueueManager {
 
     // Restore queue and last played song from SQLite/AsyncStorage on startup
     try {
-      const { loadLastPlayed, loadRecent } = require("./storage");
+      const { loadLastPlayed, loadRecent, loadActiveQueue } = require("./storage");
       const userId = this.getActiveUserId();
-      const saved = await dbGetQueue(userId);
+      let restoredSongs: Song[] = [];
+      let restoredIndex: number = 0;
 
-      if (saved && saved.songs.length > 0) {
-        this.queue = saved.songs;
-        this.index = saved.index >= 0 && saved.index < saved.songs.length ? saved.index : 0;
+      const saved = await dbGetQueue(userId);
+      if (saved && saved.songs && saved.songs.length > 0) {
+        restoredSongs = saved.songs;
+        restoredIndex = saved.index >= 0 && saved.index < saved.songs.length ? saved.index : 0;
+        console.log(`QueueManager: Restored queue from SQLite with ${restoredSongs.length} songs at index ${restoredIndex}`);
+      } else {
+        const asyncSaved = await loadActiveQueue();
+        if (asyncSaved && asyncSaved.songs && asyncSaved.songs.length > 0) {
+          restoredSongs = asyncSaved.songs;
+          restoredIndex = asyncSaved.index >= 0 && asyncSaved.index < asyncSaved.songs.length ? asyncSaved.index : 0;
+          console.log(`QueueManager: Restored queue from AsyncStorage with ${restoredSongs.length} songs at index ${restoredIndex}`);
+        }
+      }
+
+      if (restoredSongs.length > 0) {
+        this.queue = restoredSongs;
+        this.index = restoredIndex;
         this.isPlaying = false;
         this.syncWithZustand();
-        console.log(`QueueManager: Restored queue with ${saved.songs.length} songs at index ${this.index}`);
       } else {
         const lastPlayed = await loadLastPlayed();
         if (lastPlayed && lastPlayed.song) {
@@ -143,7 +186,7 @@ export class QueueManager {
           this.index = 0;
           this.isPlaying = false;
           this.syncWithZustand();
-          console.log(`QueueManager: Restored last played song: ${lastPlayed.song.title}`);
+          console.log(`QueueManager: Restored single last played song: ${lastPlayed.song.title}`);
         } else {
           const recents = await loadRecent();
           if (recents && recents.length > 0) {
@@ -359,14 +402,15 @@ export class QueueManager {
 
     let songToPlay = song;
 
-    if (!songToPlay.url) {
+    if (!songToPlay.url && songToPlay.source !== "local") {
       try {
+        console.log(`QueueManager: Resolving fresh stream URL for: ${song.title}`);
         const resolved = await resolveSong(song.title, song.artist);
-        if (resolved) {
+        if (resolved && resolved.url) {
           songToPlay = { ...resolved, id: song.id };
           this.queue[idx] = songToPlay;
         } else {
-          throw new Error(`Failed to resolve URL for ${song.title}`);
+          throw new Error(`Failed to resolve stream URL for ${song.title}`);
         }
       } catch (err) {
         console.error("Resolution error:", err);
@@ -385,6 +429,10 @@ export class QueueManager {
       saveLastPlayed(songToPlay, 0).catch(() => {});
     } catch (err) {
       console.error("Playback load error:", err);
+      // Clear URL on failure so next attempt fetches a new stream link
+      if (this.queue[idx] && this.queue[idx].source !== "local") {
+        this.queue[idx].url = "";
+      }
       this.isResolving = false;
       this.syncWithZustand();
       await this.handlePlaybackError(idx);
@@ -446,6 +494,11 @@ export class QueueManager {
     if (!currentSong) return;
 
     console.log("QueueManager: onTrackFinished called for song:", currentSong.title, currentSong.id);
+
+    if (this.currentlyPlayingId && this.currentlyPlayingId !== currentSong.id) {
+      console.log("QueueManager: Skipping onTrackFinished because currentlyPlayingId doesn't match current song:", this.currentlyPlayingId, currentSong.id);
+      return;
+    }
 
     if (this.lastFinishedId === currentSong.id) {
       console.log("QueueManager: Skipping onTrackFinished because song already finished:", currentSong.id);
@@ -633,6 +686,7 @@ export class QueueManager {
       this.queue = [...this.queue, ...formattedRecs];
       console.log(`QueueManager: Appended ${formattedRecs.length} songs.`);
       this.syncWithZustand();
+      this.saveQueueImmediately();
     }
   }
 

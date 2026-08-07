@@ -9,6 +9,7 @@ class TrackPlayerWrapper {
   public duration: number = 0;
   private currentUri: string = "";
   private isInitialized = false;
+  private isResetting = false;
 
   constructor() {}
 
@@ -28,6 +29,7 @@ class TrackPlayerWrapper {
     try {
       // Listen to react-native-track-player progress update events
       TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (data) => {
+        if (this.isResetting) return;
         this.currentTime = data.position;
         this.duration = data.duration;
         this.emitPlaybackStatus();
@@ -35,6 +37,7 @@ class TrackPlayerWrapper {
 
       // Listen to state changes
       TrackPlayer.addEventListener(Event.PlaybackState, (data: any) => {
+        if (this.isResetting) return;
         const stateStr = typeof data.state === "string" ? data.state : String(data.state);
         const isPlaying = stateStr === State.Playing || (data.state as any) === 3 || stateStr === "playing";
         if (this.playing !== isPlaying) {
@@ -42,18 +45,41 @@ class TrackPlayerWrapper {
           this.emitPlaybackStatus();
         }
         const isEnded = stateStr === State.Ended || (data.state as any) === 6 || stateStr === "ended";
-        const isNearEnd = this.duration > 0 && this.currentTime >= Math.max(1, this.duration - 3);
-        if (isEnded || (isNearEnd && (stateStr === State.Stopped || stateStr === "stopped"))) {
+        if (isEnded) {
           console.log("TrackPlayerWrapper: Event.PlaybackState ended received:", data.state);
+          this.playing = false;
+          this.currentTime = 0;
+          this.duration = 0;
           this.emitPlaybackStatus(true);
         }
       });
 
       // Listen to queue ended event
       TrackPlayer.addEventListener(Event.PlaybackQueueEnded, (data) => {
+        if (this.isResetting) return;
         console.log("TrackPlayerWrapper: Event.PlaybackQueueEnded received", data);
         this.playing = false;
+        this.currentTime = 0;
+        this.duration = 0;
         this.emitPlaybackStatus(true);
+      });
+
+      // Listen to playback error events
+      TrackPlayer.addEventListener(Event.PlaybackError, (error) => {
+        if (this.isResetting) return;
+        console.error("TrackPlayerWrapper: Event.PlaybackError received", error);
+        this.playing = false;
+        this.currentTime = 0;
+        this.duration = 0;
+        this.notify("playbackStatusUpdate", {
+          currentTime: 0,
+          duration: 0,
+          playing: false,
+          didJustFinish: false,
+          isLoaded: false,
+          error: error || "Playback error occurred",
+          playbackState: "error",
+        });
       });
     } catch (e) {
       console.warn("TrackPlayer setupListeners warning:", e);
@@ -123,42 +149,47 @@ class TrackPlayerWrapper {
 
   public async setActiveForLockScreen(active: boolean, metadata?: any, options?: any) {
     await this.ensureInitialized();
-    if (active && metadata) {
-      await TrackPlayer.reset();
-      
-      const currentTrack = {
-        id: metadata.title || "track",
-        url: this.currentUri,
-        title: metadata.title,
-        artist: metadata.artist,
-        album: metadata.albumTitle,
-        artwork: metadata.artworkUrl,
-      };
-      
-      await TrackPlayer.add([currentTrack]);
-      
-      await TrackPlayer.updateOptions({
-        progressUpdateEventInterval: 0.25,
-        capabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.SkipToNext,
-          Capability.SkipToPrevious,
-          Capability.SeekTo,
-        ],
-        compactCapabilities: [
-          Capability.Play,
-          Capability.Pause,
-          Capability.SkipToNext,
-          Capability.SkipToPrevious,
-        ],
-      });
-
-      if (this.playing) {
-        await TrackPlayer.play();
+    this.isResetting = true;
+    this.currentTime = 0;
+    this.duration = 0;
+    try {
+      if (active && metadata) {
+        await TrackPlayer.reset();
+        
+        const currentTrack = {
+          id: metadata.title || "track",
+          url: this.currentUri,
+          title: metadata.title,
+          artist: metadata.artist,
+          album: metadata.albumTitle,
+          artwork: metadata.artworkUrl,
+        };
+        
+        await TrackPlayer.add([currentTrack]);
+        
+        await TrackPlayer.updateOptions({
+          progressUpdateEventInterval: 0.25,
+          capabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+            Capability.SeekTo,
+          ],
+          compactCapabilities: [
+            Capability.Play,
+            Capability.Pause,
+            Capability.SkipToNext,
+            Capability.SkipToPrevious,
+          ],
+        });
+      } else {
+        await TrackPlayer.reset();
       }
-    } else {
-      await TrackPlayer.reset();
+    } finally {
+      setTimeout(() => {
+        this.isResetting = false;
+      }, 150);
     }
   }
 
@@ -186,6 +217,8 @@ export function tryGetPlayer(): any {
 export async function loadAndPlay(song: Song) {
   if (!playerWrapper) return;
   console.log("loadAndPlay: Starting playback sequence for:", song.title);
+  playerWrapper.currentTime = 0;
+  playerWrapper.duration = 0;
   await playerWrapper.pause();
   playerWrapper.replace({ uri: song.url });
   try {
@@ -203,9 +236,14 @@ export async function loadAndPlay(song: Song) {
   } catch (e) {
     console.error("Failed to set lockscreen:", e);
   }
-  console.log("loadAndPlay: Calling play...");
-  await playerWrapper.play();
-  console.log("loadAndPlay: Playback sequence completed successfully!");
+  console.log("loadAndPlay: Calling play for URL:", song.url);
+  try {
+    await playerWrapper.play();
+    console.log("loadAndPlay: Playback sequence completed successfully!");
+  } catch (playErr) {
+    console.error("loadAndPlay: playerWrapper.play failed:", playErr);
+    throw playErr;
+  }
 }
 
 export function updateLockScreen(song: Song) {

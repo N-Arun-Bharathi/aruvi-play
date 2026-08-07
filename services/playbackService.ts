@@ -5,22 +5,52 @@ export async function playbackService() {
 
   TrackPlayer.addEventListener(Event.RemotePlay, () => {
     console.log("PlaybackService: RemotePlay triggered");
-    TrackPlayer.play().catch((err) => console.error("PlaybackService: play error:", err));
+    try {
+      const { QueueManager } = require("./queueManager");
+      const manager = QueueManager.getInstance();
+      if (!manager.isPlaying) {
+        manager.togglePlay();
+      } else {
+        TrackPlayer.play().catch((err) => console.error("PlaybackService: play error:", err));
+      }
+    } catch (e) {
+      TrackPlayer.play().catch((err) => console.error("PlaybackService: play fallback error:", err));
+    }
   });
 
   TrackPlayer.addEventListener(Event.RemotePause, () => {
     console.log("PlaybackService: RemotePause triggered");
-    TrackPlayer.pause().catch((err) => console.error("PlaybackService: pause error:", err));
+    try {
+      const { QueueManager } = require("./queueManager");
+      const manager = QueueManager.getInstance();
+      if (manager.isPlaying) {
+        manager.togglePlay();
+      } else {
+        TrackPlayer.pause().catch((err) => console.error("PlaybackService: pause error:", err));
+      }
+    } catch (e) {
+      TrackPlayer.pause().catch((err) => console.error("PlaybackService: pause fallback error:", err));
+    }
   });
 
   TrackPlayer.addEventListener(Event.RemoteNext, () => {
-    console.log("PlaybackService: RemoteNext triggered, skipping natively to next placeholder");
-    TrackPlayer.skipToNext().catch((err) => console.error("PlaybackService: Failed to skipToNext natively:", err));
+    console.log("PlaybackService: RemoteNext triggered -> QueueManager.playNext()");
+    try {
+      const { QueueManager } = require("./queueManager");
+      QueueManager.getInstance().playNext();
+    } catch (e) {
+      console.error("PlaybackService: Failed to trigger playNext:", e);
+    }
   });
 
   TrackPlayer.addEventListener(Event.RemotePrevious, () => {
-    console.log("PlaybackService: RemotePrevious triggered, skipping natively to previous placeholder");
-    TrackPlayer.skipToPrevious().catch((err) => console.error("PlaybackService: Failed to skipToPrevious natively:", err));
+    console.log("PlaybackService: RemotePrevious triggered -> QueueManager.playPrevious()");
+    try {
+      const { QueueManager } = require("./queueManager");
+      QueueManager.getInstance().playPrevious();
+    } catch (e) {
+      console.error("PlaybackService: Failed to trigger playPrevious:", e);
+    }
   });
 
   TrackPlayer.addEventListener(Event.RemoteSeek, (event) => {

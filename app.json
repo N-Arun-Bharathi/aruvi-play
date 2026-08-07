@@ -35,7 +35,8 @@
         "WAKE_LOCK",
         "READ_EXTERNAL_STORAGE",
         "READ_MEDIA_AUDIO",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "READ_PHONE_STATE"
       ]
     },
     "web": {

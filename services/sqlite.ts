@@ -508,6 +508,7 @@ export async function dbSaveQueue(userId: string, queueId: string, index: number
     INSERT INTO user_queues (id, user_id, current_index)
     VALUES (?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
+      user_id = excluded.user_id,
       current_index = excluded.current_index,
       updated_at = datetime('now');
   `, [queueId, userId, index]);
@@ -531,7 +532,10 @@ export async function dbSaveQueue(userId: string, queueId: string, index: number
 export async function dbGetQueue(userId: string): Promise<{ queueId: string, index: number, songs: Song[] } | null> {
   if (!db) return null;
   
-  const qRow: any = await db.getFirstAsync("SELECT * FROM user_queues WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1", [userId]);
+  const qRow: any = await db.getFirstAsync(
+    "SELECT * FROM user_queues WHERE user_id = ? OR id = 'active-queue-session' ORDER BY updated_at DESC LIMIT 1",
+    [userId]
+  );
   if (!qRow) return null;
 
   const items: any[] = await db.getAllAsync(`
@@ -545,6 +549,8 @@ export async function dbGetQueue(userId: string): Promise<{ queueId: string, ind
     const s = mapRowToSong(row);
     if (row.queue_type === "local") {
       s.source = "local";
+    } else {
+      s.url = ""; // Clear expired online stream URLs on restoration
     }
     return s;
   });
