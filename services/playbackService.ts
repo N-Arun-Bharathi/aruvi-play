@@ -58,6 +58,38 @@ export async function playbackService() {
     TrackPlayer.seekTo(event.position).catch((err) => console.error("PlaybackService: seekTo error:", err));
   });
 
+  TrackPlayer.addEventListener(Event.RemoteDuck, (event) => {
+    console.log("PlaybackService: RemoteDuck (audio interruption / call / video) triggered:", event);
+    try {
+      const { QueueManager } = require("./queueManager");
+      const manager = QueueManager.getInstance();
+      if (event.paused || event.permanent || (event as any).ducking) {
+        if (manager.isPlaying) {
+          manager.togglePlay();
+        } else {
+          TrackPlayer.pause().catch(() => {});
+        }
+      }
+    } catch (e) {
+      TrackPlayer.pause().catch(() => {});
+    }
+  });
+
+  TrackPlayer.addEventListener(Event.RemoteStop, () => {
+    console.log("PlaybackService: RemoteStop triggered");
+    try {
+      const { QueueManager } = require("./queueManager");
+      const manager = QueueManager.getInstance();
+      if (manager.isPlaying) {
+        manager.togglePlay();
+      } else {
+        TrackPlayer.pause().catch(() => {});
+      }
+    } catch (e) {
+      TrackPlayer.pause().catch(() => {});
+    }
+  });
+
   TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
     console.log("PlaybackService: PlaybackQueueEnded triggered");
     try {

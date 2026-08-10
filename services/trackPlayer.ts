@@ -64,6 +64,15 @@ class TrackPlayerWrapper {
         this.emitPlaybackStatus(true);
       });
 
+      // Listen to audio interruptions (incoming call, other apps playing video/audio)
+      TrackPlayer.addEventListener(Event.RemoteDuck, (event: any) => {
+        console.log("TrackPlayerWrapper: Event.RemoteDuck received", event);
+        if (event.paused || event.permanent || event.ducking) {
+          this.playing = false;
+          this.emitPlaybackStatus();
+        }
+      });
+
       // Listen to playback error events
       TrackPlayer.addEventListener(Event.PlaybackError, (error) => {
         if (this.isResetting) return;
@@ -168,6 +177,8 @@ class TrackPlayerWrapper {
         await TrackPlayer.add([currentTrack]);
         
         await TrackPlayer.updateOptions({
+          stoppingAppPausesPlayback: true,
+          alwaysPauseOnInterruption: true,
           progressUpdateEventInterval: 0.25,
           capabilities: [
             Capability.Play,
