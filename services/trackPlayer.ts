@@ -10,6 +10,7 @@ class TrackPlayerWrapper {
   private currentUri: string = "";
   private isInitialized = false;
   private isResetting = false;
+  private wasPlayingBeforeDuck = false;
 
   constructor() {}
 
@@ -64,12 +65,32 @@ class TrackPlayerWrapper {
         this.emitPlaybackStatus(true);
       });
 
-      // Listen to audio interruptions (incoming call, other apps playing video/audio)
-      TrackPlayer.addEventListener(Event.RemoteDuck, (event: any) => {
+      // Listen to audio interruptions (incoming call, message notification, other apps)
+      TrackPlayer.addEventListener(Event.RemoteDuck, async (event: any) => {
         console.log("TrackPlayerWrapper: Event.RemoteDuck received", event);
-        if (event.paused || event.permanent || event.ducking) {
+        if (event.permanent) {
+          this.wasPlayingBeforeDuck = false;
           this.playing = false;
           this.emitPlaybackStatus();
+          return;
+        }
+
+        if (event.paused || event.ducking) {
+          if (this.playing) {
+            this.wasPlayingBeforeDuck = true;
+          }
+          this.playing = false;
+          this.emitPlaybackStatus();
+        } else if (event.shouldResume || (!event.paused && !event.ducking)) {
+          if (this.wasPlayingBeforeDuck) {
+            console.log("TrackPlayerWrapper: Interruption ended (call/notification), auto-resuming playback...");
+            this.wasPlayingBeforeDuck = false;
+            try {
+              await this.play();
+            } catch (err) {
+              console.error("Auto-resume playback error:", err);
+            }
+          }
         }
       });
 
@@ -166,7 +187,7 @@ class TrackPlayerWrapper {
         await TrackPlayer.reset();
         
         const currentTrack = {
-          id: metadata.title || "track",
+          id: metadata.id || metadata.title || "track",
           url: this.currentUri,
           title: metadata.title,
           artist: metadata.artist,
@@ -178,7 +199,7 @@ class TrackPlayerWrapper {
         
         await TrackPlayer.updateOptions({
           stoppingAppPausesPlayback: true,
-          alwaysPauseOnInterruption: true,
+          alwaysPauseOnInterruption: false,
           progressUpdateEventInterval: 0.25,
           capabilities: [
             Capability.Play,
@@ -227,34 +248,53 @@ export function tryGetPlayer(): any {
 
 export async function loadAndPlay(song: Song) {
   if (!playerWrapper) return;
-  console.log("loadAndPlay: Starting playback sequence for:", song.title);
+  console.log("loadAndPlay: Instant playback transition for:", song.title);
   playerWrapper.currentTime = 0;
   playerWrapper.duration = 0;
-  await playerWrapper.pause();
+  playerWrapper.playing = true;
   playerWrapper.replace({ uri: song.url });
+
+  const { useLibraryStore } = require("../store/likedStore");
+  const isLiked = useLibraryStore.getState().isLiked(song);
+
+  const currentTrack = {
+    id: song.id || song.title,
+    url: song.url,
+    title: song.title,
+    artist: song.artist,
+    album: song.album,
+    artwork: song.artwork,
+  };
+
   try {
-    const { useLibraryStore } = require("../store/likedStore");
-    const isLiked = useLibraryStore.getState().isLiked(song);
-    
-    console.log("loadAndPlay: Setting up lockscreen queue...");
-    await playerWrapper.setActiveForLockScreen(true, {
-      title: song.title,
-      artist: song.artist,
-      albumTitle: song.album,
-      artworkUrl: song.artwork,
-      isLiked,
-    });
-  } catch (e) {
-    console.error("Failed to set lockscreen:", e);
-  }
-  console.log("loadAndPlay: Calling play for URL:", song.url);
-  try {
-    await playerWrapper.play();
-    console.log("loadAndPlay: Playback sequence completed successfully!");
+    await TrackPlayer.reset();
+    await TrackPlayer.add([currentTrack]);
+    await TrackPlayer.play();
+    console.log("loadAndPlay: Playback started instantly!");
   } catch (playErr) {
     console.error("loadAndPlay: playerWrapper.play failed:", playErr);
     throw playErr;
   }
+
+  // Update lockscreen options asynchronously in background
+  TrackPlayer.updateOptions({
+    stoppingAppPausesPlayback: true,
+    alwaysPauseOnInterruption: false,
+    progressUpdateEventInterval: 0.25,
+    capabilities: [
+      Capability.Play,
+      Capability.Pause,
+      Capability.SkipToNext,
+      Capability.SkipToPrevious,
+      Capability.SeekTo,
+    ],
+    compactCapabilities: [
+      Capability.Play,
+      Capability.Pause,
+      Capability.SkipToNext,
+      Capability.SkipToPrevious,
+    ],
+  }).catch(() => {});
 }
 
 export function updateLockScreen(song: Song) {

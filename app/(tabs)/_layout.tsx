@@ -16,7 +16,10 @@ export default function TabsLayout() {
     <View style={{ flex: 1, backgroundColor: "#09090B" }}>
       <Tabs
         tabBar={(props) => <CustomTabBar {...props} />}
-        screenOptions={{ headerShown: false }}
+        screenOptions={{
+          headerShown: false,
+          animation: "none",
+        }}
       >
         {/* Always visible */}
         <Tabs.Screen name="index" options={{ title: "Home" }} />

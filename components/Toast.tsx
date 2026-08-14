@@ -1,27 +1,39 @@
 import React, { useEffect } from "react";
 import { View, Text, StyleSheet, Dimensions } from "react-native";
+import { BlurView } from "expo-blur";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
+  Easing,
 } from "react-native-reanimated";
 import { useToastStore } from "../store/toastStore";
+import { useTheme } from "../utils/theme";
 
 const { width } = Dimensions.get("window");
 
 export function Toast() {
   const { message, visible } = useToastStore();
-  const translateY = useSharedValue(100);
+  const insets = useSafeAreaInsets();
+  const theme = useTheme();
+
+  const translateY = useSharedValue(-60);
   const opacity = useSharedValue(0);
 
   useEffect(() => {
     if (visible) {
-      translateY.value = withSpring(0, { damping: 15 });
-      opacity.value = withTiming(1, { duration: 300 });
+      translateY.value = withTiming(0, {
+        duration: 220,
+        easing: Easing.out(Easing.quad),
+      });
+      opacity.value = withTiming(1, { duration: 200 });
     } else {
-      translateY.value = withSpring(100);
-      opacity.value = withTiming(0, { duration: 300 });
+      translateY.value = withTiming(-60, {
+        duration: 200,
+        easing: Easing.in(Easing.quad),
+      });
+      opacity.value = withTiming(0, { duration: 180 });
     }
   }, [visible]);
 
@@ -32,10 +44,36 @@ export function Toast() {
 
   if (!message && !visible) return null;
 
+  const topOffset = Math.max(insets.top + 6, 44);
+
   return (
-    <View style={styles.container} pointerEvents="none">
-      <Animated.View style={[styles.toast, animatedStyle]}>
-        <Text style={styles.text}>{message}</Text>
+    <View style={[styles.container, { top: topOffset }]} pointerEvents="none">
+      <Animated.View style={[animatedStyle, { maxWidth: width - 40 }]}>
+        <View 
+          style={{
+            borderColor: theme.glassBorder,
+            shadowColor: "#000",
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.2,
+            shadowRadius: 12,
+            elevation: 10,
+          }}
+          className="rounded-full overflow-hidden border"
+        >
+          <BlurView
+            intensity={85}
+            tint={theme.blurTint}
+            className="px-5 py-2.5 flex-row items-center justify-center"
+          >
+            <Text
+              style={{ color: theme.primaryText }}
+              className="text-xs font-bold text-center"
+              numberOfLines={2}
+            >
+              {message}
+            </Text>
+          </BlurView>
+        </View>
       </Animated.View>
     </View>
   );
@@ -44,28 +82,9 @@ export function Toast() {
 const styles = StyleSheet.create({
   container: {
     position: "absolute",
-    bottom: 100,
     left: 0,
     right: 0,
     alignItems: "center",
-    zIndex: 9999,
-  },
-  toast: {
-    backgroundColor: "rgba(30, 30, 30, 0.95)",
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 25,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 5,
-    elevation: 8,
-  },
-  text: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
+    zIndex: 99999,
   },
 });

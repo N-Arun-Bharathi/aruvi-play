@@ -6,6 +6,8 @@ import { Icon } from "./Icon";
 import { AnimatedHeart } from "./AnimatedHeart";
 import { useAuthStore } from "../store/authStore";
 
+import { useTheme } from "../utils/theme";
+
 interface Props {
   song: Song;
   onPress: () => void;
@@ -23,16 +25,19 @@ export const SongRow = React.memo(function SongRow({
   liked,
   onAddToQueue,
 }: Props) {
-  // Never show the heart button for guest users
   const authMode = useAuthStore((s) => s.authMode);
   const canLike = authMode === "authenticated" && !!onLike;
+  const theme = useTheme();
 
   return (
     <Pressable
       onPress={onPress}
       className="flex-row items-center px-4 py-3 active:opacity-60"
     >
-      <View className="w-12 h-12 rounded-md bg-surface2 overflow-hidden items-center justify-center">
+      <View 
+        style={{ backgroundColor: theme.surfaceElevated, borderColor: theme.glassBorder }}
+        className="w-12 h-12 rounded-xl overflow-hidden items-center justify-center border"
+      >
         {song.artwork ? (
           <Image
             source={{ uri: song.artwork }}
@@ -40,17 +45,18 @@ export const SongRow = React.memo(function SongRow({
             contentFit="cover"
           />
         ) : (
-          <Icon name="music" size={20} color="#A0A0A0" />
+          <Icon name="music" size={20} color={theme.secondaryText} />
         )}
       </View>
-      <View className="flex-1 ml-3">
+      <View className="flex-1 ml-3 pr-2">
         <Text
-          className={`text-base font-medium ${isActive ? "text-accent" : "text-text"}`}
+          style={{ color: isActive ? theme.accent : theme.primaryText }}
+          className="text-base font-semibold"
           numberOfLines={1}
         >
           {song.title}
         </Text>
-        <Text className="text-xs text-muted mt-0.5" numberOfLines={1}>
+        <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }} numberOfLines={1}>
           {song.artist}
           {song.source === "local" ? " • Local" : ""}
         </Text>

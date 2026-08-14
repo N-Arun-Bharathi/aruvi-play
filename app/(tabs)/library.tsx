@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { View, Text, FlatList, Pressable, TextInput, Alert, ScrollView } from "react-native";
-import { useRouter } from "expo-router";
+import { useRouter, useFocusEffect } from "expo-router";
 import { Image } from "expo-image";
 import { useLibraryStore } from "../../store/likedStore";
 import { usePlayerStore } from "../../store/playerStore";
@@ -41,33 +41,56 @@ export default function Library() {
 
   const userId = user?.id || "guest-user";
 
-  useEffect(() => {
-    useLibraryStore.getState().hydrate();
-    if (tab === "playlists") {
-      fetchPlaylists();
-    }
-  }, [tab, userId]);
-
-  const fetchPlaylists = async () => {
+  const fetchPlaylists = useCallback(async () => {
     setLoadingPlaylists(true);
     try {
-      const cached = await dbGetPlaylists(userId);
-      setPlaylists(cached);
+      const cached = (await dbGetPlaylists(userId)) || [];
+      const combinedMap = new Map<string, any>();
 
-      const { data: serverPlaylists, error } = await supabase
-        .from("playlists")
-        .select("*")
-        .eq("user_id", userId);
+      for (const item of cached) {
+        if (item && item.id) {
+          combinedMap.set(String(item.id), item);
+        }
+      }
+
+      const query = userId && !userId.startsWith("guest")
+        ? supabase.from("playlists").select("*").or(`user_id.eq.${userId},is_public.eq.true`).order("created_at", { ascending: false })
+        : supabase.from("playlists").select("*").eq("is_public", true).order("created_at", { ascending: false });
+
+      const { data: serverPlaylists, error } = await query;
 
       if (serverPlaylists && !error) {
-        setPlaylists(serverPlaylists);
+        for (const item of serverPlaylists) {
+          if (item && item.id) {
+            combinedMap.set(String(item.id), {
+              ...item,
+              isPublic: item.is_public,
+            });
+          }
+        }
       }
+
+      const mergedList = Array.from(combinedMap.values());
+      setPlaylists(mergedList);
     } catch (e) {
       console.warn("Failed to fetch playlists:", e);
     } finally {
       setLoadingPlaylists(false);
     }
-  };
+  }, [userId]);
+
+  useFocusEffect(
+    useCallback(() => {
+      useLibraryStore.getState().hydrate();
+      fetchPlaylists();
+    }, [fetchPlaylists])
+  );
+
+  useEffect(() => {
+    if (tab === "playlists") {
+      fetchPlaylists();
+    }
+  }, [tab, fetchPlaylists]);
 
   const filteredData = useMemo(() => {
     const raw = tab === "liked" ? liked : local;

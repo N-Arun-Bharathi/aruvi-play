@@ -1,5 +1,6 @@
 import React from "react";
 import { View, Text, Pressable } from "react-native";
+import { BlurView } from "expo-blur";
 import { AppScreen } from "../../components/AppScreen";
 import { AppHeader } from "../../components/AppHeader";
 import { Icon } from "../../components/Icon";
@@ -11,18 +12,18 @@ export default function AppearanceSettings() {
   const settingsTheme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
 
-  const options: { id: "system" | "dark" | "light"; label: string; desc: string }[] = [
-    { id: "system", label: "Use System Default", desc: "Adapt automatically based on device status." },
-    { id: "dark", label: "Dark Theme", desc: "Vibrant dark mode for low light spaces." },
-    { id: "light", label: "Light Theme", desc: "Clear bright theme for daylight reading." },
+  const options: { id: "system" | "dark" | "light"; label: string; desc: string; icon: "moon" | "sun" | "device" }[] = [
+    { id: "system", label: "Use System Default", desc: "Adapt automatically based on device theme preference.", icon: "device" },
+    { id: "dark", label: "Dark Glass Theme", desc: "Sleek obsidian dark mode with glassmorphic accents.", icon: "moon" },
+    { id: "light", label: "Light Glass Theme", desc: "Clean, luminous bright theme with frosted glass elements.", icon: "sun" },
   ];
 
   return (
     <AppScreen edges={["top", "bottom"]}>
-      <AppHeader title="Appearance" showBack />
+      <AppHeader title="Appearance & Themes" showBack />
       <View className="flex-1 p-6" style={{ backgroundColor: theme.background }}>
-        <Text className="text-xs font-bold uppercase tracking-wider mb-4" style={{ color: theme.secondaryText }}>
-          Theme Options
+        <Text className="text-xs font-bold uppercase tracking-wider mb-4 ml-1" style={{ color: theme.secondaryText }}>
+          Theme Preference
         </Text>
         
         {options.map((opt) => {
@@ -31,28 +32,43 @@ export default function AppearanceSettings() {
             <Pressable
               key={opt.id}
               onPress={() => setTheme(opt.id)}
-              className="p-5 rounded-2xl border flex-row items-center justify-between mb-4 active:bg-white/5"
+              className="rounded-2xl border overflow-hidden mb-4 shadow-sm active:opacity-80"
               style={{
-                backgroundColor: theme.card,
-                borderColor: isSelected ? theme.accent : theme.border,
+                borderColor: isSelected ? theme.accent : theme.glassBorder,
               }}
             >
-              <View className="flex-1 pr-4">
-                <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
-                  {opt.label}
-                </Text>
-                <Text className="text-xs mt-1" style={{ color: theme.secondaryText }}>
-                  {opt.desc}
-                </Text>
-              </View>
-              {isSelected && (
-                <View 
-                  className="w-6 h-6 rounded-full items-center justify-center" 
-                  style={{ backgroundColor: theme.accent }}
-                >
-                  <Icon name="check" size={14} color="#000000" />
+              <View 
+                className="p-5 flex-row items-center justify-between"
+                style={{ backgroundColor: isSelected ? theme.accentMuted : theme.glassCard }}
+              >
+                <View className="flex-1 pr-4">
+                  <View className="flex-row items-center mb-1">
+                    <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
+                      {opt.label}
+                    </Text>
+                    {isSelected && (
+                      <View className="ml-2 px-2 py-0.5 rounded-full bg-accent/20">
+                        <Text className="text-[10px] font-bold uppercase" style={{ color: theme.accent }}>
+                          Active
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text className="text-xs leading-relaxed" style={{ color: theme.secondaryText }}>
+                    {opt.desc}
+                  </Text>
                 </View>
-              )}
+
+                <View 
+                  className="w-7 h-7 rounded-full items-center justify-center border" 
+                  style={{
+                    backgroundColor: isSelected ? theme.accent : "transparent",
+                    borderColor: isSelected ? theme.accent : theme.border,
+                  }}
+                >
+                  {isSelected && <Icon name="check" size={14} color="#FFFFFF" />}
+                </View>
+              </View>
             </Pressable>
           );
         })}

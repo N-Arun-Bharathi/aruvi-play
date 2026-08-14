@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, TextInput, Alert } from "react-native";
+import { View, Text, TextInput } from "react-native";
 import { useRouter } from "expo-router";
 import { AppScreen } from "../../components/AppScreen";
 import { AppHeader } from "../../components/AppHeader";
@@ -8,51 +8,78 @@ import { useTheme } from "../../utils/theme";
 import { useAuthStore } from "../../store/authStore";
 import { dbSavePlaylist } from "../../services/sqlite";
 import { supabase } from "../../services/supabase";
+import { useToastStore } from "../../store/toastStore";
 
 export default function CreatePlaylist() {
   const router = useRouter();
   const theme = useTheme();
   const user = useAuthStore((s) => s.userProfile);
+  const toast = useToastStore();
 
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleCreate = async () => {
-    if (!name.trim()) {
-      Alert.alert("Required", "Please enter a playlist name.");
+    const cleanName = name.trim();
+    if (!cleanName) {
+      toast.show("Please enter a playlist name.");
       return;
     }
 
     setLoading(true);
-    const userId = user?.id || "guest-user";
+    const rawUserId = user?.id;
+    const isGuest = !rawUserId || user?.is_guest || rawUserId.startsWith("guest");
+    const playlistId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `pl-${Date.now()}`;
 
     try {
-      const { data: pl, error } = await supabase
-        .from("playlists")
-        .insert({
-          user_id: userId,
-          name: name.trim(),
+      let savedServer = false;
+      const { data: authData } = await supabase.auth.getUser();
+      const currentAuthId = authData?.user?.id;
+
+      if (currentAuthId && !isGuest) {
+        try {
+          const { data: pl, error } = await supabase
+            .from("playlists")
+            .insert({
+              user_id: currentAuthId,
+              name: cleanName,
+              description: desc.trim(),
+              is_public: true, // Visible for all users
+            })
+            .select()
+            .single();
+
+          if (!error && pl) {
+            await dbSavePlaylist({
+              id: pl.id,
+              userId: pl.user_id,
+              name: pl.name,
+              description: pl.description,
+              isPublic: true,
+            });
+            savedServer = true;
+          }
+        } catch (serverErr) {
+          console.warn("Server playlist creation fallback:", serverErr);
+        }
+      }
+
+      if (!savedServer) {
+        await dbSavePlaylist({
+          id: playlistId,
+          userId: rawUserId || "guest-user",
+          name: cleanName,
           description: desc.trim(),
-          is_public: false,
-        })
-        .select()
-        .single();
+          isPublic: true,
+        });
+      }
 
-      if (error) throw error;
-
-      await dbSavePlaylist({
-        id: pl.id,
-        userId: pl.user_id,
-        name: pl.name,
-        description: pl.description,
-        isPublic: !!pl.is_public,
-      });
-
+      toast.show(`Playlist "${cleanName}" created!`);
       router.back();
     } catch (e: any) {
-      console.error(e);
-      Alert.alert("Error", e.message || "Failed to create playlist");
+      console.error("Create playlist error:", e);
+      toast.show(e.message || "Failed to create playlist.");
     } finally {
       setLoading(false);
     }

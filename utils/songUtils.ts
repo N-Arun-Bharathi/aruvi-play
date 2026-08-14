@@ -43,8 +43,8 @@ export function normalizeSongTitle(title: string): string {
     normalized = normalized.replace(regex, "");
   }
 
-  // 5. Remove punctuation and special characters (keep tamil characters and alphanumeric characters)
-  normalized = normalized.replace(/[^a-zA-Z0-9\u0B80-\u0BFF\s]/g, "");
+  // 5. Remove punctuation and special characters (keep all letters, numbers, and spaces across languages)
+  normalized = normalized.replace(/[^\p{L}\p{N}\s]/gu, "");
 
   // 6. Normalize whitespace
   normalized = normalized.replace(/\s+/g, " ").trim();

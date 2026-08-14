@@ -13,7 +13,6 @@ const songByIdCache = new Map<string, Song>();
 const BASE_URLS = [
   "https://nepotuneapi.vercel.app",
   "https://jiosaavn-api-beta.vercel.app",
-  "https://saavn-api.vercel.app",
 ];
 
 let currentBaseIndex = 0;
@@ -81,7 +80,9 @@ function pickUrl(downloadUrl: SaavnSong["downloadUrl"]): string | undefined {
   if (!downloadUrl?.length) return undefined;
   const high = downloadUrl.find((d) => d.quality === "320kbps");
   const fallback = downloadUrl[downloadUrl.length - 1];
-  return (high ?? fallback)?.url ?? (high ?? fallback)?.link;
+  const url = (high ?? fallback)?.url ?? (high ?? fallback)?.link;
+  if (!url) return undefined;
+  return url.replace(/^http:/, "https:");
 }
 
 function artistName(s: SaavnSong): string {
@@ -226,14 +227,20 @@ export async function searchSongs(query: string, limit = 20, signal?: AbortSigna
 }
 
 export async function getSongById(id: string): Promise<Song | null> {
+  if (!id) return null;
   if (songByIdCache.has(id)) {
     return songByIdCache.get(id)!;
   }
 
   try {
-    // Some use /songs?id=, some use /songs/:id. request() handles normalization to query params mostly.
-    const data = await request(`/songs`, { id });
-    const results: SaavnSong[] = data?.data ?? [];
+    let data: any;
+    try {
+      data = await request(`/songs/${id}`);
+    } catch {
+      data = await request(`/songs`, { id });
+    }
+
+    const results: SaavnSong[] = Array.isArray(data?.data) ? data.data : data?.data ? [data.data] : [];
     if (!results.length) return null;
     const song = mapSaavnToSong(results[0]);
     if (song) {
@@ -273,10 +280,15 @@ export async function getTrending(language = "tamil,english,hindi"): Promise<Son
   }
 }
 
-export async function resolveSong(title: string, artist: string): Promise<Song | null> {
-  const firstArtist = artist.split(";")[0].trim();
-  const cleanTitle = title.replace(/[^a-zA-Z0-9\u0B80-\u0BFF\s]/g, "").trim();
-  const firstWord = title.split(/\s+/)[0];
+export async function resolveSong(title: string, artist: string, id?: string): Promise<Song | null> {
+  if (id && id !== "unknown" && !id.startsWith("local:")) {
+    const byId = await getSongById(id);
+    if (byId && byId.url) return byId;
+  }
+
+  const firstArtist = artist ? artist.split(/[;,]/)[0].trim() : "";
+  const cleanTitle = title ? title.replace(/[^\p{L}\p{N}\s]/gu, "").trim() : "";
+  const firstWord = title ? title.split(/\s+/)[0] : "";
 
   const queries = [
     `${title} ${firstArtist}`,

@@ -44,7 +44,9 @@ export type IconName =
   | "queue"
   | "check"
   | "eye"
-  | "eye-off";
+  | "eye-off"
+  | "sun"
+  | "moon";
 
 export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
   const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none" };
@@ -425,11 +427,17 @@ export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
           <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       );
-    case "eye-off":
+    case "sun":
       return (
         <Svg {...props}>
-          <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-          <Path d="M1 1l22 22" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Circle cx="12" cy="12" r="5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      );
+    case "moon":
+      return (
+        <Svg {...props}>
+          <Path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       );
   }

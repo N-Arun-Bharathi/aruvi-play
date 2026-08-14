@@ -9,7 +9,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- Normalizes song titles for deduplication and matching
 CREATE OR REPLACE FUNCTION public.normalize_song_title(title text)
-RETURNS text AS $$
+RETURNS text
+LANGUAGE plpgsql IMMUTABLE
+SET search_path = 'public'
+AS $$
 DECLARE
   normalized text;
 BEGIN
@@ -29,7 +32,7 @@ BEGIN
   normalized := regexp_replace(normalized, '\s+', ' ', 'g');
   RETURN trim(normalized);
 END;
-$$ LANGUAGE plpgsql IMMUTABLE;
+$$;
 
 -- ==========================================
 -- 2. Table Definitions
@@ -106,14 +109,16 @@ CREATE TABLE IF NOT EXISTS public.liked_songs (
 -- playlists
 CREATE TABLE IF NOT EXISTS public.playlists (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
   cover_url TEXT,
-  is_public BOOLEAN DEFAULT false,
+  is_public BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.playlists ALTER COLUMN user_id DROP NOT NULL;
 
 -- playlist_songs
 CREATE TABLE IF NOT EXISTS public.playlist_songs (
@@ -224,7 +229,12 @@ CREATE TABLE IF NOT EXISTS public.rooms (
 
 -- Migration for existing rooms table
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS code TEXT;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS room_code TEXT;
+ALTER TABLE public.rooms ALTER COLUMN room_code DROP NOT NULL;
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS host_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS host_user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE public.rooms ALTER COLUMN host_id DROP NOT NULL;
+ALTER TABLE public.rooms ALTER COLUMN host_user_id DROP NOT NULL;
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS host_name TEXT;
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS name TEXT;
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
@@ -233,7 +243,9 @@ ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT
 ALTER TABLE public.rooms ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
 
 CREATE INDEX IF NOT EXISTS idx_rooms_code ON public.rooms(code);
+CREATE INDEX IF NOT EXISTS idx_rooms_room_code ON public.rooms(room_code);
 CREATE INDEX IF NOT EXISTS idx_rooms_host_id ON public.rooms(host_id);
+CREATE INDEX IF NOT EXISTS idx_rooms_host_user_id ON public.rooms(host_user_id);
 
 -- room_members
 CREATE TABLE IF NOT EXISTS public.room_members (
@@ -287,6 +299,27 @@ ALTER TABLE public.rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.room_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.room_queue ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.room_actions ENABLE ROW LEVEL SECURITY;
+
+-- Enable RLS on legacy / auxiliary tables if present in public schema
+ALTER TABLE IF EXISTS public.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.songs_metadata ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.music_rooms ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users') THEN
+    EXECUTE 'DROP POLICY IF EXISTS users_self_policy ON public.users;';
+    EXECUTE 'CREATE POLICY users_self_policy ON public.users FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'songs_metadata') THEN
+    EXECUTE 'DROP POLICY IF EXISTS songs_metadata_select_policy ON public.songs_metadata;';
+    EXECUTE 'CREATE POLICY songs_metadata_select_policy ON public.songs_metadata FOR SELECT TO authenticated, anon USING (true);';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'music_rooms') THEN
+    EXECUTE 'DROP POLICY IF EXISTS music_rooms_select_policy ON public.music_rooms;';
+    EXECUTE 'CREATE POLICY music_rooms_select_policy ON public.music_rooms FOR SELECT TO authenticated USING (true);';
+  END IF;
+END $$;
 
 -- Helper macro: non-anonymous authenticated user
 -- (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE
@@ -351,19 +384,19 @@ DROP POLICY IF EXISTS profiles_write_policy ON public.profiles;
 CREATE POLICY profiles_write_policy ON public.profiles
   FOR ALL TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
--- Create security-definer view to allow authenticated users to fetch their own full private profile safely
-CREATE OR REPLACE VIEW public.my_profile AS
+-- Create security-invoker view to safely restrict my_profile queries to auth.uid() without SECURITY DEFINER bypass
+DROP VIEW IF EXISTS public.my_profile;
+CREATE OR REPLACE VIEW public.my_profile
+WITH (security_invoker = true) AS
   SELECT * FROM public.profiles WHERE id = auth.uid();
 GRANT SELECT ON public.my_profile TO authenticated;
 
--- Avatars storage bucket setup and policies
+-- Avatars storage bucket setup (Public buckets serve URLs natively without requiring storage.objects SELECT listing policies)
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('avatars', 'avatars', true)
 ON CONFLICT (id) DO NOTHING;
 
 DROP POLICY IF EXISTS "Public Access" ON storage.objects;
-CREATE POLICY "Public Access" ON storage.objects
-  FOR SELECT TO public USING (bucket_id = 'avatars');
 
 DROP POLICY IF EXISTS "Insert Own Avatar" ON storage.objects;
 CREATE POLICY "Insert Own Avatar" ON storage.objects
@@ -377,14 +410,14 @@ DROP POLICY IF EXISTS "Delete Own Avatar" ON storage.objects;
 CREATE POLICY "Delete Own Avatar" ON storage.objects
   FOR DELETE TO authenticated USING (bucket_id = 'avatars' AND name LIKE (auth.uid()::text || '/%'));
 
--- Songs: Read only for everyone, write only for authenticated (dynamic additions)
+-- Songs: Read only for everyone, write for authenticated users
 DROP POLICY IF EXISTS songs_read_policy ON public.songs;
 CREATE POLICY songs_read_policy ON public.songs
   FOR SELECT TO authenticated, anon USING (true);
 
 DROP POLICY IF EXISTS songs_insert_policy ON public.songs;
 CREATE POLICY songs_insert_policy ON public.songs
-  FOR INSERT TO authenticated WITH CHECK (true);
+  FOR INSERT TO authenticated WITH CHECK (auth.uid() IS NOT NULL);
 
 -- Liked Songs: Non-anonymous registered users can read, insert, delete their own liked songs
 DROP POLICY IF EXISTS liked_songs_user_policy ON public.liked_songs;
@@ -441,10 +474,10 @@ DROP POLICY IF EXISTS app_versions_read_policy ON public.app_versions;
 CREATE POLICY app_versions_read_policy ON public.app_versions
   FOR SELECT TO authenticated, anon USING (true);
 
--- Playback Errors: Write-only for users, no read except service_role
+-- Playback Errors: Write-only with validated payload
 DROP POLICY IF EXISTS playback_errors_insert ON public.playback_errors;
 CREATE POLICY playback_errors_insert ON public.playback_errors
-  FOR INSERT TO authenticated, anon WITH CHECK (true);
+  FOR INSERT TO authenticated, anon WITH CHECK (error_message IS NOT NULL OR source_url IS NOT NULL);
 
 
 -- ==========================================
@@ -453,7 +486,10 @@ CREATE POLICY playback_errors_insert ON public.playback_errors
 
 -- Provision profiles on signup
 CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = 'public'
+AS $$
 DECLARE
   v_is_anon boolean := false;
   v_guest_num integer;
@@ -496,7 +532,9 @@ BEGIN
   );
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.handle_new_user() FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
@@ -504,7 +542,10 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
 
 -- Block is_owner updates from client side
 CREATE OR REPLACE FUNCTION public.check_profile_owner_change()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = 'public'
+AS $$
 BEGIN
   IF NEW.is_owner IS DISTINCT FROM OLD.is_owner AND (auth.jwt() ->> 'role' <> 'service_role') THEN
     NEW.is_owner := OLD.is_owner;
@@ -514,7 +555,9 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.check_profile_owner_change() FROM PUBLIC, anon, authenticated;
 
 CREATE OR REPLACE TRIGGER on_profile_owner_update
   BEFORE UPDATE ON public.profiles
@@ -526,7 +569,10 @@ CREATE OR REPLACE TRIGGER on_profile_owner_update
 -- ==========================================
 
 CREATE OR REPLACE FUNCTION public.import_owner_likes(songs_json jsonb)
-RETURNS void AS $$
+RETURNS void
+LANGUAGE plpgsql SECURITY INVOKER
+SET search_path = 'public'
+AS $$
 DECLARE
   song_item jsonb;
   v_song_id text;
@@ -591,4 +637,7 @@ BEGIN
   -- 3. Mark the migration as completed
   UPDATE public.profiles SET initial_likes_imported = true, updated_at = now() WHERE id = v_owner_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.import_owner_likes(jsonb) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.import_owner_likes(jsonb) TO authenticated;

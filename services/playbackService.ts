@@ -58,16 +58,38 @@ export async function playbackService() {
     TrackPlayer.seekTo(event.position).catch((err) => console.error("PlaybackService: seekTo error:", err));
   });
 
-  TrackPlayer.addEventListener(Event.RemoteDuck, (event) => {
+  let wasPlayingBeforeDuck = false;
+
+  TrackPlayer.addEventListener(Event.RemoteDuck, async (event: any) => {
     console.log("PlaybackService: RemoteDuck (audio interruption / call / video) triggered:", event);
     try {
       const { QueueManager } = require("./queueManager");
       const manager = QueueManager.getInstance();
-      if (event.paused || event.permanent || (event as any).ducking) {
+
+      if (event.permanent) {
+        wasPlayingBeforeDuck = false;
         if (manager.isPlaying) {
-          manager.togglePlay();
-        } else {
-          TrackPlayer.pause().catch(() => {});
+          manager.isPlaying = false;
+          manager.syncWithZustand();
+        }
+        await TrackPlayer.pause().catch(() => {});
+        return;
+      }
+
+      if (event.paused || event.ducking) {
+        if (manager.isPlaying) {
+          wasPlayingBeforeDuck = true;
+          manager.isPlaying = false;
+          manager.syncWithZustand();
+        }
+        await TrackPlayer.pause().catch(() => {});
+      } else if (event.shouldResume || (!event.paused && !event.ducking)) {
+        if (wasPlayingBeforeDuck) {
+          console.log("PlaybackService: Call or notification ended. Auto-resuming playback...");
+          wasPlayingBeforeDuck = false;
+          manager.isPlaying = true;
+          manager.syncWithZustand();
+          await TrackPlayer.play().catch((err) => console.error("PlaybackService auto-resume error:", err));
         }
       }
     } catch (e) {

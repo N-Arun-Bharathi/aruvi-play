@@ -20,9 +20,13 @@ import { useAuthStore } from "../../store/authStore";
 import { usePlayerStore } from "../../store/playerStore";
 import { useTheme } from "../../utils/theme";
 
+import { useSettingsStore } from "../../store/settingsStore";
+
 export default function ProfileScreen() {
   const router = useRouter();
   const theme = useTheme();
+  const settingsTheme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
   const userProfile = useAuthStore((s) => s.userProfile);
   const upgradeGuestAccount = useAuthStore((s) => s.upgradeGuestAccount);
   const logout = useAuthStore((s) => s.logout);
@@ -34,6 +38,9 @@ export default function ProfileScreen() {
   const [saveEmail, setSaveEmail] = useState("");
   const [savePassword, setSavePassword] = useState("");
   const [saveFavourites, setSaveFavourites] = useState(true);
+
+  const isDark = settingsTheme === "dark" || (settingsTheme === "system" && theme.id === "dark");
+  const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   const handleUpdateCheck = () => {
     try {
@@ -53,7 +60,7 @@ export default function ProfileScreen() {
       >
         {/* User Card Frame */}
         <View
-          className="mx-5 my-5 p-5 rounded-3xl border flex-row items-center relative overflow-hidden"
+          className="mx-5 my-5 p-5 rounded-3xl border flex-row items-center relative overflow-hidden shadow-sm"
           style={{ backgroundColor: theme.card, borderColor: theme.border }}
         >
           <ProfileAvatar size={68} />
@@ -104,6 +111,40 @@ export default function ProfileScreen() {
               <Icon name="edit" size={16} color={theme.accent} />
             </Pressable>
           )}
+        </View>
+
+        {/* Quick Dark / Light Theme Switch Card */}
+        <View
+          className="mx-5 mb-5 p-5 rounded-3xl border flex-row items-center justify-between shadow-sm"
+          style={{ backgroundColor: theme.glassCard, borderColor: theme.glassBorder }}
+        >
+          <View className="flex-row items-center flex-1 pr-3">
+            <View 
+              className="w-10 h-10 rounded-2xl items-center justify-center mr-3 border"
+              style={{ backgroundColor: theme.accentMuted, borderColor: theme.glassBorder }}
+            >
+              <Icon name={isDark ? "moon" : "sun"} size={20} color={theme.accent} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
+                {isDark ? "Dark Theme" : "Light Theme"}
+              </Text>
+              <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
+                {isDark ? "Sleek obsidian glassmorphism mode" : "Luminous bright daylight mode"}
+              </Text>
+            </View>
+          </View>
+
+          <Pressable
+            onPress={toggleTheme}
+            className="px-4 py-2.5 rounded-2xl border flex-row items-center active:opacity-80 shadow-sm"
+            style={{ backgroundColor: theme.accent, borderColor: theme.accent }}
+          >
+            <Icon name={isDark ? "sun" : "moon"} size={16} color="#FFFFFF" />
+            <Text className="text-xs font-bold text-white ml-2">
+              {isDark ? "Light" : "Dark"} Mode
+            </Text>
+          </Pressable>
         </View>
 
         {/* Guest Banner Actions */}

@@ -16,9 +16,12 @@ import { useAuthStore } from "../store/authStore";
 
 const { width } = Dimensions.get("window");
 
+import { useTheme } from "../utils/theme";
+
 export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const visible = useTabBarStore((s) => s.visible);
   const insets = useSafeAreaInsets();
+  const theme = useTheme();
   
   // Animation values
   const translateY = useSharedValue(0);
@@ -41,19 +44,15 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   const activeVisibleIndex = visibleRoutes.findIndex((r) => r.key === activeRoute?.key);
 
   useEffect(() => {
-    // Hide/show animation based on scroll direction
-    translateY.value = withSpring(visible ? 0 : 100, {
-      damping: 18,
-      stiffness: 120,
-    });
+    // Ground bottom navigation cleanly
+    translateY.value = 0;
   }, [visible]);
 
   useEffect(() => {
-    // Slide the active indicator capsule based on visible position
+    // Smooth linear slide of active indicator capsule without spring bounce
     const targetIndex = activeVisibleIndex >= 0 ? activeVisibleIndex : 0;
-    activeTabX.value = withSpring(targetIndex * tabWidth, {
-      damping: 16,
-      stiffness: 140,
+    activeTabX.value = withTiming(targetIndex * tabWidth, {
+      duration: 180,
     });
   }, [activeVisibleIndex, tabWidth]);
 
@@ -87,27 +86,27 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
     profile: "Profile",
   };
 
-  const bottomOffset = 24 + (insets.bottom > 0 ? insets.bottom - 10 : 0);
+  const bottomOffset = Math.max(insets.bottom + 10, 18);
 
   return (
     <Animated.View
-      style={[styles.container, { bottom: bottomOffset }, animatedContainerStyle]}
+      style={[styles.container, { bottom: bottomOffset, zIndex: 9999 }, animatedContainerStyle]}
       className="absolute left-4 right-4 bg-transparent shadow-2xl"
     >
       <BlurView
         intensity={85}
-        tint="dark"
-        style={styles.blur}
-        className="rounded-[28px] border border-white/10 overflow-hidden py-2 px-1 flex-row justify-between items-center"
+        tint={theme.blurTint}
+        style={[styles.blur, { borderColor: theme.glassBorder }]}
+        className="rounded-[28px] border overflow-hidden py-2 px-1 flex-row justify-between items-center"
       >
         {/* Active Tab Indicator Capsule */}
         <Animated.View
           style={[
             styles.indicator,
-            { width: tabWidth - 8 },
+            { width: tabWidth - 8, backgroundColor: theme.accentMuted },
             animatedIndicatorStyle,
           ]}
-          className="absolute bg-white/10 rounded-2xl h-[48px] top-2 left-1.5"
+          className="absolute rounded-2xl h-[48px] top-2 left-1.5"
         />
 
         {visibleRoutes.map((route, visibleIdx) => {
@@ -140,10 +139,10 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
               style={{ width: tabWidth }}
               className="align-center justify-center py-2 h-[48px] items-center"
             >
-              <AnimatedIcon name={iconName} isFocused={isFocused} />
+              <AnimatedIcon name={iconName} isFocused={isFocused} activeColor={theme.accent} inactiveColor={theme.secondaryText} />
               <Text
-                style={{ fontSize: 9, fontWeight: isFocused ? "600" : "400" }}
-                className={`mt-1 ${isFocused ? "text-accent" : "text-muted"}`}
+                style={{ fontSize: 9, fontWeight: isFocused ? "600" : "400", color: isFocused ? theme.accent : theme.secondaryText }}
+                className="mt-1"
               >
                 {label}
               </Text>
@@ -155,12 +154,12 @@ export function CustomTabBar({ state, descriptors, navigation }: BottomTabBarPro
   );
 }
 
-// Subcomponent to animate active icon press
-function AnimatedIcon({ name, isFocused }: { name: IconName; isFocused: boolean }) {
+// Subcomponent to animate active icon press smoothly
+function AnimatedIcon({ name, isFocused, activeColor, inactiveColor }: { name: IconName; isFocused: boolean; activeColor: string; inactiveColor: string }) {
   const scale = useSharedValue(1);
 
   useEffect(() => {
-    scale.value = withSpring(isFocused ? 1.15 : 1, { damping: 10 });
+    scale.value = withTiming(isFocused ? 1.08 : 1, { duration: 150 });
   }, [isFocused]);
 
   const animatedStyle = useAnimatedStyle(() => {
@@ -171,7 +170,7 @@ function AnimatedIcon({ name, isFocused }: { name: IconName; isFocused: boolean 
 
   return (
     <Animated.View style={animatedStyle}>
-      <Icon name={name} size={20} color={isFocused ? "#10B981" : "#71717A"} />
+      <Icon name={name} size={20} color={isFocused ? activeColor : inactiveColor} />
     </Animated.View>
   );
 }

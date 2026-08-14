@@ -7,6 +7,7 @@ import { Song } from "../types/song";
 export interface MusicRoom {
   id: string;
   code: string;
+  room_code?: string;
   name: string;
   host_id: string;
   host_name: string;
@@ -42,7 +43,11 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         .order("created_at", { ascending: false });
 
       if (data) {
-        set({ activeRooms: data as MusicRoom[] });
+        const rooms = data.map((r: any) => ({
+          ...r,
+          code: r.code || r.room_code || "",
+        }));
+        set({ activeRooms: rooms as MusicRoom[] });
       }
     } catch (e) {
       console.warn("fetchActiveRooms error:", e);
@@ -63,15 +68,23 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     try {
       const { useAuthStore } = require("./authStore");
       const user = useAuthStore.getState().userProfile;
-      const userId = user?.id || "guest-" + Math.floor(Math.random() * 10000);
-      const userName = user?.name || "Guest Host";
+      const rawUserId = user?.id;
+      const isGuest = !rawUserId || user?.is_guest || rawUserId.startsWith("guest");
 
+      // Ensure valid UUID format for PostgreSQL foreign key constraints
+      const validUserId = isGuest
+        ? (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : "00000000-0000-0000-0000-000000000000")
+        : rawUserId;
+
+      const userName = user?.name || "Guest Host";
       const roomCode = generateRoomCode();
 
-      const newRoom: Partial<MusicRoom> = {
+      const newRoom: any = {
         code: roomCode,
+        room_code: roomCode,
         name: cleanName,
-        host_id: userId,
+        host_id: validUserId,
+        host_user_id: validUserId,
         host_name: userName,
         is_active: true,
         created_at: new Date().toISOString(),
@@ -85,7 +98,12 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         return null;
       }
 
-      const room = data as MusicRoom;
+      const room = {
+        ...data,
+        code: data.code || data.room_code || roomCode,
+        host_id: data.host_id || data.host_user_id || validUserId,
+      } as MusicRoom;
+
       set({ currentRoom: room, loading: false });
       toast.show(`Room "${room.name}" created! Code: ${room.code}`);
       return room.id;
@@ -109,9 +127,9 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       const { data, error } = await supabase
         .from("rooms")
         .select("*")
-        .eq("code", cleanCode)
+        .or(`code.eq.${cleanCode},room_code.eq.${cleanCode}`)
         .eq("is_active", true)
-        .single();
+        .maybeSingle();
 
       if (error || !data) {
         toast.show("Room not found or inactive.");
@@ -119,7 +137,11 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         return false;
       }
 
-      const room = data as MusicRoom;
+      const room = {
+        ...data,
+        code: data.code || data.room_code || cleanCode,
+      } as MusicRoom;
+
       set({ currentRoom: room, loading: false });
       toast.show(`Joined room "${room.name}"!`);
       return true;

@@ -25,6 +25,7 @@ export class QueueManager {
   public currentlyPlayingId: string | null = null;
   private isFetchingRelated: boolean = false;
   private isTransitioning: boolean = false;
+  private isFinishing: boolean = false;
   private lastSessionSyncTime: number = 0;
   private queueSaveTimer: any = null;
 
@@ -220,12 +221,6 @@ export class QueueManager {
         idx = 0;
       }
 
-      newQueue = newQueue.map((s, i) => {
-        if (i === idx) return s;
-        if (s.source === "local") return s;
-        return { ...s, url: "" };
-      });
-
       this.queue = newQueue;
       this.index = idx;
       this.isPlaying = true;
@@ -239,7 +234,7 @@ export class QueueManager {
   }
 
   public playNextImmediately(song: Song) {
-    const songToInsert = song.source === "local" ? song : { ...song, url: "" };
+    const songToInsert = song;
 
     if (this.index === -1 || this.queue.length === 0) {
       this.queue = [songToInsert];
@@ -263,7 +258,7 @@ export class QueueManager {
   }
 
   public addToQueue(song: Song) {
-    const songToInsert = song.source === "local" ? song : { ...song, url: "" };
+    const songToInsert = song;
 
     if (this.index === -1 || this.queue.length === 0) {
       this.queue = [songToInsert];
@@ -317,7 +312,7 @@ export class QueueManager {
       this.syncWithZustand();
 
       await this.loadIndex(nextIdx);
-      await this.appendRecommendedSongsIfNeeded();
+      this.appendRecommendedSongsIfNeeded().catch(() => {});
     } finally {
       this.isTransitioning = false;
     }
@@ -405,7 +400,7 @@ export class QueueManager {
     if (!songToPlay.url && songToPlay.source !== "local") {
       try {
         console.log(`QueueManager: Resolving fresh stream URL for: ${song.title}`);
-        const resolved = await resolveSong(song.title, song.artist);
+        const resolved = await resolveSong(song.title, song.artist, song.id);
         if (resolved && resolved.url) {
           songToPlay = { ...resolved, id: song.id };
           this.queue[idx] = songToPlay;
@@ -446,18 +441,19 @@ export class QueueManager {
     this.prefetchNextSongUrl(idx + 1);
   }
 
-  private prefetchNextSongUrl(nextIdx: number) {
-    const nextSong = this.queue[nextIdx];
-    if (nextSong && !nextSong.url && nextSong.source !== "local") {
-      console.log("QueueManager: Prefetching URL for next song:", nextSong.title);
-      resolveSong(nextSong.title, nextSong.artist).then((resolved) => {
-        if (resolved && this.queue[nextIdx] && (this.queue[nextIdx].id === nextSong.id || this.queue[nextIdx].title === nextSong.title)) {
-          this.queue[nextIdx] = { ...resolved, id: nextSong.id };
-          console.log("QueueManager: Successfully prefetched URL for:", nextSong.title);
-        }
-      }).catch((e) => {
-        console.warn("QueueManager: Prefetch error:", e);
-      });
+  private prefetchNextSongUrl(startIndex: number) {
+    for (let i = startIndex; i <= startIndex + 2; i++) {
+      const targetSong = this.queue[i];
+      if (targetSong && !targetSong.url && targetSong.source !== "local") {
+        const targetIdx = i;
+        resolveSong(targetSong.title, targetSong.artist, targetSong.id)
+          .then((resolved) => {
+            if (resolved && resolved.url && this.queue[targetIdx]) {
+              this.queue[targetIdx] = { ...resolved, id: targetSong.id };
+            }
+          })
+          .catch(() => {});
+      }
     }
   }
 
@@ -483,36 +479,44 @@ export class QueueManager {
   }
 
   public async onTrackFinished() {
-    if (this.isResolving || this.isTransitioning) {
-      console.log("QueueManager: Skipping onTrackFinished because player is resolving/transitioning");
+    if (this.isResolving || this.isTransitioning || this.isFinishing) {
+      console.log("QueueManager: Skipping onTrackFinished because player is resolving/transitioning/finishing");
       return;
     }
 
-    const { usePlayerStore } = require("../store/playerStore");
-    const store = usePlayerStore.getState();
-    const currentSong = this.queue[this.index];
-    if (!currentSong) return;
+    this.isFinishing = true;
 
-    console.log("QueueManager: onTrackFinished called for song:", currentSong.title, currentSong.id);
+    try {
+      const { usePlayerStore } = require("../store/playerStore");
+      const store = usePlayerStore.getState();
+      const currentSong = this.queue[this.index];
+      if (!currentSong) return;
 
-    if (this.currentlyPlayingId && this.currentlyPlayingId !== currentSong.id) {
-      console.log("QueueManager: Skipping onTrackFinished because currentlyPlayingId doesn't match current song:", this.currentlyPlayingId, currentSong.id);
-      return;
+      console.log("QueueManager: onTrackFinished called for song:", currentSong.title, currentSong.id);
+
+      if (this.currentlyPlayingId && this.currentlyPlayingId !== currentSong.id) {
+        console.log("QueueManager: Skipping onTrackFinished because currentlyPlayingId doesn't match current song:", this.currentlyPlayingId, currentSong.id);
+        return;
+      }
+
+      if (this.lastFinishedId === currentSong.id) {
+        console.log("QueueManager: Skipping onTrackFinished because song already finished:", currentSong.id);
+        return;
+      }
+
+      this.lastFinishedId = currentSong.id;
+
+      if (store.repeat === "one") {
+        this.loadIndex(this.index);
+        return;
+      }
+
+      await this.playNext();
+    } finally {
+      setTimeout(() => {
+        this.isFinishing = false;
+      }, 500);
     }
-
-    if (this.lastFinishedId === currentSong.id) {
-      console.log("QueueManager: Skipping onTrackFinished because song already finished:", currentSong.id);
-      return;
-    }
-
-    this.lastFinishedId = currentSong.id;
-
-    if (store.repeat === "one") {
-      this.loadIndex(this.index);
-      return;
-    }
-
-    await this.playNext();
   }
 
   public normalizeSongTitle(title: string): string {
@@ -680,11 +684,8 @@ export class QueueManager {
     const recommendations = await this.buildArtistQueue(seedSong);
     
     if (recommendations.length > 0) {
-      const formattedRecs = recommendations.map(s => 
-        s.source === "local" ? s : { ...s, url: "" }
-      );
-      this.queue = [...this.queue, ...formattedRecs];
-      console.log(`QueueManager: Appended ${formattedRecs.length} songs.`);
+      this.queue = [...this.queue, ...recommendations];
+      console.log(`QueueManager: Appended ${recommendations.length} songs.`);
       this.syncWithZustand();
       this.saveQueueImmediately();
     }

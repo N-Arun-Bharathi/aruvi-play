@@ -10,6 +10,8 @@ import { useAuthStore } from "../store/authStore";
 import { enableFreeze } from "react-native-screens";
 import { Toast } from "../components/Toast";
 import { useToastStore } from "../store/toastStore";
+import { useSettingsStore } from "../store/settingsStore";
+import { useTheme } from "../utils/theme";
 import * as Linking from "expo-linking";
 
 enableFreeze(true);
@@ -35,10 +37,12 @@ function RootLayoutNav() {
   const initPlayer = usePlayerStore((s) => s.init);
   const hydrateAuth = useAuthStore((s) => s.hydrate);
   const authMode = useAuthStore((s) => s.authMode);
+  const theme = useTheme();
 
   // ── Startup: init player + resolve auth session (once) ───────
   useEffect(() => {
     initPlayer().catch((e) => console.warn("initPlayer warning:", e));
+    useSettingsStore.getState().hydrate().catch((e) => console.warn("Settings hydrate warning:", e));
 
     hydrateAuth()
       .then(() => {
@@ -57,7 +61,6 @@ function RootLayoutNav() {
   const url = Linking.useURL();
   useEffect(() => {
     if (url && (url.includes("type=signup") || url.includes("type=invite"))) {
-      // Give Supabase a moment to process the URL internally and establish the session
       setTimeout(async () => {
         await hydrateAuth();
         const profile = useAuthStore.getState().userProfile;
@@ -83,7 +86,6 @@ function RootLayoutNav() {
     }
 
     if (authMode === "authenticated" || authMode === "guest") {
-      // If on auth screen, push into app
       if (inAuthScreen) {
         router.replace("/(tabs)" as any);
         return;
@@ -102,7 +104,7 @@ function RootLayoutNav() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: "#09090B" },
+        contentStyle: { backgroundColor: theme.background },
         animation: "slide_from_right",
       }}
     >
@@ -131,15 +133,23 @@ function RootLayoutNav() {
   );
 }
 
+function RootLayoutContent() {
+  const theme = useTheme();
+
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.background }}>
+      <StatusBar style={theme.statusBar} />
+      <RootLayoutNav />
+      <Toast />
+    </View>
+  );
+}
+
 export default function RootLayout() {
   return (
-    <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#0A0A0A" }}>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <View style={{ flex: 1, backgroundColor: "#0A0A0A" }}>
-          <StatusBar style="light" />
-          <RootLayoutNav />
-          <Toast />
-        </View>
+        <RootLayoutContent />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
