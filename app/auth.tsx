@@ -207,7 +207,7 @@ export default function AuthScreen() {
                     className="py-2 items-center mb-2"
                   >
                     <Text className="text-muted text-xs font-semibold">
-                      Don't have an account?{" "}
+                      Don&apos;t have an account?{" "}
                       <Text className="text-accent font-bold">Create Account</Text>
                     </Text>
                   </Pressable>

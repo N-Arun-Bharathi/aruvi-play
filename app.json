@@ -2,7 +2,7 @@
   "expo": {
     "name": "Aruvi Play",
     "slug": "aruvi-play",
-    "version": "1.0.0",
+    "version": "1.3.0",
     "orientation": "portrait",
     "icon": "./assets/aruvi-play.png",
     "scheme": "aruviplay",
@@ -27,6 +27,7 @@
     },
     "android": {
       "package": "com.aruvi.play",
+      "versionCode": 3,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "INTERNET",

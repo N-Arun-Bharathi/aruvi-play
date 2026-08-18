@@ -102,33 +102,39 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
 
   hydrate: async () => {
     let user = null;
+    let secretKeyUnlocked = false;
     try {
       const { useAuthStore } = require("./authStore");
+      const authState = useAuthStore.getState();
+      if (authState.authMode === "loading") {
+        await authState.hydrate();
+      }
       user = useAuthStore.getState().userProfile;
+      secretKeyUnlocked = useAuthStore.getState().secretKeyUnlocked;
     } catch (e) {}
 
     const isGuest = user?.is_guest ?? false;
     const userId = user?.id || "guest-user";
-    const adminEmail = (process.env.EXPO_PUBLIC_ADMIN_EMAIL || "").toLowerCase().trim();
-    const isOwner = user?.is_owner || (!!adminEmail && user?.email?.toLowerCase().trim() === adminEmail) || false;
+    const isAdmin = user?.isAdmin || user?.is_owner || false;
+    const hasSecretAccess = isAdmin || secretKeyUnlocked;
 
-    // For Guest Users: Do NOT fetch from database or load recent history
-    if (isGuest) {
+    // For Guest Users without secret key access: Do NOT fetch from database or load recent history
+    if (isGuest && !hasSecretAccess) {
       set({ liked: [], recent: [], hydrated: true });
       return;
     }
 
-    // 1. Load from local SQLite cache first for registered users
+    // 1. Load from local SQLite cache first for registered users / secret unlocked guests
     let liked = await dbGetLikedSongs(userId);
-    const recent = await loadRecent();
+    const recent = isGuest ? [] : await loadRecent();
 
-    // Populate with likedSongs.json ONLY for Admin/Owner and if local cache is empty
-    if (isOwner && liked.length === 0) {
+    // Populate with likedSongs.json when user has secret access (admin or secret unlocked) and cache is empty
+    if (hasSecretAccess && liked.length === 0) {
       try {
         await dbSaveUser({
           id: userId,
-          name: "Aruvi Admin",
-          is_owner: true,
+          name: user?.name || "Aruvi User",
+          is_owner: isAdmin,
           initial_likes_imported: true,
         });
 
@@ -149,7 +155,7 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
         }
         liked = formatted;
       } catch (err) {
-        console.error("Failed to load likedSongs.json for Admin profile:", err);
+        console.error("Failed to load likedSongs.json:", err);
       }
     }
 
@@ -210,7 +216,7 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
 
             liked = serverSongs;
             rebuildMaps(liked);
-          } else if (isOwner && liked.length > 0) {
+          } else if (isAdmin && liked.length > 0) {
             // Upload pre-seeded admin liked songs to Supabase
             for (const song of liked) {
               await supabase.from("songs").upsert({

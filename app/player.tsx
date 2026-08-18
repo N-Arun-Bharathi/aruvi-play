@@ -342,7 +342,7 @@ export default function PlayerScreen() {
         <Pressable onPress={() => setShowPlaylistModal(false)} className="flex-1 justify-end bg-black/60">
           <Pressable className="p-6 rounded-t-[32px] border-t overflow-hidden" style={{ backgroundColor: theme.surfaceElevated, borderColor: theme.glassBorder }}>
             <Text className="text-lg font-bold mb-1" style={{ color: theme.primaryText }}>Add to Playlist</Text>
-            <Text className="text-xs mb-4" style={{ color: theme.secondaryText }}>Choose a playlist for "{current.title}"</Text>
+            <Text className="text-xs mb-4" style={{ color: theme.secondaryText }}>Choose a playlist for &quot;{current.title}&quot;</Text>
 
             <ScrollView className="max-h-60" showsVerticalScrollIndicator={false}>
               {userPlaylists.map((pl) => (

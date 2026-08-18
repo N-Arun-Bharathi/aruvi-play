@@ -5,12 +5,9 @@ import { dbSaveUser } from "../services/sqlite";
 import { useToastStore } from "./toastStore";
 import * as Linking from "expo-linking";
 
-const ADMIN_EMAIL = (process.env.EXPO_PUBLIC_ADMIN_EMAIL || "").toLowerCase().trim();
-
-const checkIsAdmin = (email?: string | null, isOwner?: boolean | null, metadata?: any) => {
+const checkIsAdmin = (isOwner?: boolean | null, metadata?: any) => {
   if (isOwner === true) return true;
-  if (metadata?.role === "admin" || metadata?.is_owner === true) return true;
-  if (ADMIN_EMAIL && email && email.toLowerCase().trim() === ADMIN_EMAIL) return true;
+  if (metadata?.role === "admin" || metadata?.is_owner === true || metadata?.is_admin === true) return true;
   return false;
 };
 
@@ -27,6 +24,7 @@ export interface UserProfile {
   phone?: string | null;
   avatar_url?: string | null;
   is_owner: boolean;
+  isAdmin: boolean;
   is_guest: boolean;
   initial_likes_imported?: boolean;
 }
@@ -34,6 +32,7 @@ export interface UserProfile {
 interface AuthStoreState {
   authMode: AuthState;
   userProfile: UserProfile | null;
+  secretKeyUnlocked: boolean;
 
   hydrate: () => Promise<void>;
   loginWithEmail: (email: string, password: string) => Promise<boolean>;
@@ -43,6 +42,7 @@ interface AuthStoreState {
   continueAsGuest: () => Promise<void>;
   upgradeGuestAccount: (credentials: { email: string; password: string; saveFavourites?: boolean }) => Promise<boolean>;
   updateGuestDisplayName: (name: string) => Promise<boolean>;
+  verifyAndUnlockSecretKey: (code: string) => Promise<{ success: boolean; message?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -62,10 +62,15 @@ async function hydrateLibrary() {
 export const useAuthStore = create<AuthStoreState>((set, get) => ({
   authMode: "loading",
   userProfile: null,
+  secretKeyUnlocked: false,
 
   // ─── HYDRATE ─────────────────────────────────────────────────
   hydrate: async () => {
     try {
+      const unlockedStr = await AsyncStorage.getItem("aruvi:secret_unlocked").catch(() => null);
+      const secretKeyUnlocked = unlockedStr === "true";
+      set({ secretKeyUnlocked });
+
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData?.session;
 
@@ -80,20 +85,22 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
 
         let profileData: UserProfile | null = null;
         try {
-          const { data: dbProfile, error: profileErr } = await supabase
+          const { data: dbProfile } = await supabase
             .from("profiles")
             .select("id, display_name, phone, avatar_url, is_owner, initial_likes_imported, is_guest")
             .eq("id", user.id)
             .single();
 
           if (dbProfile) {
+            const isAdmin = checkIsAdmin(dbProfile.is_owner, user.user_metadata);
             profileData = {
               id: user.id,
               name: dbProfile.display_name || user.email?.split("@")[0] || "Aruvi User",
               email: user.email,
               phone: user.phone || dbProfile.phone,
               avatar_url: dbProfile.avatar_url,
-              is_owner: checkIsAdmin(user.email, dbProfile.is_owner, user.user_metadata),
+              is_owner: isAdmin,
+              isAdmin: isAdmin,
               is_guest: false,
               initial_likes_imported: dbProfile.initial_likes_imported || false,
             };
@@ -101,13 +108,15 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         } catch (_) {}
 
         if (!profileData) {
+          const isAdmin = checkIsAdmin(false, user.user_metadata);
           profileData = {
             id: user.id,
             name: user.email?.split("@")[0] || "Aruvi User",
             email: user.email,
             phone: user.phone,
             avatar_url: null,
-            is_owner: checkIsAdmin(user.email, false, user.user_metadata),
+            is_owner: isAdmin,
+            isAdmin: isAdmin,
             is_guest: false,
             initial_likes_imported: false,
           };
@@ -131,8 +140,8 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         try {
           const localUser = JSON.parse(localUserStr);
           if (localUser && localUser.id) {
-            const isOwner = checkIsAdmin(localUser.email, localUser.is_owner);
-            const updatedUser = { ...localUser, is_owner: isOwner };
+            const isAdmin = checkIsAdmin(localUser.isAdmin || localUser.is_owner);
+            const updatedUser = { ...localUser, is_owner: isAdmin, isAdmin: isAdmin };
             const mode = localUser.is_guest ? "guest" : "authenticated";
             set({ authMode: mode, userProfile: updatedUser });
             hydrateLibrary();
@@ -181,6 +190,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
           phone: user.phone,
           avatar_url: null,
           is_owner: false,
+          isAdmin: false,
           is_guest: false,
         };
 
@@ -191,11 +201,13 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
             .eq("id", user.id)
             .single();
           if (dbProfile) {
+            const isAdmin = checkIsAdmin(dbProfile.is_owner, user.user_metadata);
             profile = {
               ...profile,
               name: dbProfile.display_name || profile.name,
               avatar_url: dbProfile.avatar_url,
-              is_owner: checkIsAdmin(user.email, dbProfile.is_owner, user.user_metadata),
+              is_owner: isAdmin,
+              isAdmin: isAdmin,
               initial_likes_imported: dbProfile.initial_likes_imported || false,
             };
           }
@@ -248,13 +260,15 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
 
       if (data?.user) {
         const user = data.user;
+        const isAdmin = checkIsAdmin(false, user.user_metadata);
         const profile: UserProfile = {
           id: user.id,
           name: cleanName,
           email: user.email,
           phone: user.phone,
           avatar_url: null,
-          is_owner: checkIsAdmin(user.email, false, user.user_metadata),
+          is_owner: isAdmin,
+          isAdmin: isAdmin,
           is_guest: false,
         };
 
@@ -352,6 +366,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         id: "local-guest",
         name: `Guest ${Math.floor(1000 + Math.random() * 9000)}`,
         is_owner: false,
+        isAdmin: false,
         is_guest: true,
       };
     }
@@ -405,6 +420,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         name: userProfile?.name || "Aruvi User",
         email: cleanEmail,
         is_owner: false,
+        isAdmin: false,
         is_guest: false,
       };
 
@@ -460,6 +476,35 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   },
 
 
+  // ─── VERIFY AND UNLOCK SECRET KEY ───────────────────────────
+  verifyAndUnlockSecretKey: async (code: string) => {
+    const toast = useToastStore.getState();
+    const cleanCode = code ? code.trim() : "";
+    if (!cleanCode) {
+      toast.show("Please enter a secret key.");
+      return { success: false, message: "Please enter a secret key." };
+    }
+
+    try {
+      const { verifySecretKeyOnBackend } = require("../services/supabase");
+      const isValid = await verifySecretKeyOnBackend(cleanCode);
+
+      if (isValid) {
+        await AsyncStorage.setItem("aruvi:secret_unlocked", "true");
+        set({ secretKeyUnlocked: true });
+        hydrateLibrary();
+        toast.show("Secret access granted!");
+        return { success: true };
+      } else {
+        toast.show("Invalid secret code. Please try again.");
+        return { success: false, message: "Invalid secret code. Please try again." };
+      }
+    } catch (err: any) {
+      toast.show("Failed to verify secret code.");
+      return { success: false, message: "Failed to verify secret code." };
+    }
+  },
+
   // ─── LOGOUT ──────────────────────────────────────────────────
   logout: async () => {
     const toast = useToastStore.getState();
@@ -475,7 +520,8 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     } catch (_) {}
 
     await AsyncStorage.removeItem("aruvi:user");
-    set({ authMode: "unauthenticated", userProfile: null });
+    await AsyncStorage.removeItem("aruvi:secret_unlocked");
+    set({ authMode: "unauthenticated", userProfile: null, secretKeyUnlocked: false });
     toast.show(wasGuest ? "Guest session ended." : "Logged out.");
   },
 }));

@@ -425,22 +425,22 @@ CREATE POLICY liked_songs_user_policy ON public.liked_songs
   FOR ALL TO authenticated USING (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE)
   WITH CHECK (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE);
 
--- Playlists: Private playlists only by non-anonymous owner, public by anyone authenticated
+-- Playlists: Private playlists by owner, public playlists by all users (anon & authenticated)
 DROP POLICY IF EXISTS playlists_read_policy ON public.playlists;
 CREATE POLICY playlists_read_policy ON public.playlists
-  FOR SELECT TO authenticated USING ((auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE) OR is_public = true);
+  FOR SELECT TO anon, authenticated USING (is_public = true OR (user_id = auth.uid() AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE));
 
 DROP POLICY IF EXISTS playlists_write_policy ON public.playlists;
 CREATE POLICY playlists_write_policy ON public.playlists
-  FOR ALL TO authenticated USING (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE)
-  WITH CHECK (auth.uid() = user_id AND (auth.jwt()->>'is_anonymous')::boolean IS NOT TRUE);
+  FOR ALL TO anon, authenticated USING (auth.uid() = user_id OR user_id IS NULL OR is_public = true)
+  WITH CHECK (auth.uid() = user_id OR user_id IS NULL OR is_public = true);
 
--- Playlist Songs: Linked to playlist access
+-- Playlist Songs: Linked to public or owner playlist access
 DROP POLICY IF EXISTS playlist_songs_policy ON public.playlist_songs;
 CREATE POLICY playlist_songs_policy ON public.playlist_songs
-  FOR ALL TO authenticated
+  FOR ALL TO anon, authenticated
   USING (EXISTS (SELECT 1 FROM public.playlists WHERE id = playlist_id AND (user_id = auth.uid() OR is_public = true)))
-  WITH CHECK (EXISTS (SELECT 1 FROM public.playlists WHERE id = playlist_id AND user_id = auth.uid()));
+  WITH CHECK (EXISTS (SELECT 1 FROM public.playlists WHERE id = playlist_id AND (user_id = auth.uid() OR user_id IS NULL OR is_public = true)));
 
 -- Listening History: Only non-anonymous registered owner can view or write
 DROP POLICY IF EXISTS history_user_policy ON public.listening_history;
@@ -525,7 +525,7 @@ BEGIN
     NEW.raw_user_meta_data->>'avatar_url',
     'en',
     'system',
-    false,
+    CASE WHEN LOWER(TRIM(COALESCE(NEW.email, ''))) = 'arunabi6483@gmail.com' THEN true ELSE false END,
     false,
     v_is_anon,
     CASE WHEN v_is_anon THEN now() ELSE null END
@@ -641,3 +641,21 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.import_owner_likes(jsonb) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.import_owner_likes(jsonb) TO authenticated;
+
+-- ==========================================
+-- 6. Secret Key Verification RPC
+-- ==========================================
+
+CREATE OR REPLACE FUNCTION public.verify_secret_key(secret_code text)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = 'public'
+AS $$
+BEGIN
+  RETURN TRIM(COALESCE(secret_code, '')) = 'Aruvi5868';
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.verify_secret_key(text) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.verify_secret_key(text) TO anon, authenticated;
+

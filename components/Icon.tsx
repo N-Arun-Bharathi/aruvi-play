@@ -1,5 +1,5 @@
 import React from "react";
-import Svg, { Path, Circle } from "react-native-svg";
+import Svg, { Path, Circle, Rect, Line } from "react-native-svg";
 
 interface Props {
   name: IconName;
@@ -34,6 +34,7 @@ export type IconName =
   | "drag-handle"
   | "phone"
   | "lock"
+  | "unlock"
   | "arrow-left"
   | "settings"
   | "trash"
@@ -45,6 +46,7 @@ export type IconName =
   | "check"
   | "eye"
   | "eye-off"
+  | "alert"
   | "sun"
   | "moon";
 
@@ -440,5 +442,27 @@ export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
           <Path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       );
+    case "unlock":
+      return (
+        <Svg {...props}>
+          <Rect x="3" y="11" width="18" height="11" rx="2" ry="2" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Path d="M7 11V7a5 5 0 019.9-1" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      );
+    case "eye-off":
+      return (
+        <Svg {...props}>
+          <Path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      );
+    case "alert":
+      return (
+        <Svg {...props}>
+          <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Line x1="12" y1="8" x2="12" y2="12" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Line x1="12" y1="16" x2="12.01" y2="16" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      );
   }
 }
+

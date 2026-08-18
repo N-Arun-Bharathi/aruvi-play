@@ -115,8 +115,33 @@ export async function ensureGuestSession() {
   }
 }
 
+const SECRET_KEY = (process.env.EXPO_PUBLIC_SECRET_KEY || "Aruvi5868").trim();
+
+export async function verifySecretKeyOnBackend(code: string): Promise<boolean> {
+  const cleanCode = code ? code.trim() : "";
+  if (!cleanCode) return false;
+
+  try {
+    if (useMockSupabase || typeof supabase.rpc !== "function") {
+      return cleanCode === SECRET_KEY;
+    }
+    const { data, error } = await supabase.rpc("verify_secret_key", {
+      secret_code: cleanCode,
+    });
+    if (error) {
+      console.warn("verify_secret_key RPC returned error, using security check fallback:", error.message);
+      return cleanCode === SECRET_KEY;
+    }
+    return data === true;
+  } catch (err) {
+    console.warn("verifySecretKeyOnBackend exception:", err);
+    return cleanCode === SECRET_KEY;
+  }
+}
+
 export function isAnonymousUser(user: { is_anonymous?: boolean } | null | undefined): boolean {
   return user?.is_anonymous === true;
 }
 
 export { supabase, useMockSupabase };
+

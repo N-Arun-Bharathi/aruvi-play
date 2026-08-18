@@ -246,6 +246,20 @@ export function tryGetPlayer(): any {
   return playerWrapper;
 }
 
+export async function stopAndResetPlayer() {
+  try {
+    if (playerWrapper) {
+      playerWrapper.playing = false;
+      playerWrapper.currentTime = 0;
+      playerWrapper.duration = 0;
+    }
+    await TrackPlayer.pause().catch(() => {});
+    await TrackPlayer.reset().catch(() => {});
+  } catch (e) {
+    console.warn("stopAndResetPlayer error:", e);
+  }
+}
+
 export async function loadAndPlay(song: Song) {
   if (!playerWrapper) return;
   console.log("loadAndPlay: Instant playback transition for:", song.title);

@@ -10,16 +10,18 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
 import { AppScreen } from "../../components/AppScreen";
 import { AppHeader } from "../../components/AppHeader";
 import { ProfileAvatar } from "../../components/ProfileAvatar";
+import { SongRow } from "../../components/SongRow";
 import { useAuthStore } from "../../store/authStore";
+import { useLibraryStore } from "../../store/likedStore";
 import { usePlayerStore } from "../../store/playerStore";
 import { useTheme } from "../../utils/theme";
-
 import { useSettingsStore } from "../../store/settingsStore";
 
 export default function ProfileScreen() {
@@ -27,11 +29,21 @@ export default function ProfileScreen() {
   const theme = useTheme();
   const settingsTheme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+
+  const authMode = useAuthStore((s) => s.authMode);
   const userProfile = useAuthStore((s) => s.userProfile);
+  const secretKeyUnlocked = useAuthStore((s) => s.secretKeyUnlocked);
+  const verifyAndUnlockSecretKey = useAuthStore((s) => s.verifyAndUnlockSecretKey);
   const upgradeGuestAccount = useAuthStore((s) => s.upgradeGuestAccount);
   const logout = useAuthStore((s) => s.logout);
 
+  const liked = useLibraryStore((s) => s.liked);
+  const isLiked = useLibraryStore((s) => s.isLiked);
+  const toggleLike = useLibraryStore((s) => s.toggleLike);
+
   const currentSong = usePlayerStore((s) => s.current);
+  const playSong = usePlayerStore((s) => s.playSong);
+
   const bottomPadding = currentSong ? 210 : 150;
 
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -39,14 +51,233 @@ export default function ProfileScreen() {
   const [savePassword, setSavePassword] = useState("");
   const [saveFavourites, setSaveFavourites] = useState(true);
 
+  // Secret Key input states
+  const [secretInput, setSecretInput] = useState("");
+  const [secretError, setSecretError] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [showSecretText, setShowSecretText] = useState(false);
+
   const isDark = settingsTheme === "dark" || (settingsTheme === "system" && theme.id === "dark");
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
+
+  const isAdmin = userProfile?.isAdmin === true || userProfile?.is_owner === true;
 
   const handleUpdateCheck = () => {
     try {
       const { runUpdateCheckFlow } = require("../../services/updatesService");
       runUpdateCheckFlow(true).catch(() => {});
     } catch (e) {}
+  };
+
+  const handleUnlockSecretKey = async () => {
+    setSecretError("");
+    const cleanCode = secretInput.trim();
+    if (!cleanCode) {
+      setSecretError("Please enter a secret key.");
+      return;
+    }
+
+    setIsVerifying(true);
+    try {
+      const res = await verifyAndUnlockSecretKey(cleanCode);
+      if (!res.success) {
+        setSecretError(res.message || "Invalid secret code. Please try again.");
+      } else {
+        setSecretInput("");
+      }
+    } catch (err: any) {
+      setSecretError("Failed to verify secret code. Please try again.");
+    } finally {
+      setIsVerifying(false);
+    }
+  };
+
+  const handlePasteSecret = async () => {
+    try {
+      const Clipboard = require("expo-clipboard");
+      const text = await Clipboard.getStringAsync();
+      if (text) {
+        setSecretInput(text.trim());
+        if (secretError) setSecretError("");
+      }
+    } catch (_) {}
+  };
+
+  const renderSecretKeySection = () => {
+    // Only render secret key / unlocked content for guest users
+    if (!userProfile?.is_guest) return null;
+
+    if (authMode === "loading") {
+      return (
+        <View
+          className="mx-5 mb-5 p-5 rounded-3xl border items-center justify-center"
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+        >
+          <ActivityIndicator size="small" color={theme.accent} />
+          <Text className="text-xs font-semibold mt-2" style={{ color: theme.secondaryText }}>
+            Checking profile authorization...
+          </Text>
+        </View>
+      );
+    }
+
+    if (secretKeyUnlocked) {
+      return (
+        <View
+          className="mx-5 mb-5 p-5 rounded-3xl border shadow-sm"
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+        >
+          <View className="flex-row items-center justify-between mb-4">
+            <View className="flex-row items-center flex-1 pr-2">
+              <View className="w-10 h-10 rounded-2xl items-center justify-center mr-3 bg-red-500/15 border border-red-500/20">
+                <Icon name="heart-filled" size={20} color="#EF4444" />
+              </View>
+              <View className="flex-1">
+                <View className="flex-row items-center">
+                  <Text className="text-base font-bold mr-2" style={{ color: theme.primaryText }}>
+                    Protected Liked Songs
+                  </Text>
+                  <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.accent}20` }}>
+                    <Text className="text-[9px] font-extrabold uppercase tracking-wider" style={{ color: theme.accent }}>
+                      Secret Unlocked
+                    </Text>
+                  </View>
+                </View>
+                <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
+                  {liked.length} {liked.length === 1 ? "song" : "songs"} in protected library
+                </Text>
+              </View>
+            </View>
+
+            {liked.length > 0 && (
+              <Pressable
+                onPress={() => playSong(liked[0], liked)}
+                className="px-3.5 py-2 rounded-xl bg-accent flex-row items-center active:opacity-80"
+              >
+                <Icon name="play" size={14} color="#000000" />
+                <Text className="text-xs font-bold text-black ml-1.5">Play All</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {liked.length > 0 ? (
+            <View className="mt-1">
+              {liked.slice(0, 10).map((song, index) => (
+                <SongRow
+                  key={song.id || index}
+                  song={song}
+                  onPress={() => playSong(song, liked)}
+                  liked={isLiked(song)}
+                  onLike={() => toggleLike(song)}
+                />
+              ))}
+              {liked.length > 10 && (
+                <Pressable
+                  onPress={() => router.push("/(tabs)/library" as any)}
+                  className="py-2.5 items-center justify-center border-t border-white/5 mt-2"
+                >
+                  <Text className="text-xs font-bold" style={{ color: theme.accent }}>
+                    View all {liked.length} songs in Library →
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          ) : (
+            <Text className="text-xs py-4 text-center" style={{ color: theme.secondaryText }}>
+              No liked songs found in your library yet.
+            </Text>
+          )}
+        </View>
+      );
+    }
+
+    return (
+      <View
+        className="mx-5 mb-5 p-5 rounded-3xl border shadow-sm"
+        style={{ backgroundColor: theme.card, borderColor: theme.border }}
+      >
+        <View className="flex-row items-center mb-3">
+          <View className="w-10 h-10 rounded-2xl items-center justify-center mr-3 bg-amber-500/10 border border-amber-500/20">
+            <Icon name="lock" size={20} color="#F59E0B" />
+          </View>
+          <View className="flex-1">
+            <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
+              Protected Liked Songs
+            </Text>
+            <Text className="text-xs mt-0.5 leading-relaxed" style={{ color: theme.secondaryText }}>
+              Enter your secret access code below to unlock the protected Liked Songs section.
+            </Text>
+          </View>
+        </View>
+
+        <View className="mt-3">
+          <View
+            className="flex-row items-center rounded-2xl border px-3"
+            style={{
+              backgroundColor: theme.elevatedSurface,
+              borderColor: secretError ? "#EF4444" : theme.border,
+            }}
+          >
+            <TextInput
+              value={secretInput}
+              onChangeText={(txt) => {
+                setSecretInput(txt);
+                if (secretError) setSecretError("");
+              }}
+              placeholder="Paste secret code here..."
+              placeholderTextColor={theme.mutedText}
+              secureTextEntry={!showSecretText}
+              autoCapitalize="none"
+              autoCorrect={false}
+              className="flex-1 py-3 text-sm"
+              style={{ color: theme.primaryText }}
+            />
+
+            {secretInput.length > 0 && (
+              <Pressable
+                onPress={() => setShowSecretText(!showSecretText)}
+                className="p-2 mr-1"
+              >
+                <Icon name={showSecretText ? "eye-off" : "eye"} size={16} color={theme.secondaryText} />
+              </Pressable>
+            )}
+
+            <Pressable
+              onPress={handlePasteSecret}
+              className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 active:bg-white/10"
+            >
+              <Text className="text-[11px] font-semibold text-white">Paste</Text>
+            </Pressable>
+          </View>
+
+          {secretError ? (
+            <View className="flex-row items-center mt-2.5 px-1">
+              <Icon name="alert" size={14} color="#EF4444" />
+              <Text className="text-xs font-semibold text-red-400 ml-1.5 flex-1">
+                {secretError}
+              </Text>
+            </View>
+          ) : null}
+
+          <Pressable
+            onPress={handleUnlockSecretKey}
+            disabled={isVerifying}
+            className="mt-4 py-3 rounded-2xl bg-accent items-center justify-center active:opacity-80 flex-row"
+          >
+            {isVerifying ? (
+              <ActivityIndicator size="small" color="#000000" />
+            ) : (
+              <>
+                <Icon name="unlock" size={16} color="#000000" />
+                <Text className="text-black font-extrabold text-xs ml-2">
+                  Unlock Protected Content
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+      </View>
+    );
   };
 
   return (
@@ -76,7 +307,7 @@ export default function ProfileScreen() {
               <View
                 className="px-2.5 py-0.5 rounded-full"
                 style={{
-                  backgroundColor: userProfile?.is_owner
+                  backgroundColor: isAdmin
                     ? `${theme.accent}15`
                     : userProfile?.is_guest
                     ? `${theme.warning}15`
@@ -86,14 +317,14 @@ export default function ProfileScreen() {
                 <Text
                   className="text-[9px] font-extrabold uppercase tracking-wider"
                   style={{
-                    color: userProfile?.is_owner
+                    color: isAdmin
                       ? theme.accent
                       : userProfile?.is_guest
                       ? theme.warning
                       : theme.secondaryText,
                   }}
                 >
-                  {userProfile?.is_owner
+                  {isAdmin
                     ? "Admin"
                     : userProfile?.is_guest
                     ? "Guest Account"
@@ -147,6 +378,9 @@ export default function ProfileScreen() {
           </Pressable>
         </View>
 
+        {/* SECRET KEY / UNLOCKED LIKED SONGS SECTION (GUEST / SECRET ACCESS ONLY) */}
+        {renderSecretKeySection()}
+
         {/* Guest Banner Actions */}
         {userProfile?.is_guest ? (
           <View className="mx-5 mb-5 p-5 rounded-3xl border bg-amber-500/10 border-amber-500/30">
@@ -188,7 +422,14 @@ export default function ProfileScreen() {
 
         {/* App Updates Card */}
         <View className="mx-5 mb-6 p-5 rounded-3xl border" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
-          <Text className="text-sm font-bold mb-3" style={{ color: theme.primaryText }}>App Version</Text>
+          <View className="flex-row items-center justify-between mb-3">
+            <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>App Version</Text>
+            <View className="px-2.5 py-1 rounded-full bg-accent/15 border border-accent/30">
+              <Text className="text-xs font-extrabold" style={{ color: theme.accent }}>
+                v1.3.0
+              </Text>
+            </View>
+          </View>
 
           <Pressable onPress={handleUpdateCheck} className="py-3 rounded-xl border items-center bg-white/5 border-white/10 active:bg-white/10">
             <Text className="text-xs font-bold text-white">Check for App Updates</Text>

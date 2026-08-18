@@ -37,32 +37,31 @@ export default function CreatePlaylist() {
       const { data: authData } = await supabase.auth.getUser();
       const currentAuthId = authData?.user?.id;
 
-      if (currentAuthId && !isGuest) {
-        try {
-          const { data: pl, error } = await supabase
-            .from("playlists")
-            .insert({
-              user_id: currentAuthId,
-              name: cleanName,
-              description: desc.trim(),
-              is_public: true, // Visible for all users
-            })
-            .select()
-            .single();
+      try {
+        const { data: pl, error } = await supabase
+          .from("playlists")
+          .insert({
+            id: playlistId,
+            user_id: currentAuthId || null,
+            name: cleanName,
+            description: desc.trim(),
+            is_public: true, // Visible for all users publicly
+          })
+          .select()
+          .single();
 
-          if (!error && pl) {
-            await dbSavePlaylist({
-              id: pl.id,
-              userId: pl.user_id,
-              name: pl.name,
-              description: pl.description,
-              isPublic: true,
-            });
-            savedServer = true;
-          }
-        } catch (serverErr) {
-          console.warn("Server playlist creation fallback:", serverErr);
+        if (!error && pl) {
+          await dbSavePlaylist({
+            id: pl.id,
+            userId: pl.user_id || rawUserId || "guest-user",
+            name: pl.name,
+            description: pl.description,
+            isPublic: true,
+          });
+          savedServer = true;
         }
+      } catch (serverErr) {
+        console.warn("Server playlist creation warning:", serverErr);
       }
 
       if (!savedServer) {

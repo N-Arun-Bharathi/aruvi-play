@@ -1,5 +1,5 @@
 import { Song } from "../types/song";
-import { tryGetPlayer, loadAndPlay, clearLockScreen } from "./trackPlayer";
+import { tryGetPlayer, loadAndPlay, stopAndResetPlayer, clearLockScreen } from "./trackPlayer";
 import { getRelatedSongs, resolveSong, searchSongs, getTrending } from "./saavn";
 import { fetchSmartSongs } from "./smartQueue";
 import { pushRecent, saveLastPlayed, loadRecent } from "./storage";
@@ -389,6 +389,9 @@ export class QueueManager {
   private async loadIndex(idx: number) {
     const song = this.queue[idx];
     if (!song) return;
+
+    // Immediately stop and reset native TrackPlayer audio so old track never keeps playing in background
+    await stopAndResetPlayer();
 
     this.lastFinishedId = null;
     this.currentlyPlayingId = song.id;

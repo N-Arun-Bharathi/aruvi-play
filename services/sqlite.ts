@@ -388,7 +388,7 @@ export async function dbDeletePlaylist(playlistId: string): Promise<void> {
 
 export async function dbGetPlaylists(userId: string): Promise<any[]> {
   if (!db) return [];
-  return await db.getAllAsync("SELECT * FROM playlists WHERE user_id = ? ORDER BY created_at DESC", [userId]);
+  return await db.getAllAsync("SELECT * FROM playlists WHERE user_id = ? OR is_public = 1 ORDER BY created_at DESC", [userId]);
 }
 
 export async function dbAddSongToPlaylist(playlistId: string, song: Song, position: number): Promise<void> {
