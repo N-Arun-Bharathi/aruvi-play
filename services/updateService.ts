@@ -101,6 +101,10 @@ export async function checkForAppUpdates(
 ): Promise<UpdateCheckResult> {
   const installed = getInstalledAppInfo();
 
+  if (forceRefresh) {
+    cachedResult = null;
+  }
+
   if (
     !forceRefresh &&
     cachedResult &&
@@ -119,12 +123,15 @@ export async function checkForAppUpdates(
 
   for (const url of urlsToTry) {
     try {
-      console.log(`UpdateService: Fetching version.json from ${url}...`);
-      const response = await axios.get(url, {
+      const cacheBustUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
+      console.log(`UpdateService: Fetching version.json from ${cacheBustUrl}...`);
+      const response = await axios.get(cacheBustUrl, {
         timeout: 8000,
         headers: {
           Accept: "application/json",
-          "Cache-Control": "no-cache",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
         },
       });
 
