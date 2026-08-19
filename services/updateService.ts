@@ -553,17 +553,19 @@ export async function launchApkInstaller(
     };
   } catch (err: any) {
     console.error("UpdateService: launchApkInstaller error:", err);
-    const errStr = String(err.message || err);
+    const errStr = String(err.message || err || "").toLowerCase();
 
     if (
-      errStr.includes("MANAGE_UNKNOWN_APP_SOURCES") ||
-      errStr.includes("Permission") ||
-      errStr.includes("not allowed")
+      errStr.includes("manage_unknown_app_sources") ||
+      errStr.includes("permission") ||
+      errStr.includes("not allowed") ||
+      errStr.includes("securityexception") ||
+      errStr.includes("denied")
     ) {
       return {
         success: false,
         permissionRequired: true,
-        error: "Android requires permission to install apps from this source.",
+        error: "Android requires permission to install apps from Aruvi Play.",
       };
     }
 
