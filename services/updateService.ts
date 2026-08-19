@@ -3,7 +3,7 @@ import * as IntentLauncher from "expo-intent-launcher";
 import * as Crypto from "expo-crypto";
 import * as Application from "expo-application";
 import Constants from "expo-constants";
-import { Platform } from "react-native";
+import { Platform, Linking } from "react-native";
 import axios from "axios";
 
 export interface RemoteVersionInfo {
@@ -507,6 +507,7 @@ export async function launchApkInstaller(
     // FLAG_GRANT_READ_URI_PERMISSION (1) | FLAG_ACTIVITY_NEW_TASK (268435456)
     const flags = 1 | 268435456;
 
+    // Method 1: IntentLauncher ACTION_VIEW
     try {
       await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
         data: contentUri,
@@ -514,15 +515,42 @@ export async function launchApkInstaller(
         type: "application/vnd.android.package-archive",
       });
       return { success: true };
-    } catch (viewErr: any) {
-      console.warn("UpdateService: ACTION_VIEW failed, attempting ACTION_INSTALL_PACKAGE fallback...", viewErr);
+    } catch (err1) {
+      console.warn("UpdateService: Method 1 (ACTION_VIEW) failed:", err1);
+    }
+
+    // Method 2: IntentLauncher ACTION_INSTALL_PACKAGE
+    try {
       await IntentLauncher.startActivityAsync("android.intent.action.INSTALL_PACKAGE", {
         data: contentUri,
         flags,
         type: "application/vnd.android.package-archive",
       });
       return { success: true };
+    } catch (err2) {
+      console.warn("UpdateService: Method 2 (ACTION_INSTALL_PACKAGE) failed:", err2);
     }
+
+    // Method 3: Linking.openURL with contentUri
+    try {
+      await Linking.openURL(contentUri);
+      return { success: true };
+    } catch (err3) {
+      console.warn("UpdateService: Method 3 (Linking contentUri) failed:", err3);
+    }
+
+    // Method 4: Linking.openURL with fileUri
+    try {
+      await Linking.openURL(fileUri);
+      return { success: true };
+    } catch (err4) {
+      console.warn("UpdateService: Method 4 (Linking fileUri) failed:", err4);
+    }
+
+    return {
+      success: false,
+      error: "Unable to launch Android Package Installer. Please allow installing unknown apps in Settings.",
+    };
   } catch (err: any) {
     console.error("UpdateService: launchApkInstaller error:", err);
     const errStr = String(err.message || err);

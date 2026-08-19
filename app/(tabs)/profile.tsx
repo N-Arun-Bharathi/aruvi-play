@@ -184,11 +184,9 @@ export default function ProfileScreen() {
       if (res.permissionRequired) {
         setPermissionRequired(true);
       } else if (!res.success) {
-        setDownloadedFileUri(null);
         setUpdateError(res.error || "Failed to launch installer");
       }
     } catch (err: any) {
-      setDownloadedFileUri(null);
       setUpdateError(err.message || "Installation failed");
     }
   };
