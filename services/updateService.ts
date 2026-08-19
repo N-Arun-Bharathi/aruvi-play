@@ -35,6 +35,7 @@ export interface DownloadProgress {
 }
 
 const DEFAULT_VERSION_JSON_URLS = [
+  "https://github.com/N-Arun-Bharathi/aruvi-play/releases/latest/download/version.json",
   "https://api.github.com/repos/N-Arun-Bharathi/aruvi-play/contents/version.json",
   "https://raw.githubusercontent.com/N-Arun-Bharathi/aruvi-play/main/version.json",
 ];
