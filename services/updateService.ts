@@ -252,6 +252,19 @@ export function getLocalApkUri(version: string): string {
 }
 
 /**
+ * Checks if a valid, non-corrupt downloaded APK file for a given version already exists in cache.
+ */
+export async function checkDownloadedApkExists(version: string): Promise<string | null> {
+  try {
+    const uri = getLocalApkUri(version);
+    const isValid = await verifyApkFileIntegrity(uri);
+    return isValid ? uri : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Cleans up any cached APK file.
  */
 export async function cleanupApkFile(version?: string): Promise<void> {

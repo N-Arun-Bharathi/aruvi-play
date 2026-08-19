@@ -77,11 +77,17 @@ export default function ProfileScreen() {
     let isMounted = true;
     const fetchUpdateStatus = async () => {
       try {
-        const { checkForAppUpdates } = require("../../services/updateService");
+        const { checkForAppUpdates, checkDownloadedApkExists } = require("../../services/updateService");
         const res = await checkForAppUpdates(false);
         if (isMounted) {
           setUpdateInfo(res);
           if (res.error) setUpdateError(res.error);
+          if (res.updateAvailable && res.latestVersion) {
+            const existingUri = await checkDownloadedApkExists(res.latestVersion);
+            if (existingUri && isMounted) {
+              setDownloadedFileUri(existingUri);
+            }
+          }
         }
       } catch (err: any) {
         if (isMounted) setUpdateError("Unable to check for updates");
@@ -98,11 +104,16 @@ export default function ProfileScreen() {
     setUpdateError(null);
     setPermissionRequired(false);
     try {
-      const { checkForAppUpdates } = require("../../services/updateService");
+      const { checkForAppUpdates, checkDownloadedApkExists } = require("../../services/updateService");
       const res = await checkForAppUpdates(true); // force refresh
       setUpdateInfo(res);
       if (res.error) {
         setUpdateError(res.error);
+      } else if (res.updateAvailable && res.latestVersion) {
+        const existingUri = await checkDownloadedApkExists(res.latestVersion);
+        if (existingUri) {
+          setDownloadedFileUri(existingUri);
+        }
       } else if (!res.updateAvailable) {
         Alert.alert("Aruvi Play Up-To-Date", `You are using the latest version of Aruvi Play (v${res.currentVersion}).`);
       }
