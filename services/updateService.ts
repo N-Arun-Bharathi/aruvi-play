@@ -35,8 +35,8 @@ export interface DownloadProgress {
 }
 
 const DEFAULT_VERSION_JSON_URLS = [
+  "https://api.github.com/repos/N-Arun-Bharathi/aruvi-play/contents/version.json",
   "https://raw.githubusercontent.com/N-Arun-Bharathi/aruvi-play/main/version.json",
-  "https://aruvi-play.vercel.app/version.json",
 ];
 
 let cachedResult: { timestamp: number; data: UpdateCheckResult } | null = null;
@@ -135,7 +135,26 @@ export async function checkForAppUpdates(
         },
       });
 
-      const data = response.data;
+      let data = response.data;
+
+      // Handle GitHub REST API Base64 response structure
+      if (data && data.content && data.encoding === "base64") {
+        try {
+          const cleanBase64 = String(data.content).replace(/\s/g, "");
+          let decodedStr = "";
+          if (typeof atob === "function") {
+            decodedStr = atob(cleanBase64);
+          } else if (typeof global !== "undefined" && (global as any).Buffer) {
+            decodedStr = (global as any).Buffer.from(cleanBase64, "base64").toString("utf-8");
+          }
+          if (decodedStr) {
+            data = JSON.parse(decodedStr);
+          }
+        } catch (e) {
+          console.warn("UpdateService: Base64 decoding failed for GitHub API response", e);
+        }
+      }
+
       if (
         data &&
         typeof data === "object" &&
