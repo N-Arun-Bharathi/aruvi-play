@@ -184,10 +184,16 @@ export default function ProfileScreen() {
       if (res.permissionRequired) {
         setPermissionRequired(true);
       } else if (!res.success) {
-        setUpdateError(res.error || "Failed to launch installer");
+        setUpdateError(res.error || "Opening update package in browser fallback...");
+        if (updateInfo?.apkUrl) {
+          Linking.openURL(updateInfo.apkUrl).catch(() => {});
+        }
       }
     } catch (err: any) {
       setUpdateError(err.message || "Installation failed");
+      if (updateInfo?.apkUrl) {
+        Linking.openURL(updateInfo.apkUrl).catch(() => {});
+      }
     }
   };
 
@@ -648,11 +654,21 @@ export default function ProfileScreen() {
               </Text>
               <Pressable
                 onPress={() => handleInstallDownloadedApk(downloadedFileUri)}
-                className="py-3 rounded-2xl bg-accent items-center justify-center active:opacity-80 flex-row"
+                className="py-3 rounded-2xl bg-accent items-center justify-center active:opacity-80 flex-row mb-2"
               >
                 <Icon name="check" size={16} color="#000000" />
                 <Text className="text-xs font-extrabold text-black ml-2">Install Update Now</Text>
               </Pressable>
+
+              {updateInfo?.apkUrl && (
+                <Pressable
+                  onPress={() => Linking.openURL(updateInfo.apkUrl!)}
+                  className="py-2.5 rounded-2xl bg-white/5 border border-white/10 items-center justify-center active:opacity-80 flex-row"
+                >
+                  <Icon name="download" size={14} color={theme.accent} />
+                  <Text className="text-xs font-bold text-emerald-400 ml-2">Install via Web Browser</Text>
+                </Pressable>
+              )}
             </View>
           ) : updateInfo?.updateAvailable ? (
             /* State 4: Update Available */
