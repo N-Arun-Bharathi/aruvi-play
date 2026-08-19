@@ -59,11 +59,13 @@ export default function PlayerScreen() {
     };
   });
 
+  const [prevVolume, setPrevVolume] = useState(1.0);
+
   // Track player volume initialization
   useEffect(() => {
     const player = tryGetPlayer();
     if (player) {
-      setVolume(player.volume);
+      setVolume(player.volume ?? 1.0);
     }
   }, [current]);
 
@@ -71,7 +73,18 @@ export default function PlayerScreen() {
     setVolume(val);
     const player = tryGetPlayer();
     if (player) {
-      player.volume = val;
+      player.setVolume(val);
+    }
+    usePlayerStore.getState().setVolume(val).catch(() => {});
+  };
+
+  const toggleMute = () => {
+    if (volume > 0) {
+      setPrevVolume(volume);
+      onVolumeChange(0);
+    } else {
+      const restoreVal = prevVolume > 0 ? prevVolume : 0.8;
+      onVolumeChange(restoreVal);
     }
   };
 
@@ -211,7 +224,7 @@ export default function PlayerScreen() {
           <Pressable onPress={() => router.back()} hitSlop={12} className="p-2 rounded-full border" style={{ backgroundColor: theme.glassCard, borderColor: theme.glassBorder }}>
             <Icon name="chevron-down" size={24} color={theme.primaryText} />
           </Pressable>
-          
+
           <SleepTimerHeader onTimerPress={showTimerOptions} />
         </View>
 
@@ -273,21 +286,34 @@ export default function PlayerScreen() {
           <PlayerControls />
         </View>
 
-        {/* Volume Slider Section */}
-        <View className="flex-row items-center px-2 my-2">
-          <Icon name="music" size={14} color="#8E8E93" />
+        {/* Volume Slider Controls */}
+        <View className="flex-row items-center px-4 py-2 my-2 rounded-2xl border" style={{ backgroundColor: theme.glassCard, borderColor: theme.glassBorder }}>
+          <Pressable onPress={toggleMute} hitSlop={10} className="pr-2.5">
+            <Icon
+              name={volume === 0 ? "volume-off" : volume < 0.5 ? "volume-low" : "volume-high"}
+              size={18}
+              color={volume === 0 ? theme.secondaryText : theme.accent}
+            />
+          </Pressable>
+
           <Slider
-            style={{ flex: 1, height: 40, marginHorizontal: 12 }}
+            style={{ flex: 1, height: 36 }}
             minimumValue={0}
             maximumValue={1}
             value={volume}
             onValueChange={onVolumeChange}
-            minimumTrackTintColor="#FFFFFF"
-            maximumTrackTintColor="rgba(255,255,255,0.2)"
-            thumbTintColor="#FFFFFF"
+            minimumTrackTintColor={theme.accent}
+            maximumTrackTintColor={theme.secondaryText + "35"}
+            thumbTintColor={theme.accent}
           />
-          <Icon name="music" size={18} color="#FFFFFF" />
+
+          <View className="pl-2.5 w-10 items-end">
+            <Text className="text-[11px] font-bold" style={{ color: theme.secondaryText }}>
+              {Math.round(volume * 100)}%
+            </Text>
+          </View>
         </View>
+
 
         {/* Footer Actions (Lyrics, Add to Playlist, Queue, Share) */}
         <View className="flex-row items-center justify-between pb-6 pt-2 border-t border-white/5">
@@ -317,7 +343,7 @@ export default function PlayerScreen() {
             >
               <Icon name="share" size={16} color={theme.primaryText} />
             </Pressable>
-            
+
             <Pressable
               onPress={() => {
                 router.back();

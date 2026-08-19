@@ -118,7 +118,7 @@ export default function Search() {
 
   const handleSongPlay = (song: Song) => {
     saveSearchHistory(q || song.title);
-    playSong(song, results.length > 0 ? results : [song]);
+    playSong(song, [song]);
     router.push("/player");
   };
 

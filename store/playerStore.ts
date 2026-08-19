@@ -15,6 +15,7 @@ interface PlayerState {
   isPlaying: boolean;
   shuffle: boolean;
   repeat: RepeatMode;
+  volume: number;
   fetchingRelated: boolean;
   resolving: boolean;
   smartMode: boolean;
@@ -29,6 +30,7 @@ interface PlayerState {
   next: () => Promise<void>;
   prev: () => Promise<void>;
   seekTo: (s: number) => Promise<void>;
+  setVolume: (val: number) => Promise<void>;
   toggleShuffle: () => Promise<void>;
   cycleRepeat: () => Promise<void>;
   setQueue: (queue: Song[]) => void;
@@ -52,6 +54,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   isPlaying: false,
   shuffle: false,
   repeat: "off",
+  volume: 1.0,
   fetchingRelated: false,
   resolving: false,
   smartMode: false,
@@ -148,8 +151,19 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   cycleRepeat: async () => {
     const order: RepeatMode[] = ["off", "all", "one"];
     const next = order[(order.indexOf(get().repeat) + 1) % order.length];
-    const p = tryGetPlayer();
-    if (p) p.loop = next === "one";
     set({ repeat: next });
+    const { useToastStore } = require("./toastStore");
+    useToastStore.getState().show(
+      next === "off" ? "Repeat Off" : next === "all" ? "Repeat All" : "Repeat Current Song"
+    );
+  },
+
+  setVolume: async (val: number) => {
+    const clamped = Math.max(0, Math.min(1, val));
+    set({ volume: clamped });
+    const p = tryGetPlayer();
+    if (p) {
+      await p.setVolume(clamped);
+    }
   },
 }));

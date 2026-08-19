@@ -11,6 +11,7 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
@@ -57,16 +58,135 @@ export default function ProfileScreen() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [showSecretText, setShowSecretText] = useState(false);
 
+  // App Update System States
+  const [updateInfo, setUpdateInfo] = useState<any | null>(null);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<any | null>(null);
+  const [downloadedFileUri, setDownloadedFileUri] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [permissionRequired, setPermissionRequired] = useState(false);
+
   const isDark = settingsTheme === "dark" || (settingsTheme === "system" && theme.id === "dark");
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
   const isAdmin = userProfile?.isAdmin === true || userProfile?.is_owner === true;
 
-  const handleUpdateCheck = () => {
+  // Auto-check for updates on Profile screen mount
+  React.useEffect(() => {
+    let isMounted = true;
+    const fetchUpdateStatus = async () => {
+      try {
+        const { checkForAppUpdates } = require("../../services/updateService");
+        const res = await checkForAppUpdates(false);
+        if (isMounted) {
+          setUpdateInfo(res);
+          if (res.error) setUpdateError(res.error);
+        }
+      } catch (err: any) {
+        if (isMounted) setUpdateError("Unable to check for updates");
+      }
+    };
+    fetchUpdateStatus();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const handleManualCheck = async () => {
+    setIsCheckingUpdate(true);
+    setUpdateError(null);
+    setPermissionRequired(false);
     try {
-      const { runUpdateCheckFlow } = require("../../services/updatesService");
-      runUpdateCheckFlow(true).catch(() => {});
-    } catch (e) {}
+      const { checkForAppUpdates } = require("../../services/updateService");
+      const res = await checkForAppUpdates(true); // force refresh
+      setUpdateInfo(res);
+      if (res.error) {
+        setUpdateError(res.error);
+      } else if (!res.updateAvailable) {
+        Alert.alert("Aruvi Play Up-To-Date", `You are using the latest version of Aruvi Play (v${res.currentVersion}).`);
+      }
+    } catch (err: any) {
+      setUpdateError("Unable to check for updates");
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleStartDownload = async () => {
+    if (!updateInfo?.apkUrl || !updateInfo?.latestVersion) return;
+
+    setIsDownloading(true);
+    setUpdateError(null);
+    setPermissionRequired(false);
+    setDownloadProgress({ progressPercent: 0, downloadedMB: "0 MB", totalMB: "..." });
+
+    try {
+      const { downloadApkUpdate, launchApkInstaller } = require("../../services/updateService");
+      const result = await downloadApkUpdate(
+        updateInfo.apkUrl,
+        updateInfo.latestVersion,
+        (progress: any) => {
+          setDownloadProgress(progress);
+        },
+        updateInfo.sha256
+      );
+
+      setIsDownloading(false);
+
+      if (result.success && result.fileUri) {
+        setDownloadedFileUri(result.fileUri);
+        // Automatically launch installer upon download completion
+        const installRes = await launchApkInstaller(result.fileUri);
+        if (installRes.permissionRequired) {
+          setPermissionRequired(true);
+        } else if (!installRes.success) {
+          setUpdateError(installRes.error || "Installation launch failed");
+        }
+      } else if (result.isHtmlRedirect && updateInfo.apkUrl) {
+        setUpdateError("Google Drive requires manual confirmation. Opening download in browser...");
+        Linking.openURL(updateInfo.apkUrl).catch(() => {});
+      } else {
+        setUpdateError(result.error || "Download failed");
+      }
+    } catch (err: any) {
+      setIsDownloading(false);
+      setUpdateError(err.message || "Download failed");
+    }
+  };
+
+  const handleCancelDownload = async () => {
+    try {
+      const { cancelApkDownload } = require("../../services/updateService");
+      await cancelApkDownload(updateInfo?.latestVersion);
+    } catch (_) {}
+    setIsDownloading(false);
+    setDownloadProgress(null);
+  };
+
+  const handleInstallDownloadedApk = async (uri: string) => {
+    setUpdateError(null);
+    setPermissionRequired(false);
+    try {
+      const { launchApkInstaller } = require("../../services/updateService");
+      const res = await launchApkInstaller(uri);
+      if (res.permissionRequired) {
+        setPermissionRequired(true);
+      } else if (!res.success) {
+        setDownloadedFileUri(null);
+        setUpdateError(res.error || "Failed to launch installer");
+      }
+    } catch (err: any) {
+      setDownloadedFileUri(null);
+      setUpdateError(err.message || "Installation failed");
+    }
+  };
+
+  const handleOpenPermissionSettings = async () => {
+    try {
+      const { openInstallPermissionSettings } = require("../../services/updateService");
+      await openInstallPermissionSettings();
+    } catch (_) {}
   };
 
   const handleUnlockSecretKey = async () => {
@@ -421,19 +541,191 @@ export default function ProfileScreen() {
         )}
 
         {/* App Updates Card */}
-        <View className="mx-5 mb-6 p-5 rounded-3xl border" style={{ backgroundColor: theme.card, borderColor: theme.border }}>
+        <View
+          className="mx-5 mb-6 p-5 rounded-3xl border shadow-sm"
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+        >
           <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>App Version</Text>
-            <View className="px-2.5 py-1 rounded-full bg-accent/15 border border-accent/30">
-              <Text className="text-xs font-extrabold" style={{ color: theme.accent }}>
-                v1.3.0
+            <View className="flex-row items-center">
+              <View
+                className="w-9 h-9 rounded-2xl items-center justify-center mr-2.5 border"
+                style={{ backgroundColor: `${theme.accent}15`, borderColor: `${theme.accent}30` }}
+              >
+                <Icon name="refresh" size={18} color={theme.accent} />
+              </View>
+              <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
+                App Updates
               </Text>
             </View>
+
+            {updateInfo?.updateAvailable ? (
+              <View className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex-row items-center">
+                <View className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5" />
+                <Text className="text-[10px] font-extrabold uppercase text-emerald-400 tracking-wider">
+                  Update Available
+                </Text>
+              </View>
+            ) : (
+              <View className="px-2.5 py-1 rounded-full bg-white/5 border border-white/10 flex-row items-center">
+                <Icon name="check" size={12} color={theme.accent} />
+                <Text className="text-[10px] font-extrabold text-white ml-1 tracking-wider">
+                  v{updateInfo?.currentVersion || "1.3.0"}
+                </Text>
+              </View>
+            )}
           </View>
 
-          <Pressable onPress={handleUpdateCheck} className="py-3 rounded-xl border items-center bg-white/5 border-white/10 active:bg-white/10">
-            <Text className="text-xs font-bold text-white">Check for App Updates</Text>
-          </Pressable>
+          {/* State 1: Downloading in Progress */}
+          {isDownloading ? (
+            <View className="mt-2">
+              <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>
+                Updating Aruvi Play
+              </Text>
+              <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
+                Downloading v{updateInfo?.latestVersion}
+              </Text>
+
+              {/* Progress Bar Container */}
+              <View className="w-full h-3 rounded-full bg-white/10 overflow-hidden my-3">
+                <View
+                  className="h-full bg-accent rounded-full"
+                  style={{ width: `${downloadProgress?.progressPercent || 0}%` }}
+                />
+              </View>
+
+              <View className="flex-row justify-between items-center mb-3">
+                <Text className="text-xs font-bold" style={{ color: theme.accent }}>
+                  {downloadProgress?.progressPercent || 0}%
+                </Text>
+                <Text className="text-xs font-semibold" style={{ color: theme.secondaryText }}>
+                  {downloadProgress?.downloadedMB || "0 MB"} / {downloadProgress?.totalMB || "? MB"}
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={handleCancelDownload}
+                className="py-2.5 rounded-xl border border-red-500/30 bg-red-500/10 items-center justify-center active:opacity-80"
+              >
+                <Text className="text-xs font-bold text-red-400">Cancel Download</Text>
+              </Pressable>
+            </View>
+          ) : permissionRequired ? (
+            /* State 2: Permission Required */
+            <View className="mt-2 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+              <View className="flex-row items-center mb-2">
+                <Icon name="alert" size={16} color="#F59E0B" />
+                <Text className="text-xs font-bold text-amber-400 ml-1.5">
+                  Allow APK Installation
+                </Text>
+              </View>
+              <Text className="text-xs text-amber-200/80 leading-relaxed mb-3">
+                Android requires permission to install updates from Aruvi Play.
+              </Text>
+              <Pressable
+                onPress={handleOpenPermissionSettings}
+                className="py-2.5 rounded-xl bg-amber-500 items-center justify-center active:opacity-80"
+              >
+                <Text className="text-xs font-extrabold text-black">Open Settings</Text>
+              </Pressable>
+            </View>
+          ) : downloadedFileUri ? (
+            /* State 3: Ready to Install */
+            <View className="mt-2">
+              <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>
+                Update Downloaded
+              </Text>
+              <Text className="text-xs mt-0.5 mb-3" style={{ color: theme.secondaryText }}>
+                v{updateInfo?.latestVersion} is ready to install.
+              </Text>
+              <Pressable
+                onPress={() => handleInstallDownloadedApk(downloadedFileUri)}
+                className="py-3 rounded-2xl bg-accent items-center justify-center active:opacity-80 flex-row"
+              >
+                <Icon name="check" size={16} color="#000000" />
+                <Text className="text-xs font-extrabold text-black ml-2">Install Update Now</Text>
+              </Pressable>
+            </View>
+          ) : updateInfo?.updateAvailable ? (
+            /* State 4: Update Available */
+            <View className="mt-2">
+              <View className="flex-row items-center justify-between py-2 px-3 rounded-2xl bg-white/5 border border-white/10 mb-3">
+                <View>
+                  <Text className="text-[10px] uppercase font-bold tracking-wider" style={{ color: theme.mutedText }}>
+                    Current Version
+                  </Text>
+                  <Text className="text-xs font-bold" style={{ color: theme.primaryText }}>
+                    v{updateInfo.currentVersion}
+                  </Text>
+                </View>
+                <Icon name="chevron-right" size={16} color={theme.mutedText} />
+                <View>
+                  <Text className="text-[10px] uppercase font-bold tracking-wider" style={{ color: theme.accent }}>
+                    Latest Version
+                  </Text>
+                  <Text className="text-xs font-extrabold" style={{ color: theme.accent }}>
+                    v{updateInfo.latestVersion}
+                  </Text>
+                </View>
+              </View>
+
+              {/* Release Notes List */}
+              {updateInfo.releaseNotes.length > 0 && (
+                <View className="mb-4 px-1">
+                  <Text className="text-xs font-bold mb-1.5" style={{ color: theme.primaryText }}>
+                    What&apos;s New in v{updateInfo.latestVersion}:
+                  </Text>
+                  {updateInfo.releaseNotes.map((note: string, idx: number) => (
+                    <View key={idx} className="flex-row items-start mb-1">
+                      <Text className="text-xs mr-2" style={{ color: theme.accent }}>•</Text>
+                      <Text className="text-xs flex-1 leading-relaxed" style={{ color: theme.secondaryText }}>
+                        {note}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              <Pressable
+                onPress={handleStartDownload}
+                className="py-3 rounded-2xl bg-accent items-center justify-center active:opacity-80 flex-row shadow-sm"
+              >
+                <Icon name="download" size={16} color="#000000" />
+                <Text className="text-xs font-extrabold text-black ml-2">
+                  Update Latest Version (v{updateInfo.latestVersion})
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            /* State 5: Up to Date or Idle */
+            <View className="mt-2">
+              <View className="flex-row items-center mb-3">
+                <View className="w-5 h-5 rounded-full bg-emerald-500/20 border border-emerald-500/40 items-center justify-center mr-2">
+                  <Icon name="check" size={12} color="#10B981" />
+                </View>
+                <Text className="text-xs font-bold text-emerald-400">
+                  Aruvi Play v{updateInfo?.currentVersion || "1.3.0"} • You&apos;re up to date
+                </Text>
+              </View>
+
+              {updateError && (
+                <Text className="text-xs text-amber-400 mb-2">
+                  {updateError}
+                </Text>
+              )}
+
+              <Pressable
+                onPress={handleManualCheck}
+                disabled={isCheckingUpdate}
+                className="py-3 rounded-xl border items-center bg-white/5 border-white/10 active:bg-white/10 flex-row justify-center"
+              >
+                {isCheckingUpdate ? (
+                  <ActivityIndicator size="small" color={theme.accent} />
+                ) : (
+                  <Text className="text-xs font-bold text-white">Check for Updates</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
         </View>
       </ScrollView>
 

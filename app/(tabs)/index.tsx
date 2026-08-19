@@ -30,7 +30,7 @@ const ARTISTS = [
   { name: "Harris Jayaraj", img: "https://c.saavncdn.com/artists/Harris_Jayaraj_150x150.jpg" },
 ];
 
-const ContinueListeningProgressBar = React.memo(({ songId }: { songId: string }) => {
+const ContinueListeningProgressBar = React.memo(function ContinueListeningProgressBar({ songId }: { songId: string }) {
   const currentId = usePlayerStore((s) => s.current?.id);
   const progress = useProgress();
   const theme = useTheme();

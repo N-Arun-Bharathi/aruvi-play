@@ -46,7 +46,9 @@ export function decryptMediaUrl(encryptedUrl?: string): string | undefined {
   try {
     const key = CryptoJS.enc.Utf8.parse("38346591");
     const decrypted = CryptoJS.DES.decrypt(
-      { ciphertext: CryptoJS.enc.Base64.parse(encryptedUrl) },
+      CryptoJS.lib.CipherParams.create({
+        ciphertext: CryptoJS.enc.Base64.parse(encryptedUrl),
+      }),
       key,
       { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 }
     );
@@ -177,6 +179,19 @@ export function mapSaavnToSong(s: SaavnSong | any): Song | null {
   let primaryArtist = "";
   const artistsList: string[] = [];
 
+  // Check top-level and more_info music director fields
+  const rawMusic =
+    s.music ||
+    s.music_director ||
+    s.more_info?.music ||
+    s.more_info?.music_director ||
+    (Array.isArray(s.more_info?.artistMap?.music) && s.more_info.artistMap.music[0]?.name) ||
+    (Array.isArray(s.artist_map?.music) && s.artist_map.music[0]?.name);
+
+  if (typeof rawMusic === "string" && rawMusic.trim().length > 0) {
+    musicDirector = decodeHtml(rawMusic).trim();
+  }
+
   if (s.artists) {
     if (Array.isArray(s.artists.all)) {
       s.artists.all.forEach((a: any) => {
@@ -185,7 +200,7 @@ export function mapSaavnToSong(s: SaavnSong | any): Song | null {
           if (name && !artistsList.includes(name)) {
             artistsList.push(name);
           }
-          if (a.role === "music" && !musicDirector) {
+          if ((a.role === "music" || a.role === "composer" || a.role === "music_director") && !musicDirector) {
             musicDirector = name;
           }
         }
@@ -199,7 +214,7 @@ export function mapSaavnToSong(s: SaavnSong | any): Song | null {
           if (name && !artistsList.includes(name)) {
             artistsList.push(name);
           }
-          if (a.role === "music" && !musicDirector) {
+          if ((a.role === "music" || a.role === "composer" || a.role === "music_director") && !musicDirector) {
             musicDirector = name;
           }
           if (!primaryArtist) {
@@ -210,7 +225,7 @@ export function mapSaavnToSong(s: SaavnSong | any): Song | null {
     }
   }
 
-  const primaryArtistsStr = s.primary_artists || s.primaryArtists ? decodeHtml(s.primary_artists || s.primaryArtists) : "";
+  const primaryArtistsStr = s.primary_artists || s.primaryArtists || s.more_info?.primary_artists ? decodeHtml(s.primary_artists || s.primaryArtists || s.more_info?.primary_artists) : "";
   if (!primaryArtist && primaryArtistsStr) {
     primaryArtist = primaryArtistsStr.split(/[;,]/)[0].trim();
   }
@@ -231,6 +246,8 @@ export function mapSaavnToSong(s: SaavnSong | any): Song | null {
   const tempSongForContext = {
     title,
     artist: mappedArtist,
+    musicDirector: musicDirector || undefined,
+    primaryArtist,
   } as Song;
   const context = detectSongContext(tempSongForContext);
 

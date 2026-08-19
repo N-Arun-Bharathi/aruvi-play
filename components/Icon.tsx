@@ -48,11 +48,40 @@ export type IconName =
   | "eye-off"
   | "alert"
   | "sun"
-  | "moon";
+  | "moon"
+  | "refresh"
+  | "download"
+  | "volume-off"
+  | "volume-low"
+  | "volume-high";
 
 export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
   const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none" };
   switch (name) {
+    case "refresh":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
+    case "download":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      );
     case "phone":
       return (
         <Svg {...props}>
@@ -461,6 +490,26 @@ export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
           <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           <Line x1="12" y1="8" x2="12" y2="12" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
           <Line x1="12" y1="16" x2="12.01" y2="16" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      );
+    case "volume-off":
+      return (
+        <Svg {...props}>
+          <Path d="M11 5L6 9H2v6h4l5 4V5z" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          <Line x1="23" y1="9" x2="17" y2="15" stroke={color} strokeWidth={2} strokeLinecap="round" />
+          <Line x1="17" y1="9" x2="23" y2="15" stroke={color} strokeWidth={2} strokeLinecap="round" />
+        </Svg>
+      );
+    case "volume-low":
+      return (
+        <Svg {...props}>
+          <Path d="M11 5L6 9H2v6h4l5 4V5zM15.54 8.46a5 5 0 010 7.07" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        </Svg>
+      );
+    case "volume-high":
+      return (
+        <Svg {...props}>
+          <Path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       );
   }

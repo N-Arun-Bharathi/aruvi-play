@@ -26,6 +26,10 @@ class TrackPlayerWrapper {
     }
   }
 
+  public setIsResetting(val: boolean) {
+    this.isResetting = val;
+  }
+
   private setupListeners() {
     try {
       // Listen to react-native-track-player progress update events
@@ -40,12 +44,44 @@ class TrackPlayerWrapper {
       TrackPlayer.addEventListener(Event.PlaybackState, (data: any) => {
         if (this.isResetting) return;
         const stateStr = typeof data.state === "string" ? data.state : String(data.state);
-        const isPlaying = stateStr === State.Playing || (data.state as any) === 3 || stateStr === "playing";
-        if (this.playing !== isPlaying) {
-          this.playing = isPlaying;
+        const stateVal = data.state;
+
+        const isPlaying = stateStr === State.Playing || stateVal === 3 || stateStr === "playing";
+        const isBuffering =
+          stateStr === State.Buffering ||
+          stateVal === 4 ||
+          stateStr === "buffering" ||
+          stateStr === State.Loading ||
+          stateVal === 9 ||
+          stateStr === "loading" ||
+          stateStr === State.Connecting ||
+          stateVal === 8 ||
+          stateStr === "connecting";
+        const isPausedOrStopped =
+          stateStr === State.Paused ||
+          stateVal === 2 ||
+          stateStr === "paused" ||
+          stateStr === State.Stopped ||
+          stateVal === 1 ||
+          stateStr === "stopped" ||
+          stateStr === State.None ||
+          stateVal === 0 ||
+          stateStr === "none";
+
+        if (isBuffering) {
+          // Keep current playing status during network buffering so UI doesn't flip to paused mid-song
+          return;
+        }
+
+        if (isPausedOrStopped && this.playing) {
+          this.playing = false;
+          this.emitPlaybackStatus();
+        } else if (isPlaying && !this.playing) {
+          this.playing = true;
           this.emitPlaybackStatus();
         }
-        const isEnded = stateStr === State.Ended || (data.state as any) === 6 || stateStr === "ended";
+
+        const isEnded = stateStr === State.Ended || stateVal === 6 || stateStr === "ended";
         if (isEnded) {
           console.log("TrackPlayerWrapper: Event.PlaybackState ended received:", data.state);
           this.playing = false;
@@ -63,35 +99,6 @@ class TrackPlayerWrapper {
         this.currentTime = 0;
         this.duration = 0;
         this.emitPlaybackStatus(true);
-      });
-
-      // Listen to audio interruptions (incoming call, message notification, other apps)
-      TrackPlayer.addEventListener(Event.RemoteDuck, async (event: any) => {
-        console.log("TrackPlayerWrapper: Event.RemoteDuck received", event);
-        if (event.permanent) {
-          this.wasPlayingBeforeDuck = false;
-          this.playing = false;
-          this.emitPlaybackStatus();
-          return;
-        }
-
-        if (event.paused || event.ducking) {
-          if (this.playing) {
-            this.wasPlayingBeforeDuck = true;
-          }
-          this.playing = false;
-          this.emitPlaybackStatus();
-        } else if (event.shouldResume || (!event.paused && !event.ducking)) {
-          if (this.wasPlayingBeforeDuck) {
-            console.log("TrackPlayerWrapper: Interruption ended (call/notification), auto-resuming playback...");
-            this.wasPlayingBeforeDuck = false;
-            try {
-              await this.play();
-            } catch (err) {
-              console.error("Auto-resume playback error:", err);
-            }
-          }
-        }
       });
 
       // Listen to playback error events
@@ -173,6 +180,14 @@ class TrackPlayerWrapper {
     this.emitPlaybackStatus();
   }
 
+  public async setVolume(val: number) {
+    await this.ensureInitialized();
+    const clamped = Math.max(0, Math.min(1, val));
+    this.volume = clamped;
+    await TrackPlayer.setVolume(clamped).catch((err) => console.warn("TrackPlayer setVolume error:", err));
+    this.notify("volumeChange", { volume: clamped });
+  }
+
   public replace(source: { uri: string }) {
     this.currentUri = source.uri;
   }
@@ -249,6 +264,7 @@ export function tryGetPlayer(): any {
 export async function stopAndResetPlayer() {
   try {
     if (playerWrapper) {
+      playerWrapper.setIsResetting(true);
       playerWrapper.playing = false;
       playerWrapper.currentTime = 0;
       playerWrapper.duration = 0;
@@ -257,12 +273,19 @@ export async function stopAndResetPlayer() {
     await TrackPlayer.reset().catch(() => {});
   } catch (e) {
     console.warn("stopAndResetPlayer error:", e);
+  } finally {
+    if (playerWrapper) {
+      setTimeout(() => {
+        playerWrapper.setIsResetting(false);
+      }, 200);
+    }
   }
 }
 
 export async function loadAndPlay(song: Song) {
   if (!playerWrapper) return;
   console.log("loadAndPlay: Instant playback transition for:", song.title);
+  if (playerWrapper) playerWrapper.setIsResetting(true);
   playerWrapper.currentTime = 0;
   playerWrapper.duration = 0;
   playerWrapper.playing = true;
@@ -288,6 +311,10 @@ export async function loadAndPlay(song: Song) {
   } catch (playErr) {
     console.error("loadAndPlay: playerWrapper.play failed:", playErr);
     throw playErr;
+  } finally {
+    setTimeout(() => {
+      if (playerWrapper) playerWrapper.setIsResetting(false);
+    }, 300);
   }
 
   // Update lockscreen options asynchronously in background

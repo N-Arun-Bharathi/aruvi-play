@@ -50,8 +50,8 @@ function RootLayoutNav() {
           (global as any).appReadyTime = Date.now();
         }
         try {
-          const { runUpdateCheckFlow } = require("../services/updatesService");
-          runUpdateCheckFlow(false).catch(() => {});
+          const { checkForAppUpdates } = require("../services/updateService");
+          checkForAppUpdates(false).catch(() => {});
         } catch (_) {}
       })
       .catch((err) => console.error("Auth hydration error:", err));

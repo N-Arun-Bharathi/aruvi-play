@@ -6,14 +6,13 @@ import {
   Pressable,
   TextInput,
   ActivityIndicator,
-  FlatList,
 } from "react-native";
 import { AppScreen } from "../../components/AppScreen";
 import { AppHeader } from "../../components/AppHeader";
 import { Icon } from "../../components/Icon";
 import { useTheme } from "../../utils/theme";
 import { usePlayerStore } from "../../store/playerStore";
-import { useRoomStore, MusicRoom } from "../../store/roomStore";
+import { useRoomStore } from "../../store/roomStore";
 import { useAuthStore } from "../../store/authStore";
 import { useRouter } from "expo-router";
 
@@ -32,8 +31,6 @@ export default function RoomsTabScreen() {
     joinRoomByCode,
     leaveRoom,
   } = useRoomStore();
-
-  const userProfile = useAuthStore((s) => s.userProfile);
 
   const [roomName, setRoomName] = useState("");
   const [joinCode, setJoinCode] = useState("");

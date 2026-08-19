@@ -76,7 +76,17 @@ export async function playbackService() {
         return;
       }
 
-      if (event.paused || event.ducking) {
+      // 1. Ducking for notification sounds / navigation audio prompts
+      if (event.ducking) {
+        console.log("PlaybackService: Transient audio ducking (notification) -> lowering volume");
+        await TrackPlayer.setVolume(0.2).catch(() => {});
+      } else if (!event.paused) {
+        // Restore volume when ducking ends
+        await TrackPlayer.setVolume(1.0).catch(() => {});
+      }
+
+      // 2. Pause only on actual full pause interruptions (e.g. phone call ringing)
+      if (event.paused) {
         if (manager.isPlaying) {
           wasPlayingBeforeDuck = true;
           manager.isPlaying = false;
@@ -84,8 +94,9 @@ export async function playbackService() {
         }
         await TrackPlayer.pause().catch(() => {});
       } else if (event.shouldResume || (!event.paused && !event.ducking)) {
+        await TrackPlayer.setVolume(1.0).catch(() => {});
         if (wasPlayingBeforeDuck) {
-          console.log("PlaybackService: Call or notification ended. Auto-resuming playback...");
+          console.log("PlaybackService: Call/interruption ended. Resuming playback...");
           wasPlayingBeforeDuck = false;
           manager.isPlaying = true;
           manager.syncWithZustand();

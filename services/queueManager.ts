@@ -292,18 +292,22 @@ export class QueueManager {
       let nextIdx = this.index + 1;
 
       if (nextIdx >= this.queue.length) {
-        console.log("QueueManager: playNext reached end of queue, attempting recommendations...");
-        await this.appendRecommendedSongs();
-      }
-
-      if (nextIdx >= this.queue.length) {
         if (store.repeat === "all" && this.queue.length > 0) {
+          console.log("QueueManager: Repeat All active -> looping back to queue index 0");
           nextIdx = 0;
         } else {
-          this.isPlaying = false;
-          this.syncWithZustand();
-          clearLockScreen();
-          return;
+          console.log("QueueManager: playNext reached end of queue, attempting recommendations...");
+          await this.appendRecommendedSongs();
+          if (nextIdx >= this.queue.length) {
+            if (store.repeat === "all" && this.queue.length > 0) {
+              nextIdx = 0;
+            } else {
+              this.isPlaying = false;
+              this.syncWithZustand();
+              clearLockScreen();
+              return;
+            }
+          }
         }
       }
 
@@ -502,7 +506,7 @@ export class QueueManager {
         return;
       }
 
-      if (this.lastFinishedId === currentSong.id) {
+      if (this.lastFinishedId === currentSong.id && store.repeat !== "one") {
         console.log("QueueManager: Skipping onTrackFinished because song already finished:", currentSong.id);
         return;
       }
@@ -510,7 +514,17 @@ export class QueueManager {
       this.lastFinishedId = currentSong.id;
 
       if (store.repeat === "one") {
-        this.loadIndex(this.index);
+        console.log("QueueManager: Repeat One active -> restarting track from start");
+        this.lastFinishedId = null;
+        const player = tryGetPlayer();
+        if (player) {
+          await player.seekTo(0);
+          await player.play();
+          this.isPlaying = true;
+          this.syncWithZustand();
+        } else {
+          await this.loadIndex(this.index);
+        }
         return;
       }
 
@@ -543,7 +557,7 @@ export class QueueManager {
   }
 
   public async buildArtistQueue(seedSong: Song): Promise<Song[]> {
-    const artistSeed = this.extractPrimaryArtist(seedSong);
+    const artistSeed = extractPrimaryArtist(seedSong);
     const firstArtistWord = artistSeed ? artistSeed.split(/\s+/)[0] : "";
     const lang = seedSong.language || "tamil";
     const mood = seedSong.mood || "unknown";
@@ -551,46 +565,54 @@ export class QueueManager {
     const genre = seedSong.genre || "unknown";
 
     const queries: string[] = [];
+
+    // Recommendation Query Priority:
+    // 1. Primary artist or music director query
     if (artistSeed) {
       queries.push(`${artistSeed} ${lang} songs`);
     }
+
+    // 2. High energy / mood specific artist queries
     if (firstArtistWord) {
-      if (energy === "high") {
+      if (energy === "high" || mood === "energetic" || mood === "high-energy") {
         queries.push(`${firstArtistWord} high energy songs`);
         queries.push(`${firstArtistWord} mass songs`);
       } else if (mood && mood !== "unknown") {
         queries.push(`${firstArtistWord} ${mood} songs`);
       }
     }
-    const cleanTitle = this.normalizeSongTitle(seedSong.title);
+
+    // 3. Similar song query (language + clean title)
+    const cleanTitle = normalizeSongTitle(seedSong.title);
     if (cleanTitle) {
       queries.push(`${lang} songs similar to ${cleanTitle}`);
     }
-    if (genre && genre !== "unknown") {
-      queries.push(`${lang} ${genre} songs`);
-    }
-    if (mood && mood !== "unknown") {
-      queries.push(`${lang} ${mood} songs`);
+
+    if (artistSeed) {
+      queries.push(`${artistSeed} hits`);
     }
 
-    if (queries.length === 0) {
-      if (seedSong.album) {
+    // Fallback Logic when artist information is unavailable:
+    if (queries.length === 0 || !artistSeed) {
+      if (seedSong.musicDirector) {
+        queries.push(`${seedSong.musicDirector} ${lang} songs`);
+      } else if (seedSong.primaryArtist) {
+        queries.push(`${seedSong.primaryArtist} ${lang} songs`);
+      } else if (seedSong.album) {
         queries.push(`${seedSong.album} ${lang} songs`);
-      }
-      if (genre && genre !== "unknown") {
+      } else if (genre && genre !== "unknown") {
         queries.push(`${lang} ${genre} songs`);
-      }
-      if (mood && mood !== "unknown") {
+      } else if (mood && mood !== "unknown") {
         queries.push(`${lang} ${mood} songs`);
       }
     }
 
-    console.log(`QueueManager: Fetching recommendations for: ${seedSong.title}`);
-    const searchPromises = queries.map(q => searchSongs(q, 15).catch(() => []));
+    console.log(`QueueManager: Fetching recommendations for: ${seedSong.title} using artist seed: "${artistSeed}"`);
+    const searchPromises = queries.map((q) => searchSongs(q, 15).catch(() => []));
     const suggestionsPromise = getRelatedSongs(seedSong.id).catch(() => []);
 
     const resultsArray = await Promise.all([...searchPromises, suggestionsPromise]);
-    
+
     let candidatesPool: Song[] = [];
     for (const list of resultsArray) {
       if (Array.isArray(list)) {
@@ -607,6 +629,7 @@ export class QueueManager {
       }
     }
 
+    // Unique candidate pool by ID / URL
     const uniqueCandidates = new Map<string, Song>();
     for (const c of candidatesPool) {
       const key = c.id || c.url || `${c.title.toLowerCase().trim()}|${c.artist.toLowerCase().trim()}`;
@@ -616,50 +639,78 @@ export class QueueManager {
     }
     const candidates = Array.from(uniqueCandidates.values());
 
+    const seedNormTitle = normalizeSongTitle(seedSong.title);
+
+    // Score candidates and reject alternate versions or duplicates of seedSong
     const scoredCandidates = candidates
-      .map(candidate => {
-        const baseScore = this.scoreRecommendation(candidate, seedSong);
+      .map((candidate) => {
+        const candNorm = normalizeSongTitle(candidate.title);
+
+        // Reject if candidate is an alternate version of the seed song
+        if (candNorm.length > 0 && candNorm === seedNormTitle) {
+          return { song: candidate, score: -Infinity };
+        }
+
+        const baseScore = scoreRecommendation(candidate, seedSong);
         if (baseScore === -Infinity) {
           return { song: candidate, score: -Infinity };
         }
-        const score = baseScore + Math.random() * 5;
+
+        // Add a small random diversity factor (+ 0..4) only after relevance scoring
+        const score = baseScore + Math.random() * 4;
         return { song: candidate, score };
       })
-      .filter(item => item.score > -Infinity && item.song.id !== seedSong.id);
+      .filter((item) => item.score > -Infinity && item.song.id !== seedSong.id);
 
     scoredCandidates.sort((a, b) => b.score - a.score);
 
     const activeQueue = this.index >= 0 ? this.queue.slice(this.index) : [...this.queue];
     const recommendedSongs: Song[] = [];
 
-    const recentSongs = await loadRecent();
-    const recentIds = new Set(recentSongs.map(s => s.id));
+    const recentSongs = await loadRecent().catch(() => []);
+    const recentIds = new Set(recentSongs.map((s) => s.id));
+    const recentNormTitles = new Set(recentSongs.map((s) => normalizeSongTitle(s.title)).filter(Boolean));
 
     const canAdd = (candidate: Song, added: Song[]): boolean => {
       const fullQueueSoFar = [...activeQueue, ...added];
-      
-      if (this.isDuplicateSong(candidate, fullQueueSoFar)) {
+
+      // Rule: Avoid duplicate track IDs, URLs, and title-artist combinations
+      if (isDuplicateSong(candidate, fullQueueSoFar)) {
         return false;
       }
 
+      // Rule: Do not repeat a song already present in recent playback history
       if (recentIds.has(candidate.id)) {
         return false;
       }
 
-      const candNorm = this.normalizeSongTitle(candidate.title);
-      const checkRange = fullQueueSoFar.slice(-20);
-      if (checkRange.some(s => this.normalizeSongTitle(s.title) === candNorm)) {
+      const candNorm = normalizeSongTitle(candidate.title);
+      if (recentNormTitles.has(candNorm)) {
         return false;
       }
 
-      if (candidate.album) {
+      // Rule: Never place another version of currently playing song or same normalized title within next 20 tracks
+      if (candNorm.length > 0 && candNorm === seedNormTitle) {
+        return false;
+      }
+
+      const checkRange = fullQueueSoFar.slice(-20);
+      if (checkRange.some((s) => normalizeSongTitle(s.title) === candNorm)) {
+        return false;
+      }
+
+      // Rule: Do not allow more than two consecutive songs from the same album
+      if (candidate.album && candidate.album.trim().length > 0) {
         const len = fullQueueSoFar.length;
         if (len >= 2) {
           const last1 = fullQueueSoFar[len - 1];
           const last2 = fullQueueSoFar[len - 2];
-          if (last1.album && last2.album &&
-              last1.album.toLowerCase().trim() === candidate.album.toLowerCase().trim() &&
-              last2.album.toLowerCase().trim() === candidate.album.toLowerCase().trim()) {
+          if (
+            last1.album &&
+            last2.album &&
+            last1.album.toLowerCase().trim() === candidate.album.toLowerCase().trim() &&
+            last2.album.toLowerCase().trim() === candidate.album.toLowerCase().trim()
+          ) {
             return false;
           }
         }
@@ -682,10 +733,10 @@ export class QueueManager {
 
   public async appendRecommendations(seedSong: Song): Promise<void> {
     if (this.isResolving) return;
-    
+
     console.log(`QueueManager: Building recommendations seeded by: ${seedSong.title}`);
     const recommendations = await this.buildArtistQueue(seedSong);
-    
+
     if (recommendations.length > 0) {
       this.queue = [...this.queue, ...recommendations];
       console.log(`QueueManager: Appended ${recommendations.length} songs.`);
@@ -698,7 +749,7 @@ export class QueueManager {
     if (this.isResolving || this.isFetchingRelated) return;
 
     const remaining = this.queue.length - 1 - this.index;
-    if (remaining < 15 || this.queue.length < 30) {
+    if (remaining < 5 || this.queue.length < 10) {
       const currentSong = this.queue[this.index];
       if (!currentSong) return;
 
