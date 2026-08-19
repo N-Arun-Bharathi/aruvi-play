@@ -1,12 +1,12 @@
 {
-  "version": "1.4.1",
-  "versionCode": 15,
+  "version": "1.4.2",
+  "versionCode": 16,
   "apkUrl": "https://drive.usercontent.google.com/download?id=1B0x1MiD-RtjPaq6BpbMsHvQX_vOn4O6E&export=download&confirm=t",
   "sha256": "",
   "releaseNotes": [
-    "Fixed repeat modes (Repeat One & Repeat All infinite looping)",
+    "Fixed Repeat One mode (repeats song exactly 1 extra time then advances to next song)",
     "Added interactive player volume slider & mute toggle",
-    "Enhanced stream resolution & playback stability",
+    "Multi-fallback package installer & persistent update download detection",
     "Universal APK compatibility for all Android devices"
   ]
 }

@@ -26,6 +26,7 @@ export class QueueManager {
   private isFetchingRelated: boolean = false;
   private isTransitioning: boolean = false;
   private isFinishing: boolean = false;
+  private repeatOnePlayedCount: number = 0;
   private lastSessionSyncTime: number = 0;
   private queueSaveTimer: any = null;
 
@@ -398,6 +399,7 @@ export class QueueManager {
     await stopAndResetPlayer();
 
     this.lastFinishedId = null;
+    this.repeatOnePlayedCount = 0;
     this.currentlyPlayingId = song.id;
     this.isResolving = true;
     this.syncWithZustand();
@@ -514,18 +516,27 @@ export class QueueManager {
       this.lastFinishedId = currentSong.id;
 
       if (store.repeat === "one") {
-        console.log("QueueManager: Repeat One active -> restarting track from start");
-        this.lastFinishedId = null;
-        const player = tryGetPlayer();
-        if (player) {
-          await player.seekTo(0);
-          await player.play();
-          this.isPlaying = true;
-          this.syncWithZustand();
+        if (this.repeatOnePlayedCount < 1) {
+          this.repeatOnePlayedCount++;
+          console.log(`QueueManager: Repeat One active -> repeating track ${currentSong.title} (1 extra play)`);
+          this.lastFinishedId = null;
+          const player = tryGetPlayer();
+          if (player) {
+            await player.seekTo(0);
+            await player.play();
+            this.isPlaying = true;
+            this.syncWithZustand();
+          } else {
+            await this.loadIndex(this.index);
+          }
+          useToastStore.getState().show("Repeating current song (1/1)");
+          return;
         } else {
-          await this.loadIndex(this.index);
+          console.log(`QueueManager: Repeat One completed 1 extra repeat -> advancing to next track`);
+          this.repeatOnePlayedCount = 0;
+          await this.playNext();
+          return;
         }
-        return;
       }
 
       await this.playNext();
