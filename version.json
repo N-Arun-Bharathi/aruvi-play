@@ -1,12 +1,12 @@
 {
-  "version": "1.4.2",
-  "versionCode": 16,
+  "version": "1.4.3",
+  "versionCode": 17,
   "apkUrl": "https://drive.usercontent.google.com/download?id=1B0x1MiD-RtjPaq6BpbMsHvQX_vOn4O6E&export=download&confirm=t",
   "sha256": "",
   "releaseNotes": [
-    "Fixed Repeat One mode (repeats song exactly 1 extra time then advances to next song)",
-    "Added interactive player volume slider & mute toggle",
-    "Multi-fallback package installer & persistent update download detection",
-    "Universal APK compatibility for all Android devices"
+    "Added Preferred Song Language Customization on Profile screen (ranks Tamil/selected language 1st in search results)",
+    "Added long-press quick options popup on Home screen cards (Like, Play Next, Add to Queue, Add to Playlist, Share)",
+    "Fixed Home screen card layout spacing & gap collisions",
+    "Fixed Repeat One mode (repeats current song exactly 1 time then advances)"
   ]
 }

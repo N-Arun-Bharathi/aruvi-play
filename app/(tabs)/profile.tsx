@@ -25,11 +25,36 @@ import { usePlayerStore } from "../../store/playerStore";
 import { useTheme } from "../../utils/theme";
 import { useSettingsStore } from "../../store/settingsStore";
 
+const SUPPORTED_LANGUAGES = [
+  { id: "tamil", label: "Tamil", native: "தமிழ்" },
+  { id: "telugu", label: "Telugu", native: "తెలుగు" },
+  { id: "hindi", label: "Hindi", native: "हिंदी" },
+  { id: "malayalam", label: "Malayalam", native: "മലയാളം" },
+  { id: "kannada", label: "Kannada", native: "ಕನ್ನಡ" },
+  { id: "english", label: "English", native: "English" },
+  { id: "punjabi", label: "Punjabi", native: "ਪੰਜਾਬੀ" },
+];
+
 export default function ProfileScreen() {
   const router = useRouter();
   const theme = useTheme();
   const settingsTheme = useSettingsStore((s) => s.theme);
   const setTheme = useSettingsStore((s) => s.setTheme);
+  const languages = useSettingsStore((s) => s.languages);
+  const setLanguages = useSettingsStore((s) => s.setLanguages);
+
+  const activeLanguage = languages[0] || "tamil";
+
+  const handleSelectLanguage = async (langId: string) => {
+    await setLanguages([langId]);
+    try {
+      const { clearSearchCache } = require("../../services/saavn");
+      clearSearchCache();
+    } catch (e) {}
+    const { useToastStore } = require("../../store/toastStore");
+    const langObj = SUPPORTED_LANGUAGES.find((l) => l.id === langId);
+    useToastStore.getState().show(`1st priority language set to ${langObj?.label || langId}`);
+  };
 
   const authMode = useAuthStore((s) => s.authMode);
   const userProfile = useAuthStore((s) => s.userProfile);
@@ -511,6 +536,69 @@ export default function ProfileScreen() {
               {isDark ? "Light" : "Dark"} Mode
             </Text>
           </Pressable>
+        </View>
+
+        {/* Preferred Song Language Customization Card */}
+        <View
+          className="mx-5 mb-5 p-5 rounded-3xl border shadow-sm"
+          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+        >
+          <View className="flex-row items-center justify-between mb-1">
+            <View className="flex-row items-center">
+              <View
+                className="w-9 h-9 rounded-2xl items-center justify-center mr-2.5 border"
+                style={{ backgroundColor: `${theme.accent}15`, borderColor: `${theme.accent}30` }}
+              >
+                <Icon name="music" size={18} color={theme.accent} />
+              </View>
+              <View>
+                <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
+                  Preferred Song Language
+                </Text>
+                <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
+                  1st priority in search results & recommendations
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {/* Language Selection Chips */}
+          <View className="flex-row flex-wrap gap-2 mt-3">
+            {SUPPORTED_LANGUAGES.map((lang) => {
+              const isSelected = activeLanguage.toLowerCase() === lang.id.toLowerCase();
+              return (
+                <Pressable
+                  key={lang.id}
+                  onPress={() => handleSelectLanguage(lang.id)}
+                  className="px-3.5 py-2 rounded-2xl border flex-row items-center active:opacity-80 shadow-sm"
+                  style={{
+                    backgroundColor: isSelected ? `${theme.accent}20` : theme.elevatedSurface,
+                    borderColor: isSelected ? theme.accent : theme.border,
+                  }}
+                >
+                  {isSelected && (
+                    <View className="w-4 h-4 rounded-full bg-accent items-center justify-center mr-1.5">
+                      <Icon name="check" size={10} color="#000000" />
+                    </View>
+                  )}
+                  <Text
+                    className="text-xs font-bold"
+                    style={{
+                      color: isSelected ? theme.accent : theme.primaryText,
+                    }}
+                  >
+                    {lang.label}{" "}
+                    <Text
+                      className="text-[10px] font-normal"
+                      style={{ color: isSelected ? theme.accent : theme.mutedText }}
+                    >
+                      ({lang.native})
+                    </Text>
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
 
         {/* SECRET KEY / UNLOCKED LIKED SONGS SECTION (GUEST / SECRET ACCESS ONLY) */}

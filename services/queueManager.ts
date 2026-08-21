@@ -532,8 +532,9 @@ export class QueueManager {
           useToastStore.getState().show("Repeating current song (1/1)");
           return;
         } else {
-          console.log(`QueueManager: Repeat One completed 1 extra repeat -> advancing to next track`);
+          console.log(`QueueManager: Repeat One completed 1 extra repeat -> resetting repeat mode to off and advancing to next track`);
           this.repeatOnePlayedCount = 0;
+          usePlayerStore.setState({ repeat: "off" });
           await this.playNext();
           return;
         }

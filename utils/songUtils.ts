@@ -299,9 +299,10 @@ export function scoreRecommendation(candidate: Song, seedSong: Song): number {
 
 /**
  * Computes priority score for search results layout.
- * Higher scores are displayed first.
+ * Higher scores are displayed first. Boosts score if song matches user preferred languages.
  */
-export function getSearchPriority(title: string): number {
+export function getSearchPriority(songOrTitle: Song | string, preferredLangs?: string[]): number {
+  const title = typeof songOrTitle === "string" ? songOrTitle : songOrTitle.title;
   const lower = title.toLowerCase();
 
   const isRemix = lower.includes("remix") || lower.includes("reprise");
@@ -313,28 +314,39 @@ export function getSearchPriority(title: string): number {
   const isStatus = lower.includes("status") || lower.includes("ringtone");
   const isBgmTheme = lower.includes("bgm") || lower.includes("theme");
 
+  let score = 5;
+
   if (isRemix || isCover || isKaraoke || isInstrumental || isSlowed || isSpedUp || isStatus || isBgmTheme) {
-    if (isStatus || isSlowed || isSpedUp) return -20;
-    if (isKaraoke || isInstrumental) return -15;
-    if (isCover) return -10;
-    if (isRemix) return -5;
-    return -5;
+    if (isStatus || isSlowed || isSpedUp) score = -20;
+    else if (isKaraoke || isInstrumental) score = -15;
+    else if (isCover) score = -10;
+    else if (isRemix) score = -5;
+    else score = -5;
+  } else {
+    const isLyrical = lower.includes("lyrical") || lower.includes("lyric video") || lower.includes("lyrics");
+    const isVideo = lower.includes("video") || lower.includes("music video") || lower.includes("video song");
+    const isAudio = lower.includes("audio") || lower.includes("official audio") || lower.includes("full song");
+
+    if (isAudio) score = 10;
+    else if (!isVideo && !isLyrical) score = 10;
+    else if (isVideo && !isLyrical) score = 8;
+    else if (isLyrical) score = 6;
   }
 
-  const isLyrical = lower.includes("lyrical") || lower.includes("lyric video") || lower.includes("lyrics");
-  const isVideo = lower.includes("video") || lower.includes("music video") || lower.includes("video song");
-  const isAudio = lower.includes("audio") || lower.includes("official audio") || lower.includes("full song");
-
-  if (isAudio) return 10;
-
-  // Clean original audio titles get highest priority
-  if (!isVideo && !isLyrical) {
-    return 10;
+  // Language priority boosting
+  if (typeof songOrTitle !== "string" && preferredLangs && preferredLangs.length > 0) {
+    const songLang = (songOrTitle.language || "").toLowerCase().trim();
+    if (songLang) {
+      const matchIndex = preferredLangs.findIndex(
+        (pl) => pl.toLowerCase().trim() === songLang || songLang.includes(pl.toLowerCase().trim())
+      );
+      if (matchIndex !== -1) {
+        // High priority boost (+1000 for primary language, +900 for secondary, etc.)
+        score += 1000 - matchIndex * 100;
+      }
+    }
   }
 
-  if (isVideo && !isLyrical) return 8;
-  if (isLyrical) return 6;
-
-  return 5;
+  return score;
 }
 

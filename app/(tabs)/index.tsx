@@ -21,6 +21,7 @@ import { SkeletonCard } from "../../components/SkeletonCard";
 import { SkeletonRow } from "../../components/SkeletonRow";
 import { Song } from "../../types/song";
 import { getTrending, searchSongs } from "../../services/saavn";
+import { SongOptionsModal } from "../../components/SongOptionsModal";
 
 const GENRES = ["Tamil Kuthu", "Melody", "Gaana", "Love Hits", "90s Tamil", "Spiritual"];
 const ARTISTS = [
@@ -80,6 +81,7 @@ export default function Home() {
   const [trending, setTrending] = useState<Song[]>([]);
   const [recommended, setRecommended] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedOptionsSong, setSelectedOptionsSong] = useState<Song | null>(null);
 
   // Time-based greeting
   const getGreeting = () => {
@@ -226,6 +228,7 @@ export default function Home() {
               <View className="px-5 mt-5">
                 <Pressable
                   onPress={() => router.push("/player")}
+                  onLongPress={() => setSelectedOptionsSong(lastPlayed)}
                   className="rounded-3xl p-4 border flex-row items-center relative overflow-hidden shadow-xl"
                   style={{ backgroundColor: theme.card, borderColor: theme.border }}
                 >
@@ -240,7 +243,7 @@ export default function Home() {
                     className="border border-white/5"
                   />
                   
-                  <View className="flex-1 ml-4 justify-center pr-10">
+                  <View className="flex-1 ml-4 justify-center pr-16">
                     <Text className="text-[10px] uppercase font-bold tracking-wider mb-1" style={{ color: theme.accent }}>
                       Continue Listening
                     </Text>
@@ -270,12 +273,12 @@ export default function Home() {
             )}
 
             {/* Quick Access Shortcuts Grid */}
-            <View className="px-5 mt-6 flex-row flex-wrap justify-between">
+            <View className="px-5 mt-6 flex-row flex-wrap gap-3">
               {isGuest ? (
                 <>
                   <Pressable
                     onPress={() => router.push("/(tabs)/queue" as any)}
-                    className="w-[48%] py-3.5 px-4 rounded-2xl border flex-row items-center mb-3 active:bg-white/5"
+                    className="w-[48%] py-3.5 px-4 rounded-2xl border flex-row items-center active:bg-white/5"
                     style={{ backgroundColor: theme.card, borderColor: theme.border }}
                   >
                     <View className="p-2.5 rounded-xl mr-3 bg-emerald-500/15">
@@ -295,7 +298,7 @@ export default function Home() {
                   <Pressable
                     key={idx}
                     onPress={() => router.push(item.route as any)}
-                    className="w-[48%] py-3.5 px-4 rounded-2xl border flex-row items-center mb-3 active:bg-white/5"
+                    className="w-[48%] py-3.5 px-4 rounded-2xl border flex-row items-center active:bg-white/5"
                     style={{ backgroundColor: theme.card, borderColor: theme.border }}
                   >
                     <View 
@@ -319,7 +322,7 @@ export default function Home() {
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingHorizontal: 20 }}
+                  contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
                   className="mt-2"
                 >
                   {recent.map((s) => (
@@ -329,7 +332,8 @@ export default function Home() {
                         playSong(s, recent);
                         router.push("/player");
                       }}
-                      className="mr-4 w-28 active:scale-95 transition-transform"
+                      onLongPress={() => setSelectedOptionsSong(s)}
+                      className="w-28 active:scale-95 transition-transform"
                     >
                       <Image
                         source={{ uri: s.artwork || "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17" }}
@@ -355,7 +359,7 @@ export default function Home() {
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ paddingHorizontal: 20 }}
+                  contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
                   className="mt-2"
                 >
                   {trending.slice(0, 8).map((s) => (
@@ -365,7 +369,8 @@ export default function Home() {
                         playSong(s, trending);
                         router.push("/player");
                       }}
-                      className="mr-4 w-28 active:scale-95 transition-transform"
+                      onLongPress={() => setSelectedOptionsSong(s)}
+                      className="w-28 active:scale-95 transition-transform"
                     >
                       <Image
                         source={{ uri: s.artwork || "https://images.unsplash.com/photo-1614613535308-eb5fbd3d2c17" }}
@@ -390,14 +395,14 @@ export default function Home() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
+                contentContainerStyle={{ paddingHorizontal: 20, gap: 10 }}
                 className="mt-2"
               >
                 {GENRES.map((g) => (
                   <Pressable
                     key={g}
                     onPress={() => handleQuickGenreSearch(g)}
-                    className="px-5 py-3 rounded-2xl border mr-3 active:bg-white/10"
+                    className="px-5 py-3 rounded-2xl border active:bg-white/10"
                     style={{ backgroundColor: theme.card, borderColor: theme.border }}
                   >
                     <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>
@@ -412,7 +417,7 @@ export default function Home() {
             {recommended.length > 0 && (
               <View className="mt-6">
                 <SectionHeader title="Recommended for You" />
-                <View className="mt-2">
+                <View className="mt-2 px-5 gap-2.5">
                   {recommended.slice(0, 5).map((s) => {
                     const isLiked = !isGuest && useLibraryStore.getState().isLiked(s);
                     return (
@@ -422,11 +427,13 @@ export default function Home() {
                           playSong(s, recommended);
                           router.push("/player");
                         }}
-                        className="flex-row items-center px-5 py-2.5 active:bg-white/5"
+                        onLongPress={() => setSelectedOptionsSong(s)}
+                        className="flex-row items-center p-3 rounded-2xl border active:bg-white/10"
+                        style={{ backgroundColor: theme.card, borderColor: theme.border }}
                       >
                         <Image
                           source={{ uri: s.artwork }}
-                          style={{ width: 44, height: 44, borderRadius: 10 }}
+                          style={{ width: 44, height: 44, borderRadius: 12 }}
                           className="border border-white/5"
                         />
                         <View className="flex-1 ml-3.5">
@@ -464,14 +471,14 @@ export default function Home() {
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ paddingHorizontal: 20 }}
+                contentContainerStyle={{ paddingHorizontal: 20, gap: 16 }}
                 className="mt-2"
               >
                 {ARTISTS.map((artist) => (
                   <Pressable
                     key={artist.name}
                     onPress={() => handleQuickGenreSearch(artist.name)}
-                    className="items-center mr-5 active:scale-95 transition-transform"
+                    className="items-center active:scale-95 transition-transform"
                   >
                     <Image
                       source={{ uri: artist.img }}
@@ -488,6 +495,13 @@ export default function Home() {
           </View>
         )}
       </ScrollView>
+
+      {/* Long-Press Song Options Modal */}
+      <SongOptionsModal
+        song={selectedOptionsSong}
+        visible={!!selectedOptionsSong}
+        onClose={() => setSelectedOptionsSong(null)}
+      />
     </AppScreen>
   );
 }

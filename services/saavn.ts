@@ -284,9 +284,21 @@ function decodeHtml(s: string): string {
     .replace(/&gt;/g, ">");
 }
 
+export function clearSearchCache() {
+  searchCache.clear();
+  relatedSongsCache.clear();
+}
+
 export async function searchSongs(query: string, limit = 20, signal?: AbortSignal): Promise<Song[]> {
   if (!query.trim()) return [];
-  const cacheKey = `${query.trim().toLowerCase()}:${limit}`;
+
+  let preferredLangs: string[] = ["tamil"];
+  try {
+    const { useSettingsStore } = require("../store/settingsStore");
+    preferredLangs = useSettingsStore.getState().languages || ["tamil"];
+  } catch (e) {}
+
+  const cacheKey = `${query.trim().toLowerCase()}:${limit}:${preferredLangs.join(",")}`;
   if (searchCache.has(cacheKey)) {
     return searchCache.get(cacheKey)!;
   }
@@ -310,7 +322,7 @@ export async function searchSongs(query: string, limit = 20, signal?: AbortSigna
     const results: SaavnSong[] = data?.results ?? data?.data?.results ?? (Array.isArray(data) ? data : []);
     const mapped = results.map(mapSaavnToSong).filter(Boolean) as Song[];
 
-    const sorted = mapped.sort((a, b) => getSearchPriority(b.title) - getSearchPriority(a.title));
+    const sorted = mapped.sort((a, b) => getSearchPriority(b, preferredLangs) - getSearchPriority(a, preferredLangs));
 
     if (sorted.length > 0) {
       searchCache.set(cacheKey, sorted);
