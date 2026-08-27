@@ -1,8 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://your-supabase-project.supabase.co";
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvdXItc3VwYWJhc2UtcHJvamVjdCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjIwMDAwMDAwMDB9.FakeKeyPlaceholder123456789";
+const SUPABASE_URL = (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_SUPABASE_URL) || "https://your-supabase-project.supabase.co";
+const SUPABASE_ANON_KEY = (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY) || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvdXItc3VwYWJhc2UtcHJvamVjdCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjIwMDAwMDAwMDB9.FakeKeyPlaceholder123456789";
 
 let supabase: any;
 let useMockSupabase = false;
@@ -80,10 +79,9 @@ if (isPlaceholder) {
   try {
     supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: {
-        storage: AsyncStorage,
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: false,
+        detectSessionInUrl: true,
       },
     });
   } catch (error) {
@@ -123,7 +121,7 @@ export async function ensureGuestSession() {
   }
 }
 
-const SECRET_KEY = (process.env.EXPO_PUBLIC_SECRET_KEY || "Aruvi5868").trim();
+const SECRET_KEY = "Aruvi5868";
 
 export async function verifySecretKeyOnBackend(code: string): Promise<boolean> {
   const cleanCode = code ? code.trim() : "";
