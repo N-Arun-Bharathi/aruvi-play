@@ -1,7 +1,28 @@
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_SUPABASE_URL) || "https://your-supabase-project.supabase.co";
-const SUPABASE_ANON_KEY = (typeof process !== "undefined" && process.env?.EXPO_PUBLIC_SUPABASE_ANON_KEY) || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvdXItc3VwYWJhc2UtcHJvamVjdCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjIwMDAwMDAwMDB9.FakeKeyPlaceholder123456789";
+const getEnvVar = (...keys: string[]): string | undefined => {
+  try {
+    if (typeof import.meta !== "undefined" && (import.meta as any).env) {
+      const env = (import.meta as any).env;
+      for (const k of keys) {
+        if (env[k]) return env[k];
+      }
+    }
+  } catch (e) {}
+
+  try {
+    if (typeof process !== "undefined" && process.env) {
+      for (const k of keys) {
+        if (process.env[k]) return process.env[k];
+      }
+    }
+  } catch (e) {}
+
+  return undefined;
+};
+
+const SUPABASE_URL = getEnvVar("EXPO_PUBLIC_SUPABASE_URL", "VITE_SUPABASE_URL", "SUPABASE_URL") || "https://your-supabase-project.supabase.co";
+const SUPABASE_ANON_KEY = getEnvVar("EXPO_PUBLIC_SUPABASE_ANON_KEY", "VITE_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY") || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvdXItc3VwYWJhc2UtcHJvamVjdCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjIwMDAwMDAwMDB9.FakeKeyPlaceholder123456789";
 
 let supabase: any;
 let useMockSupabase = false;
