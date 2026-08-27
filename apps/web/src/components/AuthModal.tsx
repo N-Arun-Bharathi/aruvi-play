@@ -1,12 +1,8 @@
 import React, { useState } from "react";
 import { useAuthStore } from "../store/authStore";
-import { X, Mail, Lock, User, LogIn, UserPlus, HelpCircle } from "lucide-react";
+import { X, Mail, Lock, User, LogIn, UserPlus, HelpCircle, UserCheck } from "lucide-react";
 
-interface AuthModalProps {
-  isMandatory?: boolean;
-}
-
-export const AuthModal: React.FC<AuthModalProps> = ({ isMandatory = false }) => {
+export const AuthModal: React.FC = () => {
   const {
     isAuthModalOpen,
     closeAuthModal,
@@ -15,7 +11,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isMandatory = false }) => 
     loginWithEmail,
     signUpWithEmail,
     resetPassword,
-    authMode,
+    continueAsGuest,
     loading,
   } = useAuthStore();
 
@@ -23,8 +19,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isMandatory = false }) => 
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
 
-  const forceShow = isMandatory || authMode !== "authenticated";
-  if (!isAuthModalOpen && !forceShow) return null;
+  if (!isAuthModalOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,27 +33,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isMandatory = false }) => 
   };
 
   return (
-    <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-black/90 backdrop-blur-xl animate-fade-in">
+    <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
       <div className="relative w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 shadow-2xl overflow-hidden">
         {/* Decorative emerald gradient blur */}
         <div className="absolute -top-24 -right-24 w-48 h-48 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
 
-        {/* Close Button (only shown if not mandatory) */}
-        {!forceShow && (
-          <button
-            onClick={closeAuthModal}
-            className="absolute top-5 right-5 text-zinc-400 hover:text-white p-2 rounded-full hover:bg-zinc-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        )}
+        {/* Close Button */}
+        <button
+          onClick={closeAuthModal}
+          className="absolute top-5 right-5 text-zinc-400 hover:text-white p-2 rounded-full hover:bg-zinc-800 transition-colors"
+        >
+          <X className="w-5 h-5" />
+        </button>
 
         {/* Header Logo */}
         <div className="flex items-center gap-3 mb-6">
-          <img src="/aruvi-play.png" alt="Aruvi Play" className="w-12 h-12 object-contain rounded-xl shadow-md shadow-emerald-500/20" />
+          <img src="/aruvi-play.png" alt="Aruvi Play" className="w-10 h-10 object-contain rounded-xl shadow-md shadow-emerald-500/20" />
           <div>
-            <h2 className="text-2xl font-black text-white tracking-tight">Aruvi Play</h2>
-            <p className="text-xs text-emerald-400 font-medium">Log in to access Web Music Player</p>
+            <h2 className="text-xl font-bold text-white tracking-tight">Aruvi Play</h2>
+            <p className="text-xs text-zinc-400">Your Music, Synchronized Anywhere</p>
           </div>
         </div>
 
@@ -154,7 +147,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isMandatory = false }) => 
           >
             {authModalTab === "login" && (
               <>
-                <LogIn className="w-4 h-4" /> Log In to Web Player
+                <LogIn className="w-4 h-4" /> Log In
               </>
             )}
             {authModalTab === "register" && (
@@ -170,9 +163,23 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isMandatory = false }) => 
           </button>
         </form>
 
-        <p className="mt-6 text-center text-xs text-zinc-500">
-          Only authenticated accounts can access Aruvi Play Web.
-        </p>
+        {/* Guest Divider */}
+        <div className="relative my-5">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-zinc-800" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-zinc-900 px-3 text-zinc-500 font-medium">Or</span>
+          </div>
+        </div>
+
+        {/* Guest Mode Action */}
+        <button
+          onClick={continueAsGuest}
+          className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-750 text-zinc-200 font-semibold text-xs rounded-xl border border-zinc-700/50 transition-colors flex items-center justify-center gap-2"
+        >
+          <UserCheck className="w-4 h-4 text-emerald-400" /> Continue as Guest
+        </button>
       </div>
     </div>
   );

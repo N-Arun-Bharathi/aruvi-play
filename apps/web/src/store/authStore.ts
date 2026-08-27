@@ -3,7 +3,7 @@ import { supabase, AuthState, UserProfile } from "@aruvi/shared";
 import { useToastStore } from "./toastStore";
 
 interface AuthStoreState {
-  authMode: AuthState | "unauthenticated";
+  authMode: AuthState;
   userProfile: UserProfile | null;
   loading: boolean;
   isAuthModalOpen: boolean;
@@ -15,6 +15,7 @@ interface AuthStoreState {
   loginWithEmail: (email: string, password: string) => Promise<boolean>;
   signUpWithEmail: (email: string, password: string, displayName: string) => Promise<boolean>;
   resetPassword: (email: string) => Promise<boolean>;
+  continueAsGuest: () => void;
   updateProfileName: (newName: string) => Promise<boolean>;
   logout: () => Promise<void>;
 }
@@ -25,7 +26,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   authMode: "loading",
   userProfile: null,
   loading: true,
-  isAuthModalOpen: true,
+  isAuthModalOpen: false,
   authModalTab: "login",
 
   openAuthModal: (tab = "login") => set({ isAuthModalOpen: true, authModalTab: tab }),
@@ -34,13 +35,14 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   hydrate: async () => {
     set({ loading: true });
     try {
-      // 1. Check stored authenticated user profile in browser storage first
+      // 1. Check stored user profile (authenticated or guest) in browser localStorage
       const storedUser = localStorage.getItem(AUTH_USER_KEY);
       if (storedUser) {
         try {
-          const parsedUser = JSON.parse(storedUser);
-          if (parsedUser && parsedUser.id && !parsedUser.is_guest) {
-            set({ authMode: "authenticated", userProfile: parsedUser, loading: false });
+          const parsedUser: UserProfile = JSON.parse(storedUser);
+          if (parsedUser && parsedUser.id) {
+            const mode: AuthState = parsedUser.is_guest ? "guest" : "authenticated";
+            set({ authMode: mode, userProfile: parsedUser, loading: false });
             return;
           }
         } catch (e) {
@@ -81,11 +83,22 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         return;
       }
 
-      // If no authenticated session exists, require login
-      set({ authMode: "unauthenticated", userProfile: null, loading: false });
+      // 3. Default to Guest Mode if no session exists
+      const defaultGuest: UserProfile = {
+        id: `guest_${Math.random().toString(36).substring(2, 9)}`,
+        name: "Guest Listener",
+        is_guest: true,
+      };
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(defaultGuest));
+      set({ authMode: "guest", userProfile: defaultGuest, loading: false });
     } catch (err) {
       console.error("Auth hydration error:", err);
-      set({ authMode: "unauthenticated", userProfile: null, loading: false });
+      const defaultGuest: UserProfile = {
+        id: `guest_${Math.random().toString(36).substring(2, 9)}`,
+        name: "Guest Listener",
+        is_guest: true,
+      };
+      set({ authMode: "guest", userProfile: defaultGuest, loading: false });
     }
   },
 
@@ -187,6 +200,17 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     }
   },
 
+  continueAsGuest: () => {
+    const defaultGuest: UserProfile = {
+      id: `guest_${Math.random().toString(36).substring(2, 9)}`,
+      name: "Guest Listener",
+      is_guest: true,
+    };
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(defaultGuest));
+    set({ authMode: "guest", userProfile: defaultGuest, isAuthModalOpen: false });
+    useToastStore.getState().show("Continuing in Guest Mode");
+  },
+
   updateProfileName: async (newName) => {
     const { userProfile } = get();
     if (!userProfile) return false;
@@ -194,13 +218,15 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     if (!cleanName) return false;
 
     try {
-      await supabase.from("profiles").upsert({
-        id: userProfile.id,
-        display_name: cleanName,
-      });
-      await supabase.auth.updateUser({
-        data: { display_name: cleanName },
-      });
+      if (!userProfile.is_guest) {
+        await supabase.from("profiles").upsert({
+          id: userProfile.id,
+          display_name: cleanName,
+        });
+        await supabase.auth.updateUser({
+          data: { display_name: cleanName },
+        });
+      }
 
       const updated = { ...userProfile, name: cleanName };
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updated));
@@ -215,8 +241,13 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
 
   logout: async () => {
     await supabase.auth.signOut().catch(() => {});
-    localStorage.removeItem(AUTH_USER_KEY);
-    set({ authMode: "unauthenticated", userProfile: null });
-    useToastStore.getState().show("Logged out successfully");
+    const defaultGuest: UserProfile = {
+      id: `guest_${Math.random().toString(36).substring(2, 9)}`,
+      name: "Guest Listener",
+      is_guest: true,
+    };
+    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(defaultGuest));
+    set({ authMode: "guest", userProfile: defaultGuest });
+    useToastStore.getState().show("Logged out. Switched to Guest Mode.");
   },
 }));

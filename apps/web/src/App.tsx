@@ -28,7 +28,7 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isQueueOpen, setIsQueueOpen] = useState(false);
 
-  const { authMode, userProfile, loading, hydrate: hydrateAuth } = useAuthStore();
+  const { loading, hydrate: hydrateAuth } = useAuthStore();
   const { hydrate: hydrateLiked } = useLikedStore();
   const { loadPlaylists } = usePlaylistStore();
   const { loadHistory } = useHistoryStore();
@@ -49,18 +49,8 @@ export function App() {
       <div className="flex h-screen bg-zinc-950 items-center justify-center text-white">
         <div className="flex flex-col items-center gap-4">
           <img src="/aruvi-play.png" alt="Aruvi Play" className="w-16 h-16 object-contain animate-pulse" />
-          <p className="text-sm font-semibold text-zinc-400">Loading Aruvi Play Web...</p>
+          <p className="text-sm font-semibold text-zinc-400">Loading Aruvi Play...</p>
         </div>
-      </div>
-    );
-  }
-
-  // Force Mandatory Login Screen for Unauthenticated Visitors
-  if (authMode !== "authenticated" || !userProfile || userProfile.is_guest) {
-    return (
-      <div className="flex h-screen bg-zinc-950 text-white items-center justify-center p-4">
-        <ToastContainer />
-        <AuthModal isMandatory={true} />
       </div>
     );
   }
@@ -99,7 +89,7 @@ export function App() {
       {/* Toast Alerts */}
       <ToastContainer />
 
-      {/* Optional Dialogs */}
+      {/* Auth Modal */}
       <AuthModal />
 
       {/* Full Player Modal */}
