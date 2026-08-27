@@ -3,7 +3,7 @@ import { supabase, AuthState, UserProfile } from "@aruvi/shared";
 import { useToastStore } from "./toastStore";
 
 interface AuthStoreState {
-  authMode: AuthState;
+  authMode: AuthState | "unauthenticated";
   userProfile: UserProfile | null;
   loading: boolean;
   isAuthModalOpen: boolean;
@@ -15,19 +15,17 @@ interface AuthStoreState {
   loginWithEmail: (email: string, password: string) => Promise<boolean>;
   signUpWithEmail: (email: string, password: string, displayName: string) => Promise<boolean>;
   resetPassword: (email: string) => Promise<boolean>;
-  continueAsGuest: () => void;
   updateProfileName: (newName: string) => Promise<boolean>;
   logout: () => Promise<void>;
 }
 
 const AUTH_USER_KEY = "aruvi_user_profile";
-const GUEST_USER_KEY = "aruvi_guest_user";
 
 export const useAuthStore = create<AuthStoreState>((set, get) => ({
   authMode: "loading",
   userProfile: null,
   loading: true,
-  isAuthModalOpen: false,
+  isAuthModalOpen: true,
   authModalTab: "login",
 
   openAuthModal: (tab = "login") => set({ isAuthModalOpen: true, authModalTab: tab }),
@@ -36,7 +34,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   hydrate: async () => {
     set({ loading: true });
     try {
-      // 1. Check persistent authenticated user profile in browser storage first
+      // 1. Check stored authenticated user profile in browser storage first
       const storedUser = localStorage.getItem(AUTH_USER_KEY);
       if (storedUser) {
         try {
@@ -79,32 +77,15 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         };
 
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(profile));
-        localStorage.removeItem(GUEST_USER_KEY);
         set({ authMode: "authenticated", userProfile: profile, loading: false });
         return;
       }
 
-      // 3. Check stored guest session
-      const storedGuest = localStorage.getItem(GUEST_USER_KEY);
-      if (storedGuest) {
-        try {
-          const parsed = JSON.parse(storedGuest);
-          set({ authMode: "guest", userProfile: parsed, loading: false });
-          return;
-        } catch (e) {}
-      }
-
-      // 4. Default Guest Mode if no session exists
-      const defaultGuest: UserProfile = {
-        id: `guest_${Math.random().toString(36).substring(2, 9)}`,
-        name: "Guest Listener",
-        is_guest: true,
-      };
-      localStorage.setItem(GUEST_USER_KEY, JSON.stringify(defaultGuest));
-      set({ authMode: "guest", userProfile: defaultGuest, loading: false });
+      // If no authenticated session exists, require login
+      set({ authMode: "unauthenticated", userProfile: null, loading: false });
     } catch (err) {
       console.error("Auth hydration error:", err);
-      set({ authMode: "guest", userProfile: { id: "guest_user", name: "Guest Listener", is_guest: true }, loading: false });
+      set({ authMode: "unauthenticated", userProfile: null, loading: false });
     }
   },
 
@@ -127,9 +108,8 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         is_guest: false,
       };
 
-      // Persist authenticated profile permanently in browser storage
+      // Save authenticated profile permanently in browser storage
       localStorage.setItem(AUTH_USER_KEY, JSON.stringify(profile));
-      localStorage.removeItem(GUEST_USER_KEY);
 
       set({ authMode: "authenticated", userProfile: profile, loading: false, isAuthModalOpen: false });
       toast.show(`Welcome back, ${profile.name}!`, "success");
@@ -171,9 +151,8 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
           is_guest: false,
         };
 
-        // Persist authenticated profile permanently in browser storage
+        // Save authenticated profile permanently in browser storage
         localStorage.setItem(AUTH_USER_KEY, JSON.stringify(profile));
-        localStorage.removeItem(GUEST_USER_KEY);
 
         set({ authMode: "authenticated", userProfile: profile, loading: false, isAuthModalOpen: false });
         toast.show(`Account created! Welcome to Aruvi Play, ${displayName}!`, "success");
@@ -208,18 +187,6 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     }
   },
 
-  continueAsGuest: () => {
-    const defaultGuest: UserProfile = {
-      id: `guest_${Math.random().toString(36).substring(2, 9)}`,
-      name: "Guest Listener",
-      is_guest: true,
-    };
-    localStorage.removeItem(AUTH_USER_KEY);
-    localStorage.setItem(GUEST_USER_KEY, JSON.stringify(defaultGuest));
-    set({ authMode: "guest", userProfile: defaultGuest, isAuthModalOpen: false });
-    useToastStore.getState().show("Continuing as Guest");
-  },
-
   updateProfileName: async (newName) => {
     const { userProfile } = get();
     if (!userProfile) return false;
@@ -227,22 +194,16 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     if (!cleanName) return false;
 
     try {
-      if (!userProfile.is_guest) {
-        await supabase.from("profiles").upsert({
-          id: userProfile.id,
-          display_name: cleanName,
-        });
-        await supabase.auth.updateUser({
-          data: { display_name: cleanName },
-        });
-      }
+      await supabase.from("profiles").upsert({
+        id: userProfile.id,
+        display_name: cleanName,
+      });
+      await supabase.auth.updateUser({
+        data: { display_name: cleanName },
+      });
 
       const updated = { ...userProfile, name: cleanName };
-      if (userProfile.is_guest) {
-        localStorage.setItem(GUEST_USER_KEY, JSON.stringify(updated));
-      } else {
-        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updated));
-      }
+      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(updated));
       set({ userProfile: updated });
       useToastStore.getState().show("Display name updated!", "success");
       return true;
@@ -254,16 +215,8 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
 
   logout: async () => {
     await supabase.auth.signOut().catch(() => {});
-    // Permanently remove authenticated profile only on explicit logout
     localStorage.removeItem(AUTH_USER_KEY);
-    localStorage.removeItem(GUEST_USER_KEY);
-
-    const defaultGuest: UserProfile = {
-      id: `guest_${Math.random().toString(36).substring(2, 9)}`,
-      name: "Guest Listener",
-      is_guest: true,
-    };
-    set({ authMode: "guest", userProfile: defaultGuest });
+    set({ authMode: "unauthenticated", userProfile: null });
     useToastStore.getState().show("Logged out successfully");
   },
 }));
