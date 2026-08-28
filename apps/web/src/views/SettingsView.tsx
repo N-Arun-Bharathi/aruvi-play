@@ -1,19 +1,19 @@
-import React, { useState } from "react";
-import { Settings, Sliders, Volume2, ShieldCheck, Database, Info, Sparkles } from "lucide-react";
+import React from "react";
+import { Settings, Volume2, Database, Info } from "lucide-react";
 import { useToastStore } from "../store/toastStore";
+import { useSettingsStore } from "../store/settingsStore";
 
 export const SettingsView: React.FC = () => {
-  const [audioQuality, setAudioQuality] = useState("320kbps");
-  const [normalizeVolume, setNormalizeVolume] = useState(true);
-  const toast = useToastStore();
+  const { preferredLanguage, setPreferredLanguage, audioQuality, setAudioQuality } = useSettingsStore();
+  const { show: showToast } = useToastStore();
 
   const handleClearCache = () => {
     localStorage.removeItem("aruvi_recent_searches");
-    toast.show("Search cache cleared successfully!", "success");
+    showToast("Search cache cleared successfully!", "success");
   };
 
   return (
-    <div className="p-4 sm:p-8 space-y-8 max-w-4xl mx-auto pb-32">
+    <div className="p-4 sm:p-8 space-y-8 max-w-4xl mx-auto pb-44">
       <div className="space-y-1">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight flex items-center gap-3">
           <Settings className="w-8 h-8 text-emerald-400" /> Settings & Preferences
@@ -37,8 +37,8 @@ export const SettingsView: React.FC = () => {
             <button
               key={item.id}
               onClick={() => {
-                setAudioQuality(item.id);
-                toast.show(`Audio quality set to ${item.label}`, "success");
+                setAudioQuality(item.id as any);
+                showToast(`Audio quality set to ${item.label}`, "success");
               }}
               className={`p-4 rounded-2xl border text-left transition-all ${
                 audioQuality === item.id
@@ -76,7 +76,7 @@ export const SettingsView: React.FC = () => {
         </div>
         <div className="text-xs text-zinc-400 space-y-1.5 leading-relaxed">
           <p><strong className="text-white">Version:</strong> 1.4.3 Web Edition</p>
-          <p><strong className="text-white">Architecture:</strong> Monorepo React 19 + Vite + Tailwind CSS + Supabase Realtime</p>
+          <p><strong className="text-white">Architecture:</strong> Monorepo React + Vite + Tailwind CSS + Supabase Realtime</p>
           <p><strong className="text-white">API Stream:</strong> Official JioSaavn 320kbps DES Decryption engine</p>
         </div>
       </div>

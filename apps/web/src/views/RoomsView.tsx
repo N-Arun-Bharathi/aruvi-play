@@ -1,164 +1,205 @@
 import React, { useState, useEffect } from "react";
 import { useRoomStore } from "../store/roomStore";
 import { useAuthStore } from "../store/authStore";
-import { Radio, Plus, LogIn, Users, Sparkles, Copy, Check, ArrowRight } from "lucide-react";
+import { Plus, Key, Lock, Globe, Radio, ArrowRight } from "lucide-react";
 
 interface RoomsViewProps {
   setActiveView: (view: string) => void;
 }
 
 export const RoomsView: React.FC<RoomsViewProps> = ({ setActiveView }) => {
-  const { activeRooms, fetchActiveRooms, createRoom, joinRoomByCode, currentRoom } = useRoomStore();
-  const { authMode, openAuthModal } = useAuthStore();
+  const { fetchActiveRooms, joinRoomByCode, createRoom } = useRoomStore();
+  const { openAuthModal, authMode } = useAuthStore();
 
-  const [roomNameInput, setRoomNameInput] = useState("");
-  const [roomCodeInput, setRoomCodeInput] = useState("");
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [joinCodeInput, setJoinCodeInput] = useState("");
   const [showJoinModal, setShowJoinModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newRoomName, setNewRoomName] = useState("");
 
   useEffect(() => {
     fetchActiveRooms();
   }, []);
 
-  // If user is already inside a room, automatically navigate to room detail
-  useEffect(() => {
-    if (currentRoom) {
-      setActiveView("room-detail");
-    }
-  }, [currentRoom]);
+  const handleJoinWithCode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!joinCodeInput.trim()) return;
+    joinRoomByCode(joinCodeInput.trim().toUpperCase());
+    setShowJoinModal(false);
+    setActiveView("room-detail");
+  };
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!roomNameInput.trim()) return;
-    const roomId = await createRoom(roomNameInput);
-    if (roomId) {
-      setShowCreateModal(false);
-      setRoomNameInput("");
-      setActiveView("room-detail");
-    }
-  };
-
-  const handleJoinRoom = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!roomCodeInput.trim()) return;
-    const success = await joinRoomByCode(roomCodeInput);
-    if (success) {
-      setShowJoinModal(false);
-      setRoomCodeInput("");
-      setActiveView("room-detail");
-    }
+    if (!newRoomName.trim()) return;
+    const room = await createRoom(newRoomName.trim());
+    setShowCreateModal(false);
+    if (room) setActiveView("room-detail");
   };
 
   return (
-    <div className="p-4 sm:p-8 space-y-8 max-w-7xl mx-auto pb-32">
-      {/* Hero Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-950/80 via-zinc-900 to-zinc-900 border border-emerald-500/20 p-6 sm:p-10 shadow-2xl">
-        <div className="relative z-10 max-w-2xl space-y-3">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-bold text-emerald-400 uppercase tracking-widest">
-            <Radio className="w-3.5 h-3.5 animate-pulse" /> Listen Together
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">Collaborative Music Rooms</h1>
-          <p className="text-zinc-400 text-sm leading-relaxed">
-            Create a live music room, invite friends with a code (e.g. AP-4821), and synchronize song playback in real-time.
+    <div className="p-6 sm:p-10 space-y-8 max-w-7xl mx-auto pb-36">
+      {/* Title & Action Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+            Social Rooms
+          </h1>
+          <p className="text-xs text-zinc-400 font-medium mt-1">
+            Listen together, discover in sync.
           </p>
-
-          <div className="pt-3 flex flex-wrap gap-3">
-            <button
-              onClick={() => {
-                if (authMode === "guest") openAuthModal("login");
-                else setShowCreateModal(true);
-              }}
-              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-full shadow-lg transition-all"
-            >
-              <Plus className="w-4 h-4" /> Create Room
-            </button>
-            <button
-              onClick={() => setShowJoinModal(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs rounded-full border border-zinc-700 transition-colors"
-            >
-              <LogIn className="w-4 h-4" /> Join Room Code
-            </button>
-          </div>
         </div>
-      </div>
 
-      {/* Active Music Lounges */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-extrabold text-white tracking-tight flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-emerald-400" /> Active Public Rooms
-          </h2>
-          <button onClick={fetchActiveRooms} className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold">
-            Refresh
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setShowJoinModal(true)}
+            className="flex items-center gap-2 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 text-zinc-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-all"
+          >
+            <Key className="w-4 h-4 text-cyan-400" /> Join with Code
+          </button>
+          <button
+            onClick={() => {
+              if (authMode !== "authenticated") {
+                openAuthModal("login");
+              } else {
+                setShowCreateModal(true);
+              }
+            }}
+            className="flex items-center gap-2 bg-cyan-400 hover:bg-cyan-300 text-zinc-950 text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-lg shadow-cyan-400/20"
+          >
+            <Plus className="w-4 h-4" /> CREATE ROOM
           </button>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-          {activeRooms.map((room) => (
-            <div
-              key={room.id}
-              onClick={() => joinRoomByCode(room.code)}
-              className="group p-5 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-850 hover:border-emerald-500/30 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-lg flex flex-col justify-between"
-            >
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="bg-emerald-500/10 text-emerald-400 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                    CODE: {room.code}
-                  </span>
-                  <div className="flex items-center gap-1 text-xs text-zinc-400">
-                    <Users className="w-3.5 h-3.5" /> {(room.members || []).length}
-                  </div>
-                </div>
-                <h3 className="text-base font-bold text-white group-hover:text-emerald-400 transition-colors truncate">
-                  {room.name}
-                </h3>
-                <p className="text-xs text-zinc-400">Host: {room.host_name}</p>
+      {/* Featured Live Rooms Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Live Now Featured Card (2 Columns) */}
+        <div className="lg:col-span-2 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between space-y-6">
+          {/* Subtle cyan glow background */}
+          <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
+
+          <div className="space-y-4 relative z-10">
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-cyan-400 bg-cyan-950/60 px-3 py-1 rounded-full border border-cyan-500/20">
+                ● LIVE NOW
+              </span>
+            </div>
+
+            <div>
+              <h2 className="text-2xl font-black text-white">Synthwave Sessions 📻</h2>
+              <p className="text-xs text-zinc-400 font-medium">Host: DJ_Neon</p>
+            </div>
+          </div>
+
+          {/* Player Banner inside Card */}
+          <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-3.5 flex items-center justify-between gap-4 relative z-10">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-cyan-400 shrink-0">
+                <Radio className="w-5 h-5 animate-pulse" />
               </div>
-
-              <div className="pt-4 flex items-center justify-between border-t border-zinc-800/60 mt-4">
-                <span className="text-xs text-emerald-400 font-semibold group-hover:underline flex items-center gap-1">
-                  Join Session <ArrowRight className="w-3.5 h-3.5" />
-                </span>
-                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              <div className="min-w-0">
+                <h4 className="text-xs font-bold text-white truncate">Midnight City Run</h4>
+                <p className="text-[11px] text-zinc-400 truncate">Kavinsky</p>
               </div>
             </div>
-          ))}
+
+            <div className="flex items-center gap-3">
+              <div className="flex -space-x-2">
+                {["https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&q=80"].map((u, i) => (
+                  <img key={i} src={u} alt="user" className="w-6 h-6 rounded-full border border-zinc-900 object-cover" />
+                ))}
+                <span className="w-6 h-6 rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-300 flex items-center justify-center border border-zinc-900">
+                  +42
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  joinRoomByCode("SYNTH-99");
+                  setActiveView("room-detail");
+                }}
+                className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all"
+              >
+                JOIN
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Private Room Card */}
+        <div className="bg-zinc-900/60 border border-zinc-850 rounded-3xl p-6 flex flex-col justify-between space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-yellow-400 bg-yellow-950/40 px-2.5 py-1 rounded-full border border-yellow-500/20">
+                <Lock className="w-3 h-3" /> PRIVATE
+              </span>
+              <div className="flex -space-x-1.5">
+                {["https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80"].map((u, i) => (
+                  <img key={i} src={u} alt="user" className="w-5 h-5 rounded-full border border-zinc-900 object-cover" />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-white">Lo-Fi Study Vibes</h3>
+              <p className="text-xs text-zinc-400">4 members</p>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-zinc-850 flex items-center justify-between text-xs text-zinc-400">
+            <span className="truncate">Coffee Shop Ambience</span>
+            <span className="text-[10px] text-zinc-500">Various Artists</span>
+          </div>
+        </div>
+
+        {/* Public Room Card */}
+        <div className="bg-zinc-900/60 border border-zinc-850 rounded-3xl p-6 flex flex-col justify-between space-y-6">
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-cyan-400 bg-cyan-950/40 px-2.5 py-1 rounded-full border border-cyan-500/20">
+                <Globe className="w-3 h-3" /> PUBLIC
+              </span>
+              <span className="text-[10px] text-zinc-500 font-bold">+12</span>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-bold text-white">Deep Focus Ambient</h3>
+              <p className="text-xs text-zinc-400">12 members</p>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-zinc-850 flex items-center justify-between text-xs text-zinc-400">
+            <span className="italic">Nothing playing</span>
+            <ArrowRight className="w-4 h-4 text-zinc-500" />
+          </div>
         </div>
       </div>
 
-      {/* CREATE ROOM MODAL */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-xl font-bold text-white">Create Music Room</h3>
-            <form onSubmit={handleCreateRoom} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Room Name</label>
-                <input
-                  type="text"
-                  required
-                  value={roomNameInput}
-                  onChange={(e) => setRoomNameInput(e.target.value)}
-                  placeholder="e.g. Arun & Nivi's Chill Beats"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500"
-                />
-              </div>
-              <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-xl text-xs text-emerald-300">
-                A unique room code (e.g. AP-4821) will be generated automatically for your friends to join!
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
+      {/* Join Code Modal */}
+      {showJoinModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-white">Join Room with Code</h3>
+            <form onSubmit={handleJoinWithCode} className="space-y-3">
+              <input
+                type="text"
+                value={joinCodeInput}
+                onChange={(e) => setJoinCodeInput(e.target.value)}
+                placeholder="Enter Code (e.g. AP-4821)"
+                className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-sm uppercase font-mono tracking-wider focus:outline-none focus:border-cyan-500"
+              />
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white"
+                  onClick={() => setShowJoinModal(false)}
+                  className="flex-1 py-2 text-xs font-bold text-zinc-400 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md"
+                  className="flex-1 py-2 bg-cyan-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md"
                 >
-                  Create Room
+                  Join
                 </button>
               </div>
             </form>
@@ -166,36 +207,32 @@ export const RoomsView: React.FC<RoomsViewProps> = ({ setActiveView }) => {
         </div>
       )}
 
-      {/* JOIN ROOM MODAL */}
-      {showJoinModal && (
-        <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4">
-            <h3 className="text-xl font-bold text-white">Join Music Room</h3>
-            <form onSubmit={handleJoinRoom} className="space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Enter Room Code</label>
-                <input
-                  type="text"
-                  required
-                  value={roomCodeInput}
-                  onChange={(e) => setRoomCodeInput(e.target.value.toUpperCase())}
-                  placeholder="AP-4821"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 font-mono tracking-widest text-center uppercase"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
+      {/* Create Room Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm bg-zinc-900 border border-zinc-800 rounded-3xl p-6 space-y-4">
+            <h3 className="text-lg font-bold text-white">Create Music Room</h3>
+            <form onSubmit={handleCreateRoom} className="space-y-3">
+              <input
+                type="text"
+                value={newRoomName}
+                onChange={(e) => setNewRoomName(e.target.value)}
+                placeholder="Room Name (e.g. Anirudh Hits)"
+                className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500"
+              />
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowJoinModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white"
+                  onClick={() => setShowCreateModal(false)}
+                  className="flex-1 py-2 text-xs font-bold text-zinc-400 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md"
+                  className="flex-1 py-2 bg-cyan-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md"
                 >
-                  Join Room
+                  Create
                 </button>
               </div>
             </form>

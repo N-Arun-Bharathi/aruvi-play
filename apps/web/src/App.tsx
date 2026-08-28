@@ -110,9 +110,11 @@ export function App() {
           onSearchChange={(q) => setSearchQuery(q)}
         />
 
-        {/* Scrollable View Area */}
+        {/* Scrollable View Area with generous bottom padding for floating player pill */}
         <main className="flex-1 overflow-y-auto custom-scrollbar">
-          {renderCurrentView()}
+          <div className="pb-44">
+            {renderCurrentView()}
+          </div>
         </main>
 
         {/* Persistent Bottom Mini Player */}

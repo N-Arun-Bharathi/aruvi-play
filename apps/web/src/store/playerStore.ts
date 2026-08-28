@@ -7,6 +7,7 @@ import {
   isAlternateVersion,
   extractPrimaryArtist,
 } from "@aruvi/shared";
+import { useSettingsStore } from "./settingsStore";
 
 interface PlayerState {
   queue: Song[];
@@ -91,6 +92,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     const { queue, currentIndex } = get();
     if (queue.length - currentIndex <= 3 && song.source === "online") {
       try {
+        const preferredLang = (useSettingsStore.getState().preferredLanguage || song.language || "Tamil").toLowerCase();
         let related: Song[] = [];
         try {
           related = await getRelatedSongs(song.id);
@@ -112,12 +114,23 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         }
         newItems = distinctNewItems;
 
-        // If getRelatedSongs returned 0 non-duplicate items (e.g. for new songs), fetch composer/artist hits!
-        if (newItems.length === 0) {
-          const artist = extractPrimaryArtist(song);
-          if (artist) {
-            const artistHits = await searchSongs(`${artist} hits`);
-            for (const hit of artistHits) {
+        const artist = extractPrimaryArtist(song);
+        if (artist) {
+          // 1. Fetch artist hits specifically in preferred language (e.g. "Anirudh Tamil hits")
+          const langHits = await searchSongs(`${artist} ${preferredLang} hits`);
+          for (const hit of langHits) {
+            if (
+              !currentQueue.some((q) => q.id === hit.id || isAlternateVersion(hit, q)) &&
+              !newItems.some((d) => isAlternateVersion(hit, d))
+            ) {
+              newItems.push(hit);
+            }
+          }
+
+          // 2. If fewer than 5 items, fetch general artist hits
+          if (newItems.length < 5) {
+            const generalHits = await searchSongs(`${artist} hits`);
+            for (const hit of generalHits) {
               if (
                 !currentQueue.some((q) => q.id === hit.id || isAlternateVersion(hit, q)) &&
                 !newItems.some((d) => isAlternateVersion(hit, d))
@@ -127,6 +140,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
             }
           }
         }
+
+        // RANKING ENGINE: 1ST PRIORITY = PREFERRED LANGUAGE!
+        newItems.sort((a, b) => {
+          const aMatch = (a.language || "").toLowerCase() === preferredLang ? 1 : 0;
+          const bMatch = (b.language || "").toLowerCase() === preferredLang ? 1 : 0;
+          return bMatch - aMatch;
+        });
 
         if (newItems.length > 0) {
           set({ queue: [...currentQueue, ...newItems] });
@@ -155,12 +175,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       const rawQ = newQueue && newQueue.length > 0 ? newQueue : [song];
       const clickedIdx = rawQ.findIndex((s) => s.id === song.id);
       const songArtist = extractPrimaryArtist(song).toLowerCase();
+      const preferredLang = (useSettingsStore.getState().preferredLanguage || song.language || "Tamil").toLowerCase();
 
       // Deduplicate queue to remove alternate versions/variations AND unrelated text search hits
-      const q = rawQ.filter((s, idx) => {
+      let q = rawQ.filter((s, idx) => {
         if (idx === clickedIdx) return true;
         if (isAlternateVersion(s, song)) return false;
-        // If rawQ came from text search with mixed artists, filter out unrelated artist tracks
         if (songArtist && songArtist.length > 3) {
           const itemArtist = extractPrimaryArtist(s).toLowerCase();
           if (itemArtist && !itemArtist.includes(songArtist) && !songArtist.includes(itemArtist)) {
@@ -170,13 +190,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         return true;
       });
 
-      const index = q.findIndex((s) => s.id === song.id);
-      const activeIndex = index >= 0 ? index : 0;
+      // Sort UP NEXT queue so songs in the preferred language rank 1ST PRIORITY!
+      const played = q[clickedIdx >= 0 ? clickedIdx : 0];
+      const remaining = q.filter((_, idx) => idx !== (clickedIdx >= 0 ? clickedIdx : 0));
+
+      remaining.sort((a, b) => {
+        const aMatch = (a.language || "").toLowerCase() === preferredLang ? 1 : 0;
+        const bMatch = (b.language || "").toLowerCase() === preferredLang ? 1 : 0;
+        return bMatch - aMatch;
+      });
+
+      q = played ? [played, ...remaining] : remaining;
 
       set({
         queue: q,
         originalQueue: q,
-        currentIndex: activeIndex,
+        currentIndex: 0,
         currentSong: song,
       });
 
@@ -232,7 +261,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       const { queue, currentIndex, position } = get();
       if (queue.length === 0) return;
 
-      // If playback > 3 seconds, restart current track
       if (position > 3) {
         audio.currentTime = 0;
         return;
