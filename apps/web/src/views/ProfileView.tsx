@@ -1,12 +1,14 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { User, Mail, Edit3, LogOut, Shield, Download, Smartphone, Check, Sparkles } from "lucide-react";
 
 interface ProfileViewProps {
-  setActiveView: (view: string) => void;
+  setActiveView?: (view: string) => void;
 }
 
 export const ProfileView: React.FC<ProfileViewProps> = ({ setActiveView }) => {
+  const navigate = useNavigate();
   const { authMode, userProfile, updateProfileName, logout, openAuthModal } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [nameInput, setNameInput] = useState(userProfile?.name || "");
@@ -30,7 +32,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ setActiveView }) => {
 
         <div className="space-y-2 text-center sm:text-left flex-1 min-w-0">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[11px] font-bold text-emerald-400 uppercase tracking-widest">
-            <Shield className="w-3.5 h-3.5" /> {isGuest ? "Guest Listener" : "Authenticated Account"}
+            <Shield className="w-3.5 h-3.5" /> {isGuest ? "Guest Listener" : (userProfile?.is_owner || userProfile?.isAdmin) ? "Owner / Admin Account" : "Authenticated Account"}
           </div>
 
           {isEditing ? (

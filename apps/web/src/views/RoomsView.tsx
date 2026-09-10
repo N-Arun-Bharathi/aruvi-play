@@ -1,14 +1,16 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useRoomStore } from "../store/roomStore";
 import { useAuthStore } from "../store/authStore";
-import { Plus, Key, Lock, Globe, Radio, ArrowRight } from "lucide-react";
+import { Plus, Key, Radio, Users } from "lucide-react";
 
 interface RoomsViewProps {
-  setActiveView: (view: string) => void;
+  setActiveView?: (view: string) => void;
 }
 
 export const RoomsView: React.FC<RoomsViewProps> = ({ setActiveView }) => {
-  const { fetchActiveRooms, joinRoomByCode, createRoom } = useRoomStore();
+  const navigate = useNavigate();
+  const { activeRooms, fetchActiveRooms, joinRoomByCode, createRoom } = useRoomStore();
   const { openAuthModal, authMode } = useAuthStore();
 
   const [joinCodeInput, setJoinCodeInput] = useState("");
@@ -20,20 +22,27 @@ export const RoomsView: React.FC<RoomsViewProps> = ({ setActiveView }) => {
     fetchActiveRooms();
   }, []);
 
-  const handleJoinWithCode = (e: React.FormEvent) => {
+  const handleJoinWithCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!joinCodeInput.trim()) return;
-    joinRoomByCode(joinCodeInput.trim().toUpperCase());
+    const code = joinCodeInput.trim().toUpperCase();
+    if (!code) return;
+    const ok = await joinRoomByCode(code);
     setShowJoinModal(false);
-    setActiveView("room-detail");
+    if (ok) {
+      navigate(`/rooms/${code}`);
+      if (setActiveView) setActiveView("room-detail");
+    }
   };
 
   const handleCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newRoomName.trim()) return;
-    const room = await createRoom(newRoomName.trim());
+    const roomCode = await createRoom(newRoomName.trim());
     setShowCreateModal(false);
-    if (room) setActiveView("room-detail");
+    if (roomCode) {
+      navigate(`/rooms/${roomCode}`);
+      if (setActiveView) setActiveView("room-detail");
+    }
   };
 
   return (
@@ -45,7 +54,7 @@ export const RoomsView: React.FC<RoomsViewProps> = ({ setActiveView }) => {
             Social Rooms
           </h1>
           <p className="text-xs text-zinc-400 font-medium mt-1">
-            Listen together, discover in sync.
+            Listen together, discover in real-time sync.
           </p>
         </div>
 
@@ -71,108 +80,68 @@ export const RoomsView: React.FC<RoomsViewProps> = ({ setActiveView }) => {
         </div>
       </div>
 
-      {/* Featured Live Rooms Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Live Now Featured Card (2 Columns) */}
-        <div className="lg:col-span-2 bg-gradient-to-br from-zinc-900 via-zinc-900 to-zinc-950 border border-zinc-800 rounded-3xl p-6 relative overflow-hidden flex flex-col justify-between space-y-6">
-          {/* Subtle cyan glow background */}
-          <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="space-y-4 relative z-10">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-cyan-400 bg-cyan-950/60 px-3 py-1 rounded-full border border-cyan-500/20">
-                ● LIVE NOW
-              </span>
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-black text-white">Synthwave Sessions 📻</h2>
-              <p className="text-xs text-zinc-400 font-medium">Host: DJ_Neon</p>
-            </div>
+      {/* Real Live Rooms List */}
+      {activeRooms.length === 0 ? (
+        <div className="p-16 text-center border border-dashed border-zinc-800 rounded-3xl space-y-4 max-w-xl mx-auto my-8">
+          <div className="w-16 h-16 rounded-full bg-cyan-500/10 text-cyan-400 flex items-center justify-center mx-auto border border-cyan-500/20">
+            <Radio className="w-8 h-8 animate-pulse" />
           </div>
-
-          {/* Player Banner inside Card */}
-          <div className="bg-zinc-950/80 border border-zinc-800 rounded-2xl p-3.5 flex items-center justify-between gap-4 relative z-10">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-10 h-10 rounded-xl bg-zinc-800 flex items-center justify-center text-cyan-400 shrink-0">
-                <Radio className="w-5 h-5 animate-pulse" />
-              </div>
-              <div className="min-w-0">
-                <h4 className="text-xs font-bold text-white truncate">Midnight City Run</h4>
-                <p className="text-[11px] text-zinc-400 truncate">Kavinsky</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <div className="flex -space-x-2">
-                {["https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&q=80", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&q=80"].map((u, i) => (
-                  <img key={i} src={u} alt="user" className="w-6 h-6 rounded-full border border-zinc-900 object-cover" />
-                ))}
-                <span className="w-6 h-6 rounded-full bg-zinc-800 text-[10px] font-bold text-zinc-300 flex items-center justify-center border border-zinc-900">
-                  +42
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-white">No Active Rooms Right Now</h3>
+            <p className="text-xs text-zinc-400 leading-relaxed">
+              Create a new room and share the room code with friends to listen to music together in real-time.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              if (authMode !== "authenticated") {
+                openAuthModal("login");
+              } else {
+                setShowCreateModal(true);
+              }
+            }}
+            className="px-6 py-2.5 bg-cyan-400 hover:bg-cyan-300 text-zinc-950 text-xs font-bold rounded-xl transition-all shadow-lg shadow-cyan-400/20"
+          >
+            Start a Live Room
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {activeRooms.map((room) => (
+            <div
+              key={room.id}
+              onClick={() => {
+                const code = room.code || room.room_code || "";
+                joinRoomByCode(code);
+                navigate(`/rooms/${code}`);
+                if (setActiveView) setActiveView("room-detail");
+              }}
+              className="p-5 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-850 hover:border-cyan-500/40 rounded-3xl cursor-pointer transition-all hover:scale-[1.02] shadow-xl space-y-4 group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-widest text-cyan-400 bg-cyan-950/60 px-3 py-1 rounded-full border border-cyan-500/20">
+                  ● LIVE
+                </span>
+                <span className="text-xs font-mono text-zinc-400 bg-zinc-950 px-2.5 py-1 rounded-lg border border-zinc-800">
+                  {room.code || room.room_code}
                 </span>
               </div>
-              <button
-                onClick={() => {
-                  joinRoomByCode("SYNTH-99");
-                  setActiveView("room-detail");
-                }}
-                className="bg-zinc-800 hover:bg-zinc-700 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all"
-              >
-                JOIN
-              </button>
-            </div>
-          </div>
-        </div>
 
-        {/* Private Room Card */}
-        <div className="bg-zinc-900/60 border border-zinc-850 rounded-3xl p-6 flex flex-col justify-between space-y-6">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-yellow-400 bg-yellow-950/40 px-2.5 py-1 rounded-full border border-yellow-500/20">
-                <Lock className="w-3 h-3" /> PRIVATE
-              </span>
-              <div className="flex -space-x-1.5">
-                {["https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80"].map((u, i) => (
-                  <img key={i} src={u} alt="user" className="w-5 h-5 rounded-full border border-zinc-900 object-cover" />
-                ))}
+              <div>
+                <h3 className="text-lg font-bold text-white truncate">{room.name}</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">Host: {room.host_name || "Community Host"}</p>
+              </div>
+
+              <div className="pt-3 border-t border-zinc-800 flex items-center justify-between text-xs text-zinc-400">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Users className="w-3.5 h-3.5 text-yellow-400" /> {room.members?.length || 1} listening
+                </span>
+                <span className="text-cyan-400 font-bold hover:underline">Join & Listen →</span>
               </div>
             </div>
-
-            <div>
-              <h3 className="text-lg font-bold text-white">Lo-Fi Study Vibes</h3>
-              <p className="text-xs text-zinc-400">4 members</p>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-zinc-850 flex items-center justify-between text-xs text-zinc-400">
-            <span className="truncate">Coffee Shop Ambience</span>
-            <span className="text-[10px] text-zinc-500">Various Artists</span>
-          </div>
+          ))}
         </div>
-
-        {/* Public Room Card */}
-        <div className="bg-zinc-900/60 border border-zinc-850 rounded-3xl p-6 flex flex-col justify-between space-y-6">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-[10px] font-extrabold text-cyan-400 bg-cyan-950/40 px-2.5 py-1 rounded-full border border-cyan-500/20">
-                <Globe className="w-3 h-3" /> PUBLIC
-              </span>
-              <span className="text-[10px] text-zinc-500 font-bold">+12</span>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-bold text-white">Deep Focus Ambient</h3>
-              <p className="text-xs text-zinc-400">12 members</p>
-            </div>
-          </div>
-
-          <div className="pt-4 border-t border-zinc-850 flex items-center justify-between text-xs text-zinc-400">
-            <span className="italic">Nothing playing</span>
-            <ArrowRight className="w-4 h-4 text-zinc-500" />
-          </div>
-        </div>
-      </div>
+      )}
 
       {/* Join Code Modal */}
       {showJoinModal && (
@@ -217,7 +186,7 @@ export const RoomsView: React.FC<RoomsViewProps> = ({ setActiveView }) => {
                 type="text"
                 value={newRoomName}
                 onChange={(e) => setNewRoomName(e.target.value)}
-                placeholder="Room Name (e.g. Anirudh Hits)"
+                placeholder="Room Name (e.g. Tamil Hits)"
                 className="w-full bg-zinc-950 border border-zinc-800 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500"
               />
               <div className="flex gap-2">

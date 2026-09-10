@@ -1,37 +1,88 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { useLikedStore } from "../store/likedStore";
 import { usePlaylistStore } from "../store/playlistStore";
 import { useHistoryStore } from "../store/historyStore";
+import { usePlayerStore } from "../store/playerStore";
 import { SongListRow } from "../components/SongListRow";
 import { SongCard } from "../components/SongCard";
 import { Heart, ListMusic, History, Plus, Play, Shuffle, Lock, Sparkles, Trash2 } from "lucide-react";
 
 interface LibraryViewProps {
   initialTab?: "liked" | "playlists" | "history";
-  setActiveView: (view: string) => void;
+  setActiveView?: (view: string) => void;
 }
 
 export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", setActiveView }) => {
-  const { authMode, openAuthModal } = useAuthStore();
-  const { likedSongs } = useLikedStore();
-  const { playlists, createPlaylist } = usePlaylistStore();
-  const { history, clearHistory } = useHistoryStore();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  const [activeTab, setActiveTab] = useState<"liked" | "playlists" | "history">(initialTab);
+  // Determine active tab from URL path
+  const getTabFromPath = (): "liked" | "playlists" | "history" => {
+    if (location.pathname.includes("playlists")) return "playlists";
+    if (location.pathname.includes("history")) return "history";
+    return "liked";
+  };
+
+  const { authMode, openAuthModal } = useAuthStore();
+  const { likedSongs, hydrate: hydrateLiked } = useLikedStore();
+  const { playlists, createPlaylist, setActivePlaylist } = usePlaylistStore();
+  const { history, clearHistory } = useHistoryStore();
+  const { playSong } = usePlayerStore();
+
+  const [activeTab, setActiveTab] = useState<"liked" | "playlists" | "history">(getTabFromPath());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPlName, setNewPlName] = useState("");
   const [newPlDesc, setNewPlDesc] = useState("");
+
+  useEffect(() => {
+    setActiveTab(getTabFromPath());
+  }, [location.pathname]);
+
+  useEffect(() => {
+    hydrateLiked();
+  }, []);
+
+  const handleTabChange = (tab: "liked" | "playlists" | "history") => {
+    setActiveTab(tab);
+    navigate(`/library/${tab}`);
+    if (setActiveView) setActiveView(tab);
+  };
+
+  const playAllLiked = (shuffle = false) => {
+    if (!likedSongs.length) return;
+    if (shuffle) {
+      const list = [...likedSongs].sort(() => Math.random() - 0.5);
+      playSong(list[0], list);
+    } else {
+      playSong(likedSongs[0], likedSongs);
+    }
+  };
+
+  const playAllHistory = (shuffle = false) => {
+    const list = history.map((h) => h.song);
+    if (!list.length) return;
+    if (shuffle) {
+      const shuffled = [...list].sort(() => Math.random() - 0.5);
+      playSong(shuffled[0], shuffled);
+    } else {
+      playSong(list[0], list);
+    }
+  };
 
   const isGuest = authMode === "guest";
 
   const handleCreatePlaylist = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPlName.trim()) return;
-    createPlaylist(newPlName, newPlDesc);
+    const pl = createPlaylist(newPlName, newPlDesc);
     setNewPlName("");
     setNewPlDesc("");
     setShowCreateModal(false);
+    if (pl && pl.id) {
+      navigate(`/playlist/${pl.id}`);
+    }
   };
 
   if (isGuest) {
@@ -66,36 +117,42 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
     <div className="p-4 sm:p-8 space-y-8 max-w-7xl mx-auto pb-32">
       {/* Header Tabs */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 border-b border-zinc-800 pb-4 w-full">
+        {/* Tab Navigation Row */}
+        <div className="flex items-center gap-3 border-b border-zinc-850 pb-4 overflow-x-auto w-full">
           <button
-            onClick={() => setActiveTab("liked")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            onClick={() => handleTabChange("liked")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === "liked"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/20"
+                : "bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800"
             }`}
           >
-            <Heart className="w-4 h-4" /> Liked Songs ({likedSongs.length})
+            <Heart className={`w-3.5 h-3.5 ${activeTab === "liked" ? "fill-current" : ""}`} />
+            <span>Liked Songs ({likedSongs.length})</span>
           </button>
+
           <button
-            onClick={() => setActiveTab("playlists")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            onClick={() => handleTabChange("playlists")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === "playlists"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/20"
+                : "bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800"
             }`}
           >
-            <ListMusic className="w-4 h-4" /> Playlists ({playlists.length})
+            <ListMusic className="w-3.5 h-3.5" />
+            <span>Playlists ({playlists.length})</span>
           </button>
+
           <button
-            onClick={() => setActiveTab("history")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+            onClick={() => handleTabChange("history")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
               activeTab === "history"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-cyan-500 text-zinc-950 shadow-md shadow-cyan-500/20"
+                : "bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800"
             }`}
           >
-            <History className="w-4 h-4" /> History ({history.length})
+            <History className="w-3.5 h-3.5" />
+            <span>History ({history.length})</span>
           </button>
         </div>
       </div>
@@ -103,11 +160,29 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
       {/* LIKED SONGS TAB */}
       {activeTab === "liked" && (
         <div className="space-y-6 animate-fade-in">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black text-white">Liked Songs</h2>
               <p className="text-xs text-zinc-400">{likedSongs.length} tracks saved to your library</p>
             </div>
+
+            {likedSongs.length > 0 && (
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => playAllLiked(false)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-cyan-400 hover:bg-cyan-300 text-zinc-950 font-bold text-xs rounded-full shadow-lg shadow-cyan-400/20 transition-all hover:scale-105 active:scale-95"
+                >
+                  <Play className="w-4 h-4 fill-zinc-950" /> Play All
+                </button>
+                <button
+                  onClick={() => playAllLiked(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-cyan-500/30 text-zinc-200 hover:text-white font-bold text-xs rounded-full transition-all hover:scale-105 active:scale-95 shadow-md"
+                  title="Shuffle Liked Songs"
+                >
+                  <Shuffle className="w-4 h-4 text-cyan-400" /> Shuffle
+                </button>
+              </div>
+            )}
           </div>
 
           {likedSongs.length === 0 ? (
@@ -136,7 +211,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             </div>
             <button
               onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-xl shadow-lg transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-zinc-950 text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/20 transition-all hover:scale-105"
             >
               <Plus className="w-4 h-4" /> Create Playlist
             </button>
@@ -147,20 +222,21 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
               <div
                 key={pl.id}
                 onClick={() => {
-                  usePlaylistStore.getState().setActivePlaylist(pl);
-                  setActiveView("playlist-detail");
+                  setActivePlaylist(pl);
+                  navigate(`/playlist/${pl.id}`);
+                  if (setActiveView) setActiveView("playlist-detail");
                 }}
-                className="group p-4 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-850 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-lg flex flex-col justify-between"
+                className="group bg-zinc-900/60 hover:bg-zinc-900 border border-zinc-850 hover:border-cyan-500/40 rounded-3xl p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-xl"
               >
                 <img
                   src={pl.cover_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=500&q=80"}
                   alt={pl.name}
-                  className="w-full aspect-square rounded-xl object-cover mb-3"
+                  className="w-full aspect-square rounded-2xl object-cover mb-3 bg-zinc-800"
                 />
-                <div>
-                  <h3 className="text-sm font-bold text-white group-hover:text-emerald-400 truncate">{pl.name}</h3>
-                  <p className="text-xs text-zinc-400 truncate">{pl.songs.length} songs</p>
-                </div>
+                <h4 className="text-sm font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                  {pl.name}
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">{pl.songs?.length || 0} songs</p>
               </div>
             ))}
           </div>
@@ -170,18 +246,35 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
       {/* HISTORY TAB */}
       {activeTab === "history" && (
         <div className="space-y-6 animate-fade-in">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-black text-white">Listening History</h2>
-              <p className="text-xs text-zinc-400">Recently played tracks</p>
+              <p className="text-xs text-zinc-400">Recently played tracks on this device</p>
             </div>
+
             {history.length > 0 && (
-              <button
-                onClick={clearHistory}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 hover:text-rose-400 bg-zinc-900 border border-zinc-800 rounded-xl transition-colors font-medium"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Clear History
-              </button>
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => playAllHistory(false)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-cyan-400 hover:bg-cyan-300 text-zinc-950 font-bold text-xs rounded-full shadow-lg shadow-cyan-400/20 transition-all hover:scale-105 active:scale-95"
+                >
+                  <Play className="w-4 h-4 fill-zinc-950" /> Play All
+                </button>
+                <button
+                  onClick={() => playAllHistory(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-cyan-500/30 text-zinc-200 hover:text-white font-bold text-xs rounded-full transition-all hover:scale-105 active:scale-95 shadow-md"
+                  title="Shuffle History"
+                >
+                  <Shuffle className="w-4 h-4 text-cyan-400" /> Shuffle
+                </button>
+                <button
+                  onClick={clearHistory}
+                  className="p-2.5 text-zinc-400 hover:text-rose-400 bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 rounded-full transition-colors"
+                  title="Clear Listening History"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             )}
           </div>
 

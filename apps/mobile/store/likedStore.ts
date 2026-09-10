@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { Song } from "../types/song";
+import { AppState } from "react-native";
+import { Song } from "@aruvi/shared";
 import { loadRecent } from "../services/storage";
 import { supabase } from "../services/supabase";
 import {
@@ -29,7 +30,7 @@ const songsMatch = (s1: Song, s2: Song) => {
   if (t1 !== t2 && !t1.includes(t2) && !t2.includes(t1)) return false;
 
   const getArtists = (a: string) =>
-    a
+    (a || "")
       .toLowerCase()
       .split(/[;,]/)
       .map((x) => normalize(x))
@@ -37,6 +38,10 @@ const songsMatch = (s1: Song, s2: Song) => {
 
   const a1 = getArtists(s1.artist);
   const a2 = getArtists(s2.artist);
+
+  if (a1.length === 0 || a2.length === 0) {
+    return t1 === t2;
+  }
 
   return a1.some((name1) => a2.some((name2) => name1 === name2 || name1.includes(name2) || name2.includes(name1)));
 };
@@ -51,7 +56,7 @@ const songParseCache = new Map<string, ParsedSong>();
 
 const parseSong = (song: Song): ParsedSong => {
   const getArtists = (a: string) =>
-    a
+    (a || "")
       .toLowerCase()
       .split(/[;,]/)
       .map((x) => normalize(x))
@@ -85,11 +90,14 @@ interface LikedState {
   
   hydrate: () => Promise<void>;
   toggleLike: (song: Song) => Promise<void>;
-  isLiked: (song: Song) => boolean;
+  isLiked: (songOrId: Song | string) => boolean;
   refreshRecent: () => Promise<void>;
   clearGuestFavourites: () => void;
   resolveAndPlay: (item: any, contextList: any[]) => Promise<void>;
 }
+
+let mobileRealtimeChannel: any = null;
+let appStateListenerAttached = false;
 
 export const useLibraryStore = create<LikedState>((set, get) => ({
   liked: [],
@@ -112,6 +120,16 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
       user = useAuthStore.getState().userProfile;
       secretKeyUnlocked = useAuthStore.getState().secretKeyUnlocked;
     } catch (e) {}
+
+    // Attach AppState listener once to re-sync when app resumes from background
+    if (!appStateListenerAttached) {
+      appStateListenerAttached = true;
+      AppState.addEventListener("change", (nextState) => {
+        if (nextState === "active") {
+          get().hydrate().catch(() => {});
+        }
+      });
+    }
 
     const isGuest = user?.is_guest ?? false;
     const userId = user?.id || "guest-user";
@@ -182,8 +200,9 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
       if (session?.user && !session.user.is_anonymous) {
         const { data: serverLikes, error } = await supabase
           .from("liked_songs")
-          .select("song_id, songs(*)")
-          .eq("user_id", userId);
+          .select("song_id, liked_at, songs(*)")
+          .eq("user_id", userId)
+          .order("liked_at", { ascending: false });
 
         if (serverLikes && !error) {
           const serverSongs: Song[] = serverLikes
@@ -228,14 +247,68 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
                 artwork_url: song.artwork || null,
                 duration_seconds: song.duration || null,
                 source_type: song.source || "online",
-                source_url: song.url || null
+                source_url: song.url || null,
               });
 
               await supabase.from("liked_songs").upsert({
                 user_id: userId,
-                song_id: song.id
+                song_id: song.id,
               });
             }
+          }
+
+          // 3. Establish Supabase Realtime channel subscription on Mobile
+          if (!mobileRealtimeChannel) {
+            mobileRealtimeChannel = supabase
+              .channel(`mobile_liked_songs_${userId}`)
+              .on(
+                "postgres_changes",
+                {
+                  event: "*",
+                  schema: "public",
+                  table: "liked_songs",
+                  filter: `user_id=eq.${userId}`,
+                },
+                async () => {
+                  // Re-fetch when liked songs change on Web
+                  const { data: freshServerLikes } = await supabase
+                    .from("liked_songs")
+                    .select("song_id, liked_at, songs(*)")
+                    .eq("user_id", userId)
+                    .order("liked_at", { ascending: false });
+
+                  if (freshServerLikes) {
+                    const freshSongs: Song[] = freshServerLikes
+                      .map((item: any) => {
+                        const s = item.songs;
+                        if (!s) return null;
+                        return {
+                          id: s.id,
+                          title: s.title,
+                          artist: s.artist,
+                          album: s.album || "",
+                          artwork: s.artwork_url || "",
+                          url: s.source_url || "",
+                          duration: s.duration_seconds || 0,
+                          source: s.source_type === "local" ? "local" : "online",
+                        } as Song;
+                      })
+                      .filter(Boolean) as Song[];
+
+                    const currentLocal = await dbGetLikedSongs(userId);
+                    for (const lSong of currentLocal) {
+                      if (!freshSongs.some((s) => s.id === lSong.id)) {
+                        await dbRemoveLikedSong(userId, lSong.id);
+                      }
+                    }
+                    for (const sSong of freshSongs) {
+                      await dbSaveLikedSong(userId, sSong);
+                    }
+                    rebuildMaps(freshSongs);
+                  }
+                }
+              )
+              .subscribe();
           }
         }
       }
@@ -280,7 +353,6 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
     // Registered User Behaviour: Write to SQLite & Supabase
     toast.show(exists ? "Removed from Liked Songs" : "Added to Liked Songs");
 
-
     try {
       if (exists) {
         await dbRemoveLikedSong(userId, song.id);
@@ -305,12 +377,12 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
             artwork_url: song.artwork || null,
             duration_seconds: song.duration || null,
             source_type: song.source || "online",
-            source_url: song.url || null
+            source_url: song.url || null,
           });
 
-          await supabase.from("liked_songs").insert({
+          await supabase.from("liked_songs").upsert({
             user_id: userId,
-            song_id: song.id
+            song_id: song.id,
           });
         }
       }
@@ -319,10 +391,16 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
     }
   },
 
-  isLiked: (song) => {
-    if (!song || !song.id) return false;
+  isLiked: (songOrId) => {
+    if (!songOrId) return false;
     const { likedIds, titleToArtistsMap } = get();
     if (!likedIds || likedIds.size === 0) return false;
+
+    if (typeof songOrId === "string") {
+      return likedIds.has(songOrId);
+    }
+
+    const song = songOrId as Song;
     if (likedIds.has(song.id)) return true;
 
     const target = getParsedSong(song);
@@ -361,6 +439,10 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
   },
 
   clearGuestFavourites: () => {
+    if (mobileRealtimeChannel) {
+      supabase.removeChannel(mobileRealtimeChannel);
+      mobileRealtimeChannel = null;
+    }
     set({
       liked: [],
       recent: [],

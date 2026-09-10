@@ -1,19 +1,31 @@
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Song, searchSongs } from "@aruvi/shared";
 import { useSettingsStore } from "../store/settingsStore";
+import { usePlayerStore } from "../store/playerStore";
 import { SongListRow } from "../components/SongListRow";
 import { SkeletonList } from "../components/SkeletonLoader";
-import { Search as SearchIcon, X, Music, Sparkles } from "lucide-react";
+import { Search as SearchIcon, X, Music, Sparkles, Play, Shuffle } from "lucide-react";
 
 interface SearchViewProps {
   initialQuery?: string;
 }
 
 export const SearchView: React.FC<SearchViewProps> = ({ initialQuery = "" }) => {
-  const [query, setQuery] = useState(initialQuery);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlQuery = searchParams.get("q") || initialQuery;
+  const [query, setQuery] = useState(urlQuery);
   const [results, setResults] = useState<Song[]>([]);
   const [loading, setLoading] = useState(false);
   const { preferredLanguage } = useSettingsStore();
+  const { playSong } = usePlayerStore();
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q !== null && q !== query) {
+      setQuery(q);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -45,6 +57,15 @@ export const SearchView: React.FC<SearchViewProps> = ({ initialQuery = "" }) => 
     return () => clearTimeout(timer);
   }, [query, preferredLanguage]);
 
+  const handleQueryChange = (val: string) => {
+    setQuery(val);
+    if (val.trim()) {
+      setSearchParams({ q: val });
+    } else {
+      setSearchParams({});
+    }
+  };
+
   const genres = [
     { id: "electronic", name: "Electronic", gradient: "from-pink-600 to-purple-800" },
     { id: "jazz", name: "Jazz", gradient: "from-emerald-600 to-teal-800" },
@@ -62,14 +83,14 @@ export const SearchView: React.FC<SearchViewProps> = ({ initialQuery = "" }) => 
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleQueryChange(e.target.value)}
             placeholder="What do you want to listen to?"
             className="w-full bg-zinc-900/90 border border-cyan-500/40 text-white text-base rounded-2xl pl-14 pr-12 py-3.5 focus:outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/20 transition-all placeholder:text-zinc-500 shadow-2xl shadow-cyan-500/10"
             autoFocus
           />
           {query && (
             <button
-              onClick={() => setQuery("")}
+              onClick={() => handleQueryChange("")}
               className="absolute right-4 top-4 text-zinc-400 hover:text-white p-1 rounded-full hover:bg-zinc-800"
             >
               <X className="w-4 h-4" />
@@ -89,7 +110,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ initialQuery = "" }) => 
             {genres.map((g) => (
               <div
                 key={g.id}
-                onClick={() => setQuery(g.name)}
+                onClick={() => handleQueryChange(g.name)}
                 className={`h-40 rounded-2xl bg-gradient-to-br ${g.gradient} p-4 cursor-pointer transition-all hover:scale-105 shadow-xl flex flex-col justify-between group overflow-hidden relative`}
               >
                 <h3 className="text-base font-extrabold text-white tracking-tight">{g.name}</h3>
@@ -108,13 +129,36 @@ export const SearchView: React.FC<SearchViewProps> = ({ initialQuery = "" }) => 
       {/* Search Results */}
       {!loading && query.trim() && (
         <div className="space-y-4 animate-fade-in">
-          <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
-            Search Results for "{query}"
-          </h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
+              Search Results for "{query}" ({results.length})
+            </h3>
+
+            {results.length > 0 && (
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => playSong(results[0], results)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-cyan-400 hover:bg-cyan-300 text-zinc-950 font-bold text-xs rounded-full shadow-md shadow-cyan-400/20 transition-all hover:scale-105 active:scale-95"
+                >
+                  <Play className="w-3.5 h-3.5 fill-zinc-950" /> Play All
+                </button>
+                <button
+                  onClick={() => {
+                    const shuffled = [...results].sort(() => Math.random() - 0.5);
+                    playSong(shuffled[0], shuffled);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-cyan-500/30 text-zinc-200 hover:text-white font-bold text-xs rounded-full transition-all hover:scale-105 active:scale-95 shadow-md"
+                  title="Shuffle Search Results"
+                >
+                  <Shuffle className="w-3.5 h-3.5 text-cyan-400" /> Shuffle
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-1">
             {results.map((song, idx) => (
-              <SongListRow key={song.id} song={song} index={idx} />
+              <SongListRow key={song.id} song={song} index={idx} queue={results} />
             ))}
           </div>
         </div>

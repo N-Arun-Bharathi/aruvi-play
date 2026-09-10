@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Song, MusicRoom, RoomMember, supabase } from "@aruvi/shared";
+import { Song, MusicRoom, supabase } from "@aruvi/shared";
 import { useToastStore } from "./toastStore";
 import { useAuthStore } from "./authStore";
 
@@ -33,13 +33,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   fetchActiveRooms: async () => {
     set({ loading: true });
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("rooms")
         .select("*")
         .eq("is_active", true)
         .order("created_at", { ascending: false });
 
-      if (data && data.length > 0) {
+      if (data && !error) {
         const rooms = data.map((r: any) => ({
           ...r,
           code: r.code || r.room_code || "",
@@ -48,38 +48,10 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         return;
       }
     } catch (e) {
-      console.warn("Realtime room fetch fallback to local active rooms:", e);
+      console.warn("Failed to fetch active rooms:", e);
     }
 
-    // Default mock rooms for discovery if backend table empty
-    const mockRooms: MusicRoom[] = [
-      {
-        id: "room_chill_1",
-        code: "AP-8842",
-        name: "Anirudh Hits & Vibes 🎧",
-        host_id: "u_host_1",
-        host_name: "Arun",
-        is_active: true,
-        created_at: new Date().toISOString(),
-        members: [
-          { id: "m1", user_id: "u_host_1", name: "Arun", joined_at: new Date().toISOString() },
-          { id: "m2", user_id: "u_user_2", name: "Nivi", joined_at: new Date().toISOString() },
-        ],
-      },
-      {
-        id: "room_melody_2",
-        code: "AP-3109",
-        name: "Late Night Tamil Melodies ✨",
-        host_id: "u_host_2",
-        host_name: "Karthik",
-        is_active: true,
-        created_at: new Date().toISOString(),
-        members: [
-          { id: "m3", user_id: "u_host_2", name: "Karthik", joined_at: new Date().toISOString() },
-        ],
-      },
-    ];
-    set({ activeRooms: mockRooms, loading: false });
+    set({ activeRooms: [], loading: false });
   },
 
   createRoom: async (name: string) => {
@@ -118,18 +90,25 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     };
 
     try {
-      await supabase.from("rooms").insert({
+      const { data } = await supabase.from("rooms").insert({
         code: roomCode,
         room_code: roomCode,
         name: cleanName,
         host_id: hostId.includes("-") ? hostId : "00000000-0000-0000-0000-000000000000",
         host_name: hostName,
         is_active: true,
-      }).catch(console.warn);
-    } catch (e) {}
+      }).select().maybeSingle();
+
+      if (data) {
+        newRoom.id = data.id || newRoom.id;
+      }
+    } catch (e) {
+      console.warn("Room creation database sync:", e);
+    }
 
     set({ currentRoom: newRoom, loading: false });
-    toast.show(`Room "${cleanName}" created! Room Code: ${roomCode}`, "success");
+    get().fetchActiveRooms();
+    toast.show(`Room "${cleanName}" created! Code: ${roomCode}`, "success");
     return newRoom.id;
   },
 
@@ -146,7 +125,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const userName = user?.name || "Guest Listener";
     const userId = user?.id || `user_${Date.now()}`;
 
-    // Search active rooms
+    // 1. Search locally cached active rooms
     const activeRooms = get().activeRooms;
     const found = activeRooms.find((r) => r.code === cleanCode || r.room_code === cleanCode);
 
@@ -162,16 +141,16 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       return true;
     }
 
-    // Try Supabase lookup
+    // 2. Query Supabase database for the room code
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("rooms")
         .select("*")
         .or(`code.eq.${cleanCode},room_code.eq.${cleanCode}`)
         .eq("is_active", true)
         .maybeSingle();
 
-      if (data) {
+      if (data && !error) {
         const room: MusicRoom = {
           ...data,
           code: data.code || data.room_code || cleanCode,
@@ -183,26 +162,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         toast.show(`Joined room "${room.name}"!`, "success");
         return true;
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Join room lookup error:", e);
+    }
 
-    // Fallback: create mock room for code if demo
-    const createdRoom: MusicRoom = {
-      id: `room_${Date.now()}`,
-      code: cleanCode.startsWith("AP-") ? cleanCode : `AP-${cleanCode}`,
-      name: `Music Lounge ${cleanCode}`,
-      host_id: "u_host_demo",
-      host_name: "Community Host",
-      is_active: true,
-      created_at: new Date().toISOString(),
-      members: [
-        { id: "m_host", user_id: "u_host_demo", name: "Community Host", joined_at: new Date().toISOString() },
-        { id: `m_${Date.now()}`, user_id: userId, name: userName, joined_at: new Date().toISOString() },
-      ],
-    };
-
-    set({ currentRoom: createdRoom, loading: false });
-    toast.show(`Joined Room Code ${createdRoom.code}!`, "success");
-    return true;
+    set({ loading: false });
+    toast.show(`Room "${cleanCode}" not found or is inactive.`, "error");
+    return false;
   },
 
   leaveRoom: async () => {
@@ -223,7 +189,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     const updatedQueue = [...currentQueue, songWithMeta];
 
     set({ currentRoom: { ...currentRoom, queue: updatedQueue } });
-    toast.show(`"${song.title}" added to room queue by ${adder}`, "success");
+    toast.show(`"${song.title}" added to room queue`, "success");
   },
 
   updateRoomPlayback: async (song, isPlaying, position) => {

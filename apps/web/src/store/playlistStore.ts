@@ -26,21 +26,11 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
       if (stored) {
         set({ playlists: JSON.parse(stored) });
       } else {
-        // Create initial default playlist
-        const defaultPl: Playlist = {
-          id: "pl_favorites_mix",
-          name: "My Chill Favorites",
-          description: "Curated mix of favorite beats and melodies",
-          cover_url: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=500&q=80",
-          is_public: true,
-          songs: [],
-          created_at: new Date().toISOString(),
-        };
-        set({ playlists: [defaultPl] });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify([defaultPl]));
+        set({ playlists: [] });
       }
     } catch (e) {
       console.warn("Failed to load playlists:", e);
+      set({ playlists: [] });
     }
   },
 

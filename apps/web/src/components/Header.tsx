@@ -1,26 +1,44 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { Search, Settings, LogIn, LogOut, Globe, User } from "lucide-react";
 
 interface HeaderProps {
   onSearchChange?: (val: string) => void;
-  activeView: string;
-  setActiveView: (view: string) => void;
+  activeView?: string;
+  setActiveView?: (view: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({ onSearchChange, activeView, setActiveView }) => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { authMode, userProfile, openAuthModal, logout } = useAuthStore();
   const { preferredLanguage, setPreferredLanguage } = useSettingsStore();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(searchParams.get("q") || "");
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (q !== null && q !== query) {
+      setQuery(q);
+    }
+  }, [searchParams]);
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
     setQuery(val);
     if (onSearchChange) onSearchChange(val);
-    if (activeView !== "search" && val.trim().length > 0) {
-      setActiveView("search");
+    if (val.trim().length > 0) {
+      navigate(`/search?q=${encodeURIComponent(val)}`);
+    } else {
+      navigate(`/search`);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" && query.trim()) {
+      navigate(`/search?q=${encodeURIComponent(query.trim())}`);
     }
   };
 
@@ -34,7 +52,8 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, activeView, setA
             type="text"
             value={query}
             onChange={handleSearch}
-            placeholder="Search songs, artists, rooms..."
+            onKeyDown={handleKeyDown}
+            placeholder="Search songs, artists, albums..."
             className="w-full bg-zinc-900/90 border border-zinc-800 text-white text-xs rounded-full pl-10 pr-4 py-2 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 transition-all placeholder:text-zinc-500"
           />
         </div>
@@ -61,7 +80,7 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, activeView, setA
 
         {/* Settings Icon */}
         <button
-          onClick={() => setActiveView("settings")}
+          onClick={() => navigate("/settings")}
           className="w-9 h-9 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 hover:text-white transition-colors"
           title="Settings"
         >
@@ -89,19 +108,19 @@ export const Header: React.FC<HeaderProps> = ({ onSearchChange, activeView, setA
               <div className="absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl p-2 z-50 animate-slide-in">
                 <button
                   onClick={() => {
-                    setActiveView("profile");
+                    navigate("/profile");
                     setShowProfileMenu(false);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-850 rounded-xl transition-colors"
                 >
                   <User className="w-4 h-4 text-cyan-400" /> My Profile
                 </button>
                 <button
                   onClick={() => {
-                    setActiveView("settings");
+                    navigate("/settings");
                     setShowProfileMenu(false);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white hover:bg-zinc-850 rounded-xl transition-colors"
                 >
                   <Settings className="w-4 h-4 text-cyan-400" /> Settings
                 </button>

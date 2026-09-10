@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { MobileBottomNav } from "./components/MobileBottomNav";
@@ -24,8 +25,6 @@ import { useHistoryStore } from "./store/historyStore";
 import { useRoomStore } from "./store/roomStore";
 
 export function App() {
-  const [activeView, setActiveView] = useState("home");
-  const [searchQuery, setSearchQuery] = useState("");
   const [isQueueOpen, setIsQueueOpen] = useState(false);
 
   const { loading, hydrate: hydrateAuth } = useAuthStore();
@@ -55,35 +54,6 @@ export function App() {
     );
   }
 
-  const renderCurrentView = () => {
-    switch (activeView) {
-      case "home":
-        return <HomeView setActiveView={setActiveView} />;
-      case "search":
-        return <SearchView initialQuery={searchQuery} />;
-      case "library":
-        return <LibraryView initialTab="liked" setActiveView={setActiveView} />;
-      case "liked":
-        return <LibraryView initialTab="liked" setActiveView={setActiveView} />;
-      case "playlists":
-        return <LibraryView initialTab="playlists" setActiveView={setActiveView} />;
-      case "playlist-detail":
-        return <PlaylistDetailView setActiveView={setActiveView} />;
-      case "history":
-        return <LibraryView initialTab="history" setActiveView={setActiveView} />;
-      case "rooms":
-        return <RoomsView setActiveView={setActiveView} />;
-      case "room-detail":
-        return <RoomDetailView setActiveView={setActiveView} />;
-      case "profile":
-        return <ProfileView setActiveView={setActiveView} />;
-      case "settings":
-        return <SettingsView />;
-      default:
-        return <HomeView setActiveView={setActiveView} />;
-    }
-  };
-
   return (
     <div className="flex h-screen bg-zinc-950 text-white font-sans overflow-hidden antialiased">
       {/* Toast Alerts */}
@@ -99,21 +69,33 @@ export function App() {
       <QueueDrawer isOpen={isQueueOpen} onClose={() => setIsQueueOpen(false)} />
 
       {/* Left Desktop Sidebar */}
-      <Sidebar activeView={activeView} setActiveView={setActiveView} />
+      <Sidebar />
 
       {/* Main App Content Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         {/* Top Header */}
-        <Header
-          activeView={activeView}
-          setActiveView={setActiveView}
-          onSearchChange={(q) => setSearchQuery(q)}
-        />
+        <Header />
 
         {/* Scrollable View Area with generous bottom padding for floating player pill */}
         <main className="flex-1 overflow-y-auto custom-scrollbar">
           <div className="pb-44">
-            {renderCurrentView()}
+            <Routes>
+              <Route path="/" element={<HomeView />} />
+              <Route path="/home" element={<HomeView />} />
+              <Route path="/search" element={<SearchView />} />
+              <Route path="/library" element={<LibraryView initialTab="liked" />} />
+              <Route path="/library/liked" element={<LibraryView initialTab="liked" />} />
+              <Route path="/library/playlists" element={<LibraryView initialTab="playlists" />} />
+              <Route path="/library/history" element={<LibraryView initialTab="history" />} />
+              <Route path="/playlists" element={<LibraryView initialTab="playlists" />} />
+              <Route path="/playlist/:id" element={<PlaylistDetailView />} />
+              <Route path="/rooms" element={<RoomsView />} />
+              <Route path="/rooms/:code" element={<RoomDetailView />} />
+              <Route path="/room/:code" element={<RoomDetailView />} />
+              <Route path="/profile" element={<ProfileView />} />
+              <Route path="/settings" element={<SettingsView />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           </div>
         </main>
 
@@ -121,7 +103,7 @@ export function App() {
         <Player onOpenQueue={() => setIsQueueOpen(true)} />
 
         {/* Mobile Bottom Navigation */}
-        <MobileBottomNav activeView={activeView} setActiveView={setActiveView} />
+        <MobileBottomNav />
       </div>
     </div>
   );

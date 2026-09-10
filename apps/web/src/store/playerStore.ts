@@ -25,6 +25,11 @@ interface PlayerState {
 
   // Actions
   playSong: (song: Song, newQueue?: Song[]) => void;
+  addToQueue: (song: Song) => void;
+  playNextImmediately: (song: Song) => void;
+  removeFromQueue: (songId: string) => void;
+  clearQueue: () => void;
+  moveInQueue: (fromIdx: number, toIdx: number) => void;
   togglePlay: () => void;
   pause: () => void;
   resume: () => void;
@@ -211,6 +216,63 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
       loadAndPlayTrack(song);
       appendRelatedIfNeeded(song);
+    },
+
+    addToQueue: (song: Song) => {
+      const { queue } = get();
+      if (queue.some((s) => s.id === song.id)) return;
+      set({ queue: [...queue, song] });
+    },
+
+    playNextImmediately: (song: Song) => {
+      const { queue, currentIndex } = get();
+      const filtered = queue.filter((s) => s.id !== song.id);
+      const insertIdx = Math.max(0, currentIndex + 1);
+      const newQueue = [...filtered.slice(0, insertIdx), song, ...filtered.slice(insertIdx)];
+      set({ queue: newQueue });
+    },
+
+    removeFromQueue: (songId: string) => {
+      const { queue, currentIndex, currentSong } = get();
+      const removeIdx = queue.findIndex((s) => s.id === songId);
+      if (removeIdx < 0) return;
+
+      const newQueue = queue.filter((s) => s.id !== songId);
+      let newIdx = currentIndex;
+      if (removeIdx < currentIndex) {
+        newIdx = Math.max(0, currentIndex - 1);
+      } else if (removeIdx === currentIndex) {
+        if (newQueue.length > 0) {
+          const nextSong = newQueue[newIdx < newQueue.length ? newIdx : 0];
+          set({ queue: newQueue, currentIndex: newIdx < newQueue.length ? newIdx : 0, currentSong: nextSong });
+          loadAndPlayTrack(nextSong);
+          return;
+        } else {
+          audio.pause();
+          set({ queue: [], currentIndex: -1, currentSong: null, isPlaying: false });
+          return;
+        }
+      }
+      set({ queue: newQueue, currentIndex: newIdx });
+    },
+
+    clearQueue: () => {
+      const { currentSong } = get();
+      if (currentSong) {
+        set({ queue: [currentSong], currentIndex: 0 });
+      } else {
+        audio.pause();
+        set({ queue: [], currentIndex: -1, isPlaying: false, currentSong: null });
+      }
+    },
+
+    moveInQueue: (fromIdx: number, toIdx: number) => {
+      const { queue } = get();
+      if (fromIdx < 0 || fromIdx >= queue.length || toIdx < 0 || toIdx >= queue.length) return;
+      const newQueue = [...queue];
+      const [moved] = newQueue.splice(fromIdx, 1);
+      newQueue.splice(toIdx, 0, moved);
+      set({ queue: newQueue });
     },
 
     togglePlay: () => {

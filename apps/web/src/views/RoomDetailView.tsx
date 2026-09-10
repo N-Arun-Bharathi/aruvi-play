@@ -1,16 +1,19 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useRoomStore } from "../store/roomStore";
 import { usePlayerStore } from "../store/playerStore";
 import { Song, searchSongs } from "@aruvi/shared";
-import { Radio, Users, Copy, Check, LogOut, Music, Plus, Play, Search, ShieldCheck } from "lucide-react";
+import { Radio, Users, Copy, Check, LogOut, Music, Plus, Play, Search, ShieldCheck, ArrowLeft } from "lucide-react";
 import { useToastStore } from "../store/toastStore";
 
 interface RoomDetailViewProps {
-  setActiveView: (view: string) => void;
+  setActiveView?: (view: string) => void;
 }
 
 export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView }) => {
-  const { currentRoom, leaveRoom, addSongToRoomQueue } = useRoomStore();
+  const { code } = useParams<{ code: string }>();
+  const navigate = useNavigate();
+  const { currentRoom, leaveRoom, addSongToRoomQueue, joinRoomByCode } = useRoomStore();
   const { currentSong, isPlaying, playSong } = usePlayerStore();
   const toast = useToastStore();
 
@@ -19,14 +22,30 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
   const [searchResults, setSearchResults] = useState<Song[]>([]);
   const [searching, setSearching] = useState(false);
 
+  useEffect(() => {
+    if (!currentRoom && code) {
+      joinRoomByCode(code.toUpperCase());
+    }
+  }, [code, currentRoom]);
+
+  const handleBack = () => {
+    navigate("/rooms");
+    if (setActiveView) setActiveView("rooms");
+  };
+
+  const handleLeave = () => {
+    leaveRoom();
+    handleBack();
+  };
+
   if (!currentRoom) {
     return (
       <div className="p-8 text-center my-16 space-y-4">
         <Radio className="w-12 h-12 text-zinc-600 mx-auto" />
         <h3 className="text-xl font-bold text-white">No Active Room</h3>
         <button
-          onClick={() => setActiveView("rooms")}
-          className="px-5 py-2.5 bg-emerald-500 text-zinc-950 font-bold text-xs rounded-full"
+          onClick={handleBack}
+          className="px-5 py-2.5 bg-cyan-500 text-zinc-950 font-bold text-xs rounded-full shadow-lg"
         >
           Back to Rooms
         </button>
@@ -76,24 +95,23 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
               <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block">Room Code</span>
               <span className="text-sm font-mono font-black text-emerald-400 tracking-wider">{currentRoom.code}</span>
             </div>
+          </div>
+          <div className="flex items-center gap-3">
             <button
               onClick={copyCode}
-              className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors"
-              title="Copy Code"
+              className="flex items-center gap-1.5 px-4 py-2 bg-zinc-900 border border-zinc-800 hover:border-cyan-500/40 text-white rounded-xl text-xs font-bold transition-all shadow-md"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Check className="w-3.5 h-3.5 text-cyan-400" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copied ? "Copied!" : "Share Code"}</span>
+            </button>
+            <button
+              onClick={handleLeave}
+              className="flex items-center gap-1.5 px-4 py-2 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-bold transition-all"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Leave Room</span>
             </button>
           </div>
-
-          <button
-            onClick={() => {
-              leaveRoom();
-              setActiveView("rooms");
-            }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 text-xs font-bold rounded-2xl transition-all"
-          >
-            <LogOut className="w-4 h-4" /> Leave Room
-          </button>
         </div>
       </div>
 
