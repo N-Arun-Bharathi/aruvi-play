@@ -18,6 +18,23 @@ export interface Song {
   genre?: string;
   mood?: string;
   energy?: string;
+  hasLyrics?: boolean;
+  lyrics?: string;
+  lyricsSnippet?: string;
+}
+
+export interface LyricsLine {
+  time?: number; // In seconds, if synced
+  text: string;
+}
+
+export interface LyricsData {
+  lyrics: string; // Clean multiline string
+  lines: LyricsLine[]; // Parsed lines
+  snippet?: string;
+  copyright?: string;
+  isSynced: boolean;
+  source: "jiosaavn" | "lrclib";
 }
 
 export type RepeatMode = "off" | "one" | "all";

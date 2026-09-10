@@ -1,10 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { usePlayerStore } from "../store/playerStore";
 import { useLikedStore } from "../store/likedStore";
 import { usePlaylistStore } from "../store/playlistStore";
 import { useTimerStore } from "../store/timerStore";
 import { useAuthStore } from "../store/authStore";
 import { useToastStore } from "../store/toastStore";
+import { getLyrics, LyricsData } from "@aruvi/shared";
 import {
   ChevronDown,
   Play,
@@ -23,6 +24,8 @@ import {
   Share2,
   Plus,
   ListMusic,
+  Mic2,
+  Music,
 } from "lucide-react";
 
 interface FullPlayerModalProps {
@@ -62,6 +65,63 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
   const [showTimerMenu, setShowTimerMenu] = useState(false);
   const [showPlaylistMenu, setShowPlaylistMenu] = useState(false);
   const [newPlName, setNewPlName] = useState("");
+
+  const [lyricsData, setLyricsData] = useState<LyricsData | null>(null);
+  const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
+  const lyricsContainerRef = useRef<HTMLDivElement>(null);
+  const activeLineRef = useRef<HTMLParagraphElement>(null);
+
+  // Fetch lyrics when current song changes
+  useEffect(() => {
+    if (!currentSong?.id) {
+      setLyricsData(null);
+      return;
+    }
+
+    let isMounted = true;
+    setIsLoadingLyrics(true);
+
+    getLyrics(currentSong.id, currentSong)
+      .then((data) => {
+        if (isMounted) {
+          setLyricsData(data);
+          setIsLoadingLyrics(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Error fetching lyrics:", err);
+        if (isMounted) {
+          setLyricsData(null);
+          setIsLoadingLyrics(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentSong?.id]);
+
+  // Determine active lyric line index if synced lyrics are present
+  const activeLyricIndex = React.useMemo(() => {
+    if (!lyricsData?.isSynced || !lyricsData.lines.length) return -1;
+    for (let i = lyricsData.lines.length - 1; i >= 0; i--) {
+      const lineTime = lyricsData.lines[i].time ?? 0;
+      if (position >= lineTime) {
+        return i;
+      }
+    }
+    return 0;
+  }, [lyricsData, position]);
+
+  // Auto-scroll to active line
+  useEffect(() => {
+    if (activeLineRef.current && lyricsContainerRef.current) {
+      activeLineRef.current.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [activeLyricIndex]);
 
   if (!isExpanded || !currentSong) return null;
 
@@ -343,18 +403,29 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
         </div>
 
         {/* Right Column: Lyrics & Song Information */}
-        <div className="space-y-4 hidden md:block max-h-[480px] overflow-y-auto custom-scrollbar pl-2">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">
-              Song Info & Lyrics
-            </h3>
-            <Maximize2 className="w-4 h-4 text-zinc-500 hover:text-white cursor-pointer" />
+        <div className="space-y-4 hidden md:flex flex-col h-full max-h-[500px] pl-2">
+          <div className="flex items-center justify-between px-2 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <Mic2 className="w-4 h-4 text-cyan-400" />
+              <h3 className="text-xs font-bold text-zinc-300 uppercase tracking-widest">
+                Lyrics & Details
+              </h3>
+            </div>
+            {lyricsData && (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                lyricsData.isSynced
+                  ? "bg-cyan-500/10 text-cyan-400 border-cyan-500/30"
+                  : "bg-zinc-800 text-zinc-400 border-zinc-700"
+              }`}>
+                {lyricsData.isSynced ? "⚡ Synced LRC" : "JioSaavn"}
+              </span>
+            )}
           </div>
 
-          <div className="p-4 bg-zinc-900/50 border border-zinc-850 rounded-2xl space-y-3 text-xs">
+          <div className="p-3 bg-zinc-900/60 border border-zinc-850 rounded-2xl space-y-2 text-xs flex-shrink-0">
             <div className="flex justify-between text-zinc-400">
               <span>Album:</span>
-              <span className="text-white font-medium">{currentSong.album || "Single"}</span>
+              <span className="text-white font-medium truncate max-w-[200px]">{currentSong.album || "Single"}</span>
             </div>
             {currentSong.language && (
               <div className="flex justify-between text-zinc-400">
@@ -368,24 +439,61 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
             </div>
           </div>
 
-          <div className="space-y-3 py-2">
-            {[
-              "City lights reflecting in the breeze",
-              "Melodies flow with effortless ease",
-              "Night vibes in high definition sound",
-              "Music playing all around",
-            ].map((line, idx) => (
-              <p
-                key={idx}
-                className={`text-sm font-semibold transition-all ${
-                  idx === 1
-                    ? "text-white font-bold border-l-2 border-cyan-400 pl-3 scale-105"
-                    : "text-zinc-500"
-                }`}
-              >
-                {line}
-              </p>
-            ))}
+          {/* Dynamic Lyrics Container */}
+          <div
+            ref={lyricsContainerRef}
+            className="flex-1 overflow-y-auto custom-scrollbar p-3 bg-zinc-900/40 rounded-2xl border border-zinc-850/60 space-y-3 relative"
+          >
+            {isLoadingLyrics ? (
+              <div className="space-y-3 py-4 animate-pulse">
+                <div className="h-4 bg-zinc-800/80 rounded w-3/4"></div>
+                <div className="h-4 bg-zinc-800/60 rounded w-5/6"></div>
+                <div className="h-4 bg-zinc-800/80 rounded w-2/3"></div>
+                <div className="h-4 bg-zinc-800/50 rounded w-4/5"></div>
+                <div className="h-4 bg-zinc-800/70 rounded w-3/5"></div>
+                <div className="h-4 bg-zinc-800/60 rounded w-4/6"></div>
+              </div>
+            ) : lyricsData && lyricsData.lines.length > 0 ? (
+              <div className="space-y-3 py-1">
+                {lyricsData.lines.map((line, idx) => {
+                  const isActive = lyricsData.isSynced && idx === activeLyricIndex;
+                  return (
+                    <p
+                      key={idx}
+                      ref={isActive ? activeLineRef : undefined}
+                      onClick={() => {
+                        if (lyricsData.isSynced && line.time !== undefined) {
+                          seekTo(line.time);
+                        }
+                      }}
+                      className={`text-sm leading-relaxed transition-all duration-300 rounded-lg px-2.5 py-1 ${
+                        isActive
+                          ? "text-cyan-300 font-bold bg-cyan-950/40 border-l-2 border-cyan-400 scale-[1.02] shadow-[0_0_12px_rgba(6,182,212,0.15)]"
+                          : lyricsData.isSynced
+                          ? "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/30 cursor-pointer"
+                          : "text-zinc-300 hover:text-white"
+                      }`}
+                    >
+                      {line.text}
+                    </p>
+                  );
+                })}
+
+                {lyricsData.copyright && (
+                  <div className="pt-4 border-t border-zinc-800/60 text-center">
+                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-mono">
+                      {lyricsData.copyright}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="h-full min-h-[180px] flex flex-col items-center justify-center text-center p-4 text-zinc-500 space-y-2">
+                <Music className="w-8 h-8 text-zinc-600 opacity-60" />
+                <p className="text-xs font-semibold text-zinc-400">No lyrics available for this song</p>
+                <p className="text-[11px] text-zinc-600">Enjoy the audio playback</p>
+              </div>
+            )}
           </div>
         </div>
       </main>

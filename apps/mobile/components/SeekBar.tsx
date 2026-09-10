@@ -23,8 +23,8 @@ export function SeekBar() {
         maximumTrackTintColor="#3A3A3A"
         thumbTintColor="#FFFFFF"
         onSlidingStart={() => setScrubbing(position)}
-        onValueChange={(v) => setScrubbing(v)}
-        onSlidingComplete={async (v) => {
+        onValueChange={(v: number) => setScrubbing(v)}
+        onSlidingComplete={async (v: number) => {
           await seekTo(v);
           setScrubbing(null);
         }}

@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import CryptoJS from "crypto-js";
-import { Song, SaavnSong } from "../types/song";
+import { Song, SaavnSong, LyricsData, LyricsLine } from "../types/song";
 import { detectSongContext } from "../utils/contextDetector";
 import { getSearchPriority, normalizeSongTitle } from "../utils/songUtils";
 
@@ -10,6 +10,7 @@ export const getApiCallCount = () => apiCallCount;
 const searchCache = new Map<string, Song[]>();
 const relatedSongsCache = new Map<string, Song[]>();
 const songByIdCache = new Map<string, Song>();
+const lyricsCache = new Map<string, LyricsData>();
 
 const isBrowser = typeof window !== "undefined";
 
@@ -177,6 +178,8 @@ export function mapSaavnToSong(s: any): Song | null {
     primaryArtists: s.primary_artists || s.primaryArtists || s.more_info?.primary_artists,
     musicDirector: s.music || s.more_info?.music,
     language: s.language || s.more_info?.language,
+    hasLyrics: s.has_lyrics === "true" || s.more_info?.has_lyrics === "true",
+    lyricsSnippet: s.lyrics_snippet || s.more_info?.lyrics_snippet ? decodeHtml(s.lyrics_snippet || s.more_info?.lyrics_snippet) : undefined,
     normalized_title: normalizeSongTitle(title),
   };
 
@@ -306,4 +309,160 @@ export async function getSongById(id: string): Promise<Song | null> {
   }
   const results = await searchSongs(id);
   return results.length > 0 ? results[0] : null;
+}
+
+/**
+ * Parses and sanitizes raw HTML lyrics from JioSaavn into clean text and lines.
+ */
+export function cleanSaavnLyrics(rawHtml: string): { lyrics: string; lines: LyricsLine[] } {
+  if (!rawHtml || typeof rawHtml !== "string") {
+    return { lyrics: "", lines: [] };
+  }
+
+  let cleaned = rawHtml
+    .replace(/<br\s*[\/]?>/gi, "\n")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/<[^>]*>/g, "")
+    .trim();
+
+  // Normalize multiple consecutive line breaks
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+
+  const lines: LyricsLine[] = cleaned
+    .split("\n")
+    .map((l) => ({ text: l.trim() }))
+    .filter((l) => l.text.length > 0);
+
+  return { lyrics: cleaned, lines };
+}
+
+/**
+ * Parses synchronized LRC format string into structured lines with timestamps.
+ */
+export function parseLrcLyrics(lrc: string): LyricsLine[] {
+  if (!lrc || typeof lrc !== "string") return [];
+  const lines: LyricsLine[] = [];
+  const regex = /\[(\d{2}):(\d{2}(?:\.\d{1,3})?)\](.*)/;
+
+  for (const rawLine of lrc.split("\n")) {
+    const match = rawLine.trim().match(regex);
+    if (match) {
+      const min = parseInt(match[1], 10);
+      const sec = parseFloat(match[2]);
+      const time = min * 60 + sec;
+      const text = match[3].trim();
+      if (text) {
+        lines.push({ time, text });
+      }
+    } else {
+      const clean = rawLine.trim();
+      if (clean && !clean.startsWith("[")) {
+        lines.push({ text: clean });
+      }
+    }
+  }
+
+  return lines.sort((a, b) => (a.time ?? 0) - (b.time ?? 0));
+}
+
+/**
+ * Fetches lyrics for a song from JioSaavn, with LRCLIB fallback for synced lyrics.
+ */
+export async function getLyrics(
+  songId: string,
+  song?: Partial<Song>
+): Promise<LyricsData | null> {
+  if (!songId) return null;
+
+  if (lyricsCache.has(songId)) {
+    return lyricsCache.get(songId)!;
+  }
+
+  apiCallCount++;
+
+  // 1. Try JioSaavn native lyrics API first
+  try {
+    const res = await client.get("/api.php", {
+      params: {
+        __call: "lyrics.getLyrics",
+        lyrics_id: songId,
+        ctx: "web6dot0",
+        api_version: "4",
+        _format: "json",
+        _marker: "0",
+      },
+    });
+
+    if (res.data && res.data.lyrics && typeof res.data.lyrics === "string" && res.data.lyrics.trim().length > 0) {
+      const cleaned = cleanSaavnLyrics(res.data.lyrics);
+      const lyricsData: LyricsData = {
+        lyrics: cleaned.lyrics,
+        lines: cleaned.lines,
+        snippet: res.data.snippet ? decodeHtml(res.data.snippet) : undefined,
+        copyright: res.data.lyrics_copyright ? decodeHtml(res.data.lyrics_copyright) : "Lyrics powered by JioSaavn",
+        isSynced: false,
+        source: "jiosaavn",
+      };
+      lyricsCache.set(songId, lyricsData);
+      return lyricsData;
+    }
+  } catch (err) {
+    console.warn("JioSaavn lyrics lookup failed, attempting fallback:", err);
+  }
+
+  // 2. Fallback to LRCLIB (provides Synced LRC & plain lyrics)
+  if (song?.title) {
+    try {
+      const trackName = song.normalized_title || song.title;
+      const artistName = song.primaryArtist || song.artist || "";
+      const duration = song.duration ? Math.round(song.duration) : undefined;
+
+      const lrclibRes = await axios.get("https://lrclib.net/api/get", {
+        params: {
+          track_name: trackName,
+          artist_name: artistName,
+          duration,
+        },
+        timeout: 6000,
+      });
+
+      if (lrclibRes.data) {
+        const { syncedLyrics, plainLyrics } = lrclibRes.data;
+        if (syncedLyrics) {
+          const lines = parseLrcLyrics(syncedLyrics);
+          const lyricsData: LyricsData = {
+            lyrics: lines.map((l) => l.text).join("\n"),
+            lines,
+            isSynced: true,
+            copyright: "Synced lyrics powered by LRCLIB",
+            source: "lrclib",
+          };
+          lyricsCache.set(songId, lyricsData);
+          return lyricsData;
+        } else if (plainLyrics) {
+          const lines: LyricsLine[] = plainLyrics
+            .split("\n")
+            .map((l: string) => ({ text: l.trim() }))
+            .filter((l: { text: string }) => l.text.length > 0);
+          const lyricsData: LyricsData = {
+            lyrics: plainLyrics.trim(),
+            lines,
+            isSynced: false,
+            copyright: "Lyrics powered by LRCLIB",
+            source: "lrclib",
+          };
+          lyricsCache.set(songId, lyricsData);
+          return lyricsData;
+        }
+      }
+    } catch {
+      // LRCLIB 404 / error
+    }
+  }
+
+  return null;
 }

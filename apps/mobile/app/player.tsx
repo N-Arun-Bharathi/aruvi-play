@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { View, Text, Pressable, Dimensions, Alert, Share, StyleSheet, Modal, ScrollView } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, Text, Pressable, Dimensions, Alert, Share, StyleSheet, Modal, ScrollView, ActivityIndicator } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Image } from "expo-image";
@@ -24,6 +24,8 @@ import { useToastStore } from "../store/toastStore";
 import { useAuthStore } from "../store/authStore";
 import { dbGetPlaylists, dbAddSongToPlaylist, dbGetPlaylistSongs } from "../services/sqlite";
 import { supabase } from "../services/supabase";
+import { useProgress } from "../hooks/useProgress";
+import { getLyrics, LyricsData } from "@aruvi/shared";
 
 const { width, height } = Dimensions.get("window");
 
@@ -31,17 +33,65 @@ export default function PlayerScreen() {
   const router = useRouter();
   const current = usePlayerStore((s) => s.current);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const seekTo = usePlayerStore((s) => s.seekTo);
   const isLiked = useLibraryStore((s) => s.isLiked);
   const toggleLike = useLibraryStore((s) => s.toggleLike);
   const setTimer = useTimerStore((s) => s.setTimer);
   const currentContext = usePlayerStore((s) => s.currentContext);
+  const { position } = useProgress();
+
   const [volume, setVolume] = useState(1.0);
   const [showLyrics, setShowLyrics] = useState(false);
+  const [lyricsData, setLyricsData] = useState<LyricsData | null>(null);
+  const [isLoadingLyrics, setIsLoadingLyrics] = useState(false);
   const [showPlaylistModal, setShowPlaylistModal] = useState(false);
   const [userPlaylists, setUserPlaylists] = useState<any[]>([]);
   const theme = useTheme();
   const toast = useToastStore();
   const user = useAuthStore((s) => s.userProfile);
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  // Fetch lyrics whenever current song changes
+  useEffect(() => {
+    if (!current?.id) {
+      setLyricsData(null);
+      return;
+    }
+
+    let isMounted = true;
+    setIsLoadingLyrics(true);
+
+    getLyrics(current.id, current)
+      .then((data) => {
+        if (isMounted) {
+          setLyricsData(data);
+          setIsLoadingLyrics(false);
+        }
+      })
+      .catch((err) => {
+        console.warn("Error fetching lyrics:", err);
+        if (isMounted) {
+          setLyricsData(null);
+          setIsLoadingLyrics(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [current?.id]);
+
+  // Active lyric index for synced lyrics
+  const activeLyricIndex = React.useMemo(() => {
+    if (!lyricsData?.isSynced || !lyricsData.lines.length) return -1;
+    for (let i = lyricsData.lines.length - 1; i >= 0; i--) {
+      const lineTime = lyricsData.lines[i].time ?? 0;
+      if (position >= lineTime) {
+        return i;
+      }
+    }
+    return 0;
+  }, [lyricsData, position]);
 
   // Artwork Animation: Scales up when playing, down when paused
   const artworkScale = useSharedValue(1.0);
@@ -415,37 +465,87 @@ export default function PlayerScreen() {
           <BlurView intensity={90} tint="dark" className="h-[75%] rounded-t-[32px] overflow-hidden border-t border-white/10">
             <SafeAreaView className="flex-1" edges={["bottom"]}>
               <View className="flex-row justify-between items-center px-6 py-5 border-b border-white/5">
-                <Text className="text-text text-lg font-bold">Lyrics</Text>
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-text text-lg font-bold">Lyrics</Text>
+                  {lyricsData && (
+                    <View className={`px-2 py-0.5 rounded-full border ${
+                      lyricsData.isSynced
+                        ? "bg-cyan-500/20 border-cyan-500/40"
+                        : "bg-white/10 border-white/20"
+                    }`}>
+                      <Text className="text-[10px] font-semibold" style={{ color: lyricsData.isSynced ? "#22d3ee" : theme.secondaryText }}>
+                        {lyricsData.isSynced ? "⚡ Synced" : "JioSaavn"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
                 <Pressable onPress={() => setShowLyrics(false)} className="px-3 py-1 bg-white/10 rounded-full">
                   <Text className="text-text text-xs font-semibold">Close</Text>
                 </Pressable>
               </View>
 
-              <ScrollView contentContainerStyle={{ padding: 24 }}>
-                <Text className="text-accent text-sm font-bold uppercase tracking-wider mb-2">
+              <ScrollView
+                ref={scrollViewRef}
+                contentContainerStyle={{ padding: 24, paddingBottom: 60 }}
+                showsVerticalScrollIndicator={false}
+              >
+                <Text className="text-accent text-sm font-bold uppercase tracking-wider mb-1">
                   {current.title}
                 </Text>
                 <Text className="text-muted text-xs mb-6">{current.artist}</Text>
 
-                {/* Simulated Premium Rolling Lyrics */}
-                <Text className="text-text text-xl font-bold leading-relaxed mb-4 text-accent">
-                  🎶 Listening on Aruvi Play Premium
-                </Text>
-                <Text className="text-text text-xl font-bold leading-relaxed mb-4">
-                  Enjoying the visual waveform visualizer?
-                </Text>
-                <Text className="text-text/70 text-xl font-bold leading-relaxed mb-4">
-                  This song vibe category matches: {currentContext?.type || "Standard"}
-                </Text>
-                <Text className="text-text/50 text-xl font-bold leading-relaxed mb-4">
-                  Duplicate prevention active for the next 20 songs
-                </Text>
-                <Text className="text-text/30 text-xl font-bold leading-relaxed mb-4">
-                  Share this Music Room session with your friends!
-                </Text>
-                <Text className="text-text/10 text-xl font-bold leading-relaxed mb-4">
-                  Playback continues forever...
-                </Text>
+                {isLoadingLyrics ? (
+                  <View className="py-16 items-center justify-center space-y-3">
+                    <ActivityIndicator size="large" color="#22d3ee" />
+                    <Text className="text-muted text-xs mt-3">Fetching lyrics from JioSaavn...</Text>
+                  </View>
+                ) : lyricsData && lyricsData.lines.length > 0 ? (
+                  <View className="space-y-4">
+                    {lyricsData.lines.map((line, idx) => {
+                      const isActive = lyricsData.isSynced && idx === activeLyricIndex;
+                      return (
+                        <Pressable
+                          key={idx}
+                          onPress={() => {
+                            if (lyricsData.isSynced && line.time !== undefined) {
+                              seekTo(line.time);
+                            }
+                          }}
+                          className="py-1"
+                        >
+                          <Text
+                            className={`text-lg font-bold leading-relaxed ${
+                              isActive
+                                ? "text-accent scale-105"
+                                : lyricsData.isSynced
+                                ? "text-text/40"
+                                : "text-text/90"
+                            }`}
+                            style={isActive ? { color: "#22d3ee" } : {}}
+                          >
+                            {line.text}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+
+                    {lyricsData.copyright && (
+                      <View className="mt-8 pt-4 border-t border-white/10 items-center">
+                        <Text className="text-[11px] text-muted uppercase tracking-wider">
+                          {lyricsData.copyright}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ) : (
+                  <View className="py-16 items-center justify-center">
+                    <Icon name="music" size={32} color={theme.secondaryText} />
+                    <Text className="text-text font-bold text-base mt-4">No Lyrics Available</Text>
+                    <Text className="text-muted text-xs mt-1 text-center">
+                      Lyrics for this track couldn't be found. Enjoy the music!
+                    </Text>
+                  </View>
+                )}
               </ScrollView>
             </SafeAreaView>
           </BlurView>
