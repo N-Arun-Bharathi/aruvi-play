@@ -2,18 +2,18 @@ import { createClient } from "@supabase/supabase-js";
 
 const getEnvVar = (...keys: string[]): string | undefined => {
   try {
-    if (typeof import.meta !== "undefined" && (import.meta as any).env) {
-      const env = (import.meta as any).env;
+    if (typeof process !== "undefined" && process.env) {
       for (const k of keys) {
-        if (env[k]) return env[k];
+        if (process.env[k]) return process.env[k];
       }
     }
   } catch (e) {}
 
   try {
-    if (typeof process !== "undefined" && process.env) {
+    const g = typeof globalThis !== "undefined" ? (globalThis as any) : typeof window !== "undefined" ? (window as any) : {};
+    if (g && g.env) {
       for (const k of keys) {
-        if (process.env[k]) return process.env[k];
+        if (g.env[k]) return g.env[k];
       }
     }
   } catch (e) {}
