@@ -1,12 +1,20 @@
 {
   "name": "aruvi-play",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.5.0",
   "scripts": {
     "dev:web": "pnpm --filter web dev --port 3000",
     "dev:mobile": "pnpm --filter mobile start",
     "build:web": "pnpm --filter web build",
-    "build:mobile": "pnpm --filter mobile build"
+    "build:mobile": "pnpm --filter mobile build",
+    "patch": "node scripts/bump-version.js patch",
+    "minor": "node scripts/bump-version.js minor",
+    "major": "node scripts/bump-version.js major",
+    "version:patch": "node scripts/bump-version.js patch",
+    "version:minor": "node scripts/bump-version.js minor",
+    "version:major": "node scripts/bump-version.js major",
+    "push:version": "node scripts/publish-version.js",
+    "publish:version": "node scripts/publish-version.js"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

@@ -192,11 +192,54 @@ CREATE TABLE IF NOT EXISTS public.app_versions (
   version_name TEXT UNIQUE NOT NULL,
   version_code INTEGER UNIQUE NOT NULL,
   apk_url TEXT NOT NULL,
+  sha256 TEXT,
   release_notes TEXT,
   minimum_supported_version INTEGER NOT NULL DEFAULT 1,
   is_mandatory BOOLEAN DEFAULT false,
   released_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Migrations for existing app_versions table if already created without new columns
+ALTER TABLE public.app_versions ADD COLUMN IF NOT EXISTS sha256 TEXT;
+ALTER TABLE public.app_versions ADD COLUMN IF NOT EXISTS release_notes TEXT;
+ALTER TABLE public.app_versions ADD COLUMN IF NOT EXISTS minimum_supported_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE public.app_versions ADD COLUMN IF NOT EXISTS is_mandatory BOOLEAN DEFAULT false;
+ALTER TABLE public.app_versions ADD COLUMN IF NOT EXISTS released_at TIMESTAMPTZ DEFAULT now();
+
+-- Seed latest v1.5.0 release
+INSERT INTO public.app_versions (
+  version_name,
+  version_code,
+  apk_url,
+  sha256,
+  release_notes,
+  minimum_supported_version,
+  is_mandatory,
+  released_at
+)
+VALUES (
+  '1.5.0',
+  19,
+  'https://drive.usercontent.google.com/download?id=1B0x1MiD-RtjPaq6BpbMsHvQX_vOn4O6E&export=download&confirm=t',
+  'ed04c21d04fbb919b54c72f361b47818f7c9c4b798c3b0e4bdf1c9422c10046a',
+  'Added Live JioSaavn & Synced LRC lyrics integration with line-by-line karaoke tracking
+Added Preferred Song Language Customization on Profile screen
+Added long-press quick options popup on Home screen cards (Like, Play Next, Add to Queue, Add to Playlist, Share)
+Fixed Home screen card layout spacing & gap collisions
+Fixed Repeat One mode (repeats current song exactly 1 time then advances)
+Optimized APK size down to ~20MB',
+  1,
+  false,
+  now()
+)
+ON CONFLICT (version_code) DO UPDATE SET
+  version_name = EXCLUDED.version_name,
+  apk_url = EXCLUDED.apk_url,
+  sha256 = EXCLUDED.sha256,
+  release_notes = EXCLUDED.release_notes,
+  minimum_supported_version = EXCLUDED.minimum_supported_version,
+  is_mandatory = EXCLUDED.is_mandatory,
+  released_at = EXCLUDED.released_at;
 
 -- playback_errors
 CREATE TABLE IF NOT EXISTS public.playback_errors (
@@ -658,4 +701,67 @@ $$;
 
 REVOKE EXECUTE ON FUNCTION public.verify_secret_key(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.verify_secret_key(text) TO anon, authenticated;
+
+-- ==========================================
+-- 7. App Version Publishing RPC
+-- ==========================================
+
+CREATE OR REPLACE FUNCTION public.publish_app_version(
+  p_secret_key text,
+  p_version_name text,
+  p_version_code integer,
+  p_apk_url text,
+  p_sha256 text DEFAULT NULL,
+  p_release_notes text DEFAULT NULL,
+  p_minimum_supported_version integer DEFAULT 1,
+  p_is_mandatory boolean DEFAULT false
+)
+RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = 'public'
+AS $$
+BEGIN
+  IF TRIM(COALESCE(p_secret_key, '')) != 'Aruvi5868' THEN
+    RAISE EXCEPTION 'Unauthorized: Invalid secret key';
+  END IF;
+
+  INSERT INTO public.app_versions (
+    version_name,
+    version_code,
+    apk_url,
+    sha256,
+    release_notes,
+    minimum_supported_version,
+    is_mandatory,
+    released_at
+  )
+  VALUES (
+    p_version_name,
+    p_version_code,
+    p_apk_url,
+    p_sha256,
+    p_release_notes,
+    p_minimum_supported_version,
+    p_is_mandatory,
+    now()
+  )
+  ON CONFLICT (version_code) DO UPDATE SET
+    version_name = EXCLUDED.version_name,
+    apk_url = EXCLUDED.apk_url,
+    sha256 = EXCLUDED.sha256,
+    release_notes = EXCLUDED.release_notes,
+    minimum_supported_version = EXCLUDED.minimum_supported_version,
+    is_mandatory = EXCLUDED.is_mandatory,
+    released_at = EXCLUDED.released_at;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'version', p_version_name,
+    'version_code', p_version_code
+  );
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.publish_app_version(text, text, integer, text, text, text, integer, boolean) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.publish_app_version(text, text, integer, text, text, text, integer, boolean) TO anon, authenticated;
 

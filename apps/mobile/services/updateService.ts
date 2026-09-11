@@ -12,10 +12,15 @@ export interface RemoteVersionInfo {
   apkUrl: string;
   sha256?: string;
   releaseNotes?: string[] | string;
+  isMandatory?: boolean;
+  minimumSupportedVersion?: number;
+  source?: "database" | "github_json" | "local_fallback";
 }
 
 export interface UpdateCheckResult {
   updateAvailable: boolean;
+  isMandatory: boolean;
+  minimumSupportedVersion: number;
   currentVersion: string;
   currentVersionCode: number;
   latestVersion: string;
@@ -23,6 +28,7 @@ export interface UpdateCheckResult {
   apkUrl?: string;
   sha256?: string;
   releaseNotes: string[];
+  source: "database" | "github_json" | "local_fallback";
   error?: string;
 }
 
@@ -41,7 +47,7 @@ const DEFAULT_VERSION_JSON_URLS = [
 ];
 
 let cachedResult: { timestamp: number; data: UpdateCheckResult } | null = null;
-const CACHE_DURATION_MS = 45 * 60 * 1000; // 45 minutes
+const CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutes cache for DB checks
 
 let activeDownloadResumable: FileSystem.DownloadResumable | null = null;
 
@@ -79,7 +85,7 @@ export function getInstalledAppInfo(): { version: string; versionCode: number } 
   const version =
     Application.nativeApplicationVersion ||
     Constants.expoConfig?.version ||
-    "1.3.0";
+    "1.4.4";
 
   const versionCodeRaw =
     Application.nativeBuildVersion ||
@@ -88,13 +94,14 @@ export function getInstalledAppInfo(): { version: string; versionCode: number } 
   const versionCode =
     typeof versionCodeRaw === "number"
       ? versionCodeRaw
-      : parseInt(String(versionCodeRaw || "3"), 10) || 3;
+      : parseInt(String(versionCodeRaw || "18"), 10) || 18;
 
   return { version, versionCode };
 }
 
 /**
- * Fetches the public version.json and determines if an update is available.
+ * Fetches latest version info from Database (Supabase 'app_versions' table),
+ * with graceful fallback to GitHub releases version.json and local configuration.
  */
 export async function checkForAppUpdates(
   forceRefresh = false,
@@ -115,107 +122,126 @@ export async function checkForAppUpdates(
     return cachedResult.data;
   }
 
-  const urlsToTry = customVersionUrl
-    ? [customVersionUrl, ...DEFAULT_VERSION_JSON_URLS]
-    : DEFAULT_VERSION_JSON_URLS;
-
   let remoteInfo: RemoteVersionInfo | null = null;
   let fetchError = "";
 
-  for (const url of urlsToTry) {
-    try {
-      const cacheBustUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
-      console.log(`UpdateService: Fetching version.json from ${cacheBustUrl}...`);
-      const response = await axios.get(cacheBustUrl, {
-        timeout: 8000,
-        headers: {
-          Accept: "application/json",
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      });
-
-      let data = response.data;
-
-      // Handle GitHub REST API Base64 response structure
-      if (data && data.content && data.encoding === "base64") {
-        try {
-          const cleanBase64 = String(data.content).replace(/\s/g, "");
-          let decodedStr = "";
-          if (typeof atob === "function") {
-            decodedStr = atob(cleanBase64);
-          } else if (typeof global !== "undefined" && (global as any).Buffer) {
-            decodedStr = (global as any).Buffer.from(cleanBase64, "base64").toString("utf-8");
-          }
-          if (decodedStr) {
-            data = JSON.parse(decodedStr);
-          }
-        } catch (e) {
-          console.warn("UpdateService: Base64 decoding failed for GitHub API response", e);
-        }
-      }
-
-      if (
-        data &&
-        typeof data === "object" &&
-        data.version &&
-        typeof data.version === "string" &&
-        data.apkUrl &&
-        typeof data.apkUrl === "string" &&
-        data.apkUrl.startsWith("https://")
-      ) {
-        remoteInfo = {
-          version: data.version,
-          versionCode:
-            typeof data.versionCode === "number"
-              ? data.versionCode
-              : parseInt(String(data.versionCode || 0), 10),
-          apkUrl: data.apkUrl,
-          sha256: data.sha256 || undefined,
-          releaseNotes: data.releaseNotes || [],
-        };
-        break;
-      }
-    } catch (err: any) {
-      console.warn(`UpdateService: Failed to fetch from ${url}:`, err.message);
-      fetchError = err.message || "Network request failed";
-    }
-  }
-
-  // 2. If public version.json URLs failed or returned 404, check Supabase table 'app_versions'
-  if (!remoteInfo) {
-    try {
-      const { supabase } = require("./supabase");
-      const { data: latestRelease, error } = await supabase
+  // ── 1. PRIMARY: Fetch from Supabase Database 'app_versions' table ───
+  try {
+    const { supabase, useMockSupabase } = require("./supabase");
+    if (!useMockSupabase && supabase) {
+      console.log("UpdateService: Querying Supabase 'app_versions' table for latest release...");
+      const { data: latestRelease, error: dbError } = await supabase
         .from("app_versions")
         .select("*")
         .order("version_code", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (!error && latestRelease && latestRelease.version_code && latestRelease.apk_url) {
+      if (!dbError && latestRelease && latestRelease.version_code && latestRelease.apk_url) {
+        console.log(`UpdateService: Found DB release v${latestRelease.version_name || latestRelease.version_code} (code ${latestRelease.version_code})`);
         remoteInfo = {
           version: latestRelease.version_name || `1.${latestRelease.version_code}.0`,
-          versionCode: latestRelease.version_code,
+          versionCode: Number(latestRelease.version_code),
           apkUrl: latestRelease.apk_url,
+          sha256: latestRelease.sha256 || undefined,
           releaseNotes: latestRelease.release_notes || [],
+          isMandatory: Boolean(latestRelease.is_mandatory),
+          minimumSupportedVersion: Number(latestRelease.minimum_supported_version || 1),
+          source: "database",
         };
+      } else if (dbError) {
+        console.warn("UpdateService: Supabase DB query warning:", dbError.message);
       }
-    } catch (_) {}
+    }
+  } catch (dbErr: any) {
+    console.warn("UpdateService: DB query exception:", dbErr?.message);
   }
 
-  // 3. Fallback to local version.json configuration if remote endpoints were unreachable
+  // ── 2. FALLBACK: Fetch from GitHub Public version.json URLs ─────────
+  if (!remoteInfo) {
+    const urlsToTry = customVersionUrl
+      ? [customVersionUrl, ...DEFAULT_VERSION_JSON_URLS]
+      : DEFAULT_VERSION_JSON_URLS;
+
+    for (const url of urlsToTry) {
+      try {
+        const cacheBustUrl = url.includes("?") ? `${url}&_t=${Date.now()}` : `${url}?_t=${Date.now()}`;
+        console.log(`UpdateService: Falling back to remote JSON: ${cacheBustUrl}...`);
+        const response = await axios.get(cacheBustUrl, {
+          timeout: 7000,
+          headers: {
+            Accept: "application/json",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          },
+        });
+
+        let data = response.data;
+
+        // Handle GitHub REST API Base64 response structure
+        if (data && data.content && data.encoding === "base64") {
+          try {
+            const cleanBase64 = String(data.content).replace(/\s/g, "");
+            let decodedStr = "";
+            if (typeof atob === "function") {
+              decodedStr = atob(cleanBase64);
+            } else if (typeof global !== "undefined" && (global as any).Buffer) {
+              decodedStr = (global as any).Buffer.from(cleanBase64, "base64").toString("utf-8");
+            }
+            if (decodedStr) {
+              data = JSON.parse(decodedStr);
+            }
+          } catch (e) {
+            console.warn("UpdateService: Base64 decoding failed for GitHub API response", e);
+          }
+        }
+
+        if (
+          data &&
+          typeof data === "object" &&
+          data.version &&
+          typeof data.version === "string" &&
+          data.apkUrl &&
+          typeof data.apkUrl === "string" &&
+          data.apkUrl.startsWith("https://")
+        ) {
+          remoteInfo = {
+            version: data.version,
+            versionCode:
+              typeof data.versionCode === "number"
+                ? data.versionCode
+                : parseInt(String(data.versionCode || 0), 10),
+            apkUrl: data.apkUrl,
+            sha256: data.sha256 || undefined,
+            releaseNotes: data.releaseNotes || [],
+            isMandatory: Boolean(data.isMandatory || data.is_mandatory),
+            minimumSupportedVersion: Number(data.minimumSupportedVersion || data.minimum_supported_version || 1),
+            source: "github_json",
+          };
+          break;
+        }
+      } catch (err: any) {
+        console.warn(`UpdateService: Failed to fetch from ${url}:`, err.message);
+        fetchError = err.message || "Network request failed";
+      }
+    }
+  }
+
+  // ── 3. FALLBACK: Local bundled version.json ─────────────────────────
   if (!remoteInfo) {
     try {
       const localConfig = require("../version.json");
       if (localConfig && localConfig.version && localConfig.apkUrl && localConfig.apkUrl.startsWith("https://")) {
         remoteInfo = {
           version: localConfig.version,
-          versionCode: localConfig.versionCode || 15,
+          versionCode: localConfig.versionCode || 18,
           apkUrl: localConfig.apkUrl,
           sha256: localConfig.sha256 || undefined,
           releaseNotes: localConfig.releaseNotes || [],
+          isMandatory: Boolean(localConfig.isMandatory),
+          minimumSupportedVersion: Number(localConfig.minimumSupportedVersion || 1),
+          source: "local_fallback",
         };
       }
     } catch (_) {}
@@ -224,12 +250,15 @@ export async function checkForAppUpdates(
   if (!remoteInfo) {
     const errorResult: UpdateCheckResult = {
       updateAvailable: false,
+      isMandatory: false,
+      minimumSupportedVersion: 1,
       currentVersion: installed.version,
       currentVersionCode: installed.versionCode,
       latestVersion: installed.version,
       latestVersionCode: installed.versionCode,
       releaseNotes: [],
-      error: fetchError || "Unable to reach update server",
+      source: "local_fallback",
+      error: fetchError || "Unable to reach database or update servers",
     };
     return errorResult;
   }
@@ -250,9 +279,15 @@ export async function checkForAppUpdates(
   const codeDiff = remoteInfo.versionCode > installed.versionCode;
 
   const updateAvailable = semverDiff < 0 || codeDiff;
+  const isMandatory =
+    updateAvailable &&
+    (Boolean(remoteInfo.isMandatory) ||
+      installed.versionCode < (remoteInfo.minimumSupportedVersion || 1));
 
   const result: UpdateCheckResult = {
     updateAvailable,
+    isMandatory,
+    minimumSupportedVersion: remoteInfo.minimumSupportedVersion || 1,
     currentVersion: installed.version,
     currentVersionCode: installed.versionCode,
     latestVersion: remoteInfo.version,
@@ -260,6 +295,7 @@ export async function checkForAppUpdates(
     apkUrl: remoteInfo.apkUrl,
     sha256: remoteInfo.sha256,
     releaseNotes,
+    source: remoteInfo.source || "database",
   };
 
   cachedResult = {

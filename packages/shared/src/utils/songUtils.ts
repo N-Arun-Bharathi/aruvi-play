@@ -188,3 +188,41 @@ export function getSearchPriority(song: Song, preferredLangs?: string[]): number
   }
   return score;
 }
+
+export function scoreRecommendation(candidate: Song, seedSong: Song): number {
+  if (!candidate || !seedSong) return 0;
+  let score = 0;
+
+  // Language match bonus
+  if (
+    candidate.language &&
+    seedSong.language &&
+    candidate.language.toLowerCase() === seedSong.language.toLowerCase()
+  ) {
+    score += 10;
+  }
+
+  // Primary artist / music director match bonus
+  const candidateArtist = extractPrimaryArtist(candidate).toLowerCase();
+  const seedArtist = extractPrimaryArtist(seedSong).toLowerCase();
+  if (candidateArtist && seedArtist && (candidateArtist.includes(seedArtist) || seedArtist.includes(candidateArtist))) {
+    score += 15;
+  }
+
+  // Same album match bonus
+  if (
+    candidate.album &&
+    seedSong.album &&
+    candidate.album.toLowerCase() === seedSong.album.toLowerCase()
+  ) {
+    score += 8;
+  }
+
+  // Popularity / playCount
+  const playCount = (candidate as any).playCount || (candidate as any).play_count;
+  if (typeof playCount === "number") {
+    score += Math.min(5, Math.log10(playCount + 1));
+  }
+
+  return score;
+}

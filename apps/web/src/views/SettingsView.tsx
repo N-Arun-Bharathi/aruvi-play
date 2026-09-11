@@ -164,7 +164,7 @@ export const SettingsView: React.FC = () => {
           <h3 className="text-base font-bold text-white">About Aruvi Play Web Edition</h3>
         </div>
         <div className="text-xs text-zinc-400 space-y-1.5 leading-relaxed">
-          <p><strong className="text-white">Version:</strong> 1.4.4 Web Edition (Full Mobile Parity)</p>
+          <p><strong className="text-white">Version:</strong> 1.5.0 Web Edition (Full Mobile Parity)</p>
           <p><strong className="text-white">Architecture:</strong> Monorepo React + Vite + Tailwind CSS + Supabase Realtime</p>
           <p><strong className="text-white">API Stream:</strong> Official JioSaavn 320kbps DES Decryption engine</p>
         </div>
