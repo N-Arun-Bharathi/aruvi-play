@@ -1,7 +1,7 @@
 {
   "name": "aruvi-play",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "scripts": {
     "dev:web": "pnpm --filter web dev --port 3000",
     "dev:mobile": "pnpm --filter mobile start",
@@ -18,7 +18,9 @@
     "build:apk:release:patch": "pnpm bump:patch && pnpm build:apk:release",
     "build:apk:release:minor": "pnpm bump:minor && pnpm build:apk:release",
     "build:apk:release:major": "pnpm bump:major && pnpm build:apk:release",
-    "publish:sql": "node scripts/publish-update.js"
+    "publish:sql": "node scripts/publish-update.js",
+    "sync-version": "node scripts/sync-version.js",
+    "sync:version": "node scripts/sync-version.js"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

@@ -45,10 +45,10 @@ DROP POLICY IF EXISTS app_versions_read_policy ON public.app_versions;
 CREATE POLICY app_versions_read_policy ON public.app_versions
   FOR SELECT TO authenticated, anon USING (true);
 
--- 4. Service role / authenticated write policy
+-- 4. Write policy for version publishing (service role / anon / authenticated)
 DROP POLICY IF EXISTS app_versions_write_policy ON public.app_versions;
 CREATE POLICY app_versions_write_policy ON public.app_versions
-  FOR ALL TO authenticated USING (true) WITH CHECK (true);
+  FOR ALL TO authenticated, anon USING (true) WITH CHECK (true);
 
 -- 5. Enable Realtime broadcasting for app_versions table
 DO $$ 

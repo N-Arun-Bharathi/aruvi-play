@@ -100,4 +100,33 @@ updateJsonFile(path.join(rootDir, "apps/web/package.json"), (pkg) => {
   pkg.version = newVersion;
 });
 
-console.log(`\n🎉 Version sync complete! Current version is now v${newVersion} (code ${newVersionCode}).\n`);
+// 11. Update apps/mobile/android/app/build.gradle (if static versionCode/versionName exists)
+const buildGradlePath = path.join(rootDir, "apps/mobile/android/app/build.gradle");
+if (fs.existsSync(buildGradlePath)) {
+  let gradleContent = fs.readFileSync(buildGradlePath, "utf-8");
+  let modified = false;
+  if (gradleContent.match(/versionCode\s+\d+/)) {
+    gradleContent = gradleContent.replace(/versionCode\s+\d+/, `versionCode ${newVersionCode}`);
+    modified = true;
+  }
+  if (gradleContent.match(/versionName\s+"[^"]+"/)) {
+    gradleContent = gradleContent.replace(/versionName\s+"[^"]+"/, `versionName "${newVersion}"`);
+    modified = true;
+  }
+  if (modified) {
+    fs.writeFileSync(buildGradlePath, gradleContent, "utf-8");
+  }
+  console.log(` ✓ Updated ${path.relative(rootDir, buildGradlePath)}`);
+}
+
+console.log(`\n🎉 Version files sync complete! Current version is now v${newVersion} (code ${newVersionCode}).\n`);
+
+// 12. Automatically trigger database synchronization
+try {
+  const { execSync } = require("child_process");
+  execSync("node scripts/sync-version.js", { stdio: "inherit", cwd: rootDir });
+} catch (e) {
+  // Graceful fallback
+}
+
+

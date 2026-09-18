@@ -9,8 +9,22 @@ const appJson = JSON.parse(fs.readFileSync(appJsonPath, "utf-8"));
 const versionName = appJson?.expo?.version || "1.0.0";
 const versionCode = appJson?.expo?.android?.versionCode || 1;
 
-const driveUrl = process.argv[2] || "https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing";
-const releaseNotes = process.argv[3] || "• Performance improvements and bug fixes.\n• Audio playback optimizations.";
+const DEFAULT_DRIVE_URL = process.env.APP_UPDATE_URL || "https://drive.google.com/file/d/1B0x1MiD-RtjPaq6BpbMsHvQX_vOn4O6E/view?usp=sharing";
+const DEFAULT_RELEASE_NOTES = "• Performance improvements and bug fixes.\n• Audio playback optimizations.";
+
+let driveUrl = DEFAULT_DRIVE_URL;
+let releaseNotes = DEFAULT_RELEASE_NOTES;
+
+const arg1 = process.argv[2];
+const arg2 = process.argv[3];
+if (arg1) {
+  if (arg1.startsWith("http://") || arg1.startsWith("https://")) {
+    driveUrl = arg1;
+    if (arg2) releaseNotes = arg2;
+  } else {
+    releaseNotes = arg1;
+  }
+}
 
 console.log("\n=======================================================");
 console.log("  🚀 Aruvi Play - Release SQL for Supabase DB");
