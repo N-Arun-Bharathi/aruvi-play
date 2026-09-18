@@ -5,5 +5,7 @@ export * from "./types/playlist";
 export * from "./types/history";
 export * from "./utils/contextDetector";
 export * from "./utils/songUtils";
+export * from "./utils/format";
+export * from "./utils/random";
 export * from "./services/saavn";
 export * from "./services/supabase";

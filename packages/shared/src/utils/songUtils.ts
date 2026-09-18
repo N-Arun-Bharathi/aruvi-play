@@ -188,3 +188,19 @@ export function getSearchPriority(song: Song, preferredLangs?: string[]): number
   }
   return score;
 }
+
+export function scoreRecommendation(candidate: Song, seedSong: Song): number {
+  let score = 0;
+  if (!candidate || !seedSong) return score;
+  if (candidate.language && seedSong.language && candidate.language.toLowerCase() === seedSong.language.toLowerCase()) {
+    score += 5;
+  }
+  if (candidate.musicDirector && seedSong.musicDirector && candidate.musicDirector.toLowerCase() === seedSong.musicDirector.toLowerCase()) {
+    score += 10;
+  }
+  if (candidate.primaryArtist && seedSong.primaryArtist && candidate.primaryArtist.toLowerCase() === seedSong.primaryArtist.toLowerCase()) {
+    score += 8;
+  }
+  return score;
+}
+

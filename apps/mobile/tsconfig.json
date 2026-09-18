@@ -4,8 +4,17 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./*"]
-    }
+      "@/*": ["./*"],
+      "@aruvi/shared/*": ["../../packages/shared/src/*"],
+      "@aruvi/shared": ["../../packages/shared/src/index"],
+      "../types/*": ["../../packages/shared/src/types/*"],
+      "../../types/*": ["../../packages/shared/src/types/*"],
+      "../../../types/*": ["../../packages/shared/src/types/*"],
+      "../utils/*": ["../../packages/shared/src/utils/*"],
+      "../../utils/*": ["../../packages/shared/src/utils/*"],
+      "../../../utils/*": ["../../packages/shared/src/utils/*"]
+    },
+    "skipLibCheck": true
   },
   "include": [
     "**/*.ts",

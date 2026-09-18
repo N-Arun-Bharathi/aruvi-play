@@ -18,7 +18,6 @@ export default function TabsLayout() {
         tabBar={(props) => <CustomTabBar {...props} />}
         screenOptions={{
           headerShown: false,
-          animation: "none",
         }}
       >
         {/* Always visible */}

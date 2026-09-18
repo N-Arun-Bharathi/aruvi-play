@@ -6,7 +6,9 @@
     "dev:web": "pnpm --filter web dev --port 3000",
     "dev:mobile": "pnpm --filter mobile start",
     "build:web": "pnpm --filter web build",
-    "build:mobile": "pnpm --filter mobile build"
+    "build:mobile": "pnpm --filter mobile build",
+    "build:apk": "pnpm --filter mobile build:apk",
+    "build:apk:release": "pnpm --filter mobile build:apk:release"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

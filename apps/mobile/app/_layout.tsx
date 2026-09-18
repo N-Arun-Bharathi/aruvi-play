@@ -49,10 +49,6 @@ function RootLayoutNav() {
         if (typeof global !== "undefined" && !(global as any).appReadyTime) {
           (global as any).appReadyTime = Date.now();
         }
-        try {
-          const { checkForAppUpdates } = require("../services/updateService");
-          checkForAppUpdates(false).catch(() => {});
-        } catch (_) {}
       })
       .catch((err) => console.error("Auth hydration error:", err));
   }, []);
@@ -127,8 +123,6 @@ function RootLayoutNav() {
       <Stack.Screen name="profile/edit" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="profile/appearance" />
       <Stack.Screen name="profile/playback" />
-      <Stack.Screen name="updates/available" options={{ presentation: "modal", gestureEnabled: false, animation: "slide_from_bottom" }} />
-      <Stack.Screen name="updates/required" options={{ presentation: "transparentModal", gestureEnabled: false }} />
     </Stack>
   );
 }
