@@ -4,7 +4,7 @@ import { Stack, useRouter, useSegments } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { View } from "react-native";
+import { View, AppState } from "react-native";
 import { usePlayerStore } from "../store/playerStore";
 import { useAuthStore } from "../store/authStore";
 import { enableFreeze } from "react-native-screens";
@@ -13,8 +13,10 @@ import { UpdateModal } from "../components/UpdateModal";
 import { useToastStore } from "../store/toastStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useUpdateStore } from "../store/updateStore";
+import { subscribeToAppUpdates } from "../services/updateService";
 import { useTheme } from "../utils/theme";
 import * as Linking from "expo-linking";
+
 
 enableFreeze(true);
 
@@ -59,8 +61,25 @@ function RootLayoutNav() {
       useUpdateStore.getState().checkUpdate(false).catch((e) => console.warn("Update check warning:", e));
     }, 1500);
 
-    return () => clearTimeout(updateTimer);
+    // Listen for Realtime database updates on app_versions table
+    const unsubscribeRealtime = subscribeToAppUpdates(() => {
+      useUpdateStore.getState().checkUpdate(false).catch((e) => console.warn("Realtime update check warning:", e));
+    });
+
+    // Check for updates when app returns to foreground
+    const appStateSub = AppState.addEventListener("change", (state) => {
+      if (state === "active") {
+        useUpdateStore.getState().checkUpdate(false).catch(() => {});
+      }
+    });
+
+    return () => {
+      clearTimeout(updateTimer);
+      unsubscribeRealtime();
+      appStateSub.remove();
+    };
   }, []);
+
 
 
   // ── Deep Link handler for email verification ─────────────────

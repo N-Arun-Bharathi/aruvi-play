@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -10,7 +10,6 @@
     "build:apk": "export JAVA_HOME=\"$HOME/jdk/jdk-17.0.11+9/Contents/Home\" && export ANDROID_HOME=\"$HOME/Library/Android/sdk\" && export PATH=\"$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH\" && cd android && ./gradlew :app:assembleDebug",
     "build:apk:release": "export JAVA_HOME=\"$HOME/jdk/jdk-17.0.11+9/Contents/Home\" && export ANDROID_HOME=\"$HOME/Library/Android/sdk\" && export PATH=\"$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH\" && cd android && ./gradlew :app:assembleRelease"
   },
-
   "dependencies": {
     "@aruvi/shared": "workspace:*",
     "@expo/vector-icons": "^14.0.0",

@@ -66,8 +66,17 @@ const createMockSupabase = () => ({
       upsert: (data: any) => Promise.resolve({ data, error: null }),
     };
   },
+  channel: (name: string) => ({
+    on: () => ({
+      subscribe: () => ({ unsubscribe: () => {} }),
+    }),
+    subscribe: () => ({ unsubscribe: () => {} }),
+    unsubscribe: () => {},
+  }),
+  removeChannel: () => {},
   rpc: () => Promise.resolve({ data: true, error: null }),
 });
+
 
 
 if (isPlaceholder) {

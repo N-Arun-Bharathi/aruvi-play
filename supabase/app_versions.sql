@@ -50,11 +50,20 @@ DROP POLICY IF EXISTS app_versions_write_policy ON public.app_versions;
 CREATE POLICY app_versions_write_policy ON public.app_versions
   FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
--- 5. Indexes for fast lookup
+-- 5. Enable Realtime broadcasting for app_versions table
+DO $$ 
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.app_versions;
+EXCEPTION
+  WHEN OTHERS THEN NULL;
+END $$;
+
+-- 6. Indexes for fast lookup
 CREATE INDEX IF NOT EXISTS idx_app_versions_code ON public.app_versions(version_code DESC);
 CREATE INDEX IF NOT EXISTS idx_app_versions_name ON public.app_versions(version_name);
 
--- 6. Insert / Upsert Latest Release (Ready to RUN)
+-- 7. Insert / Upsert Latest Release (Ready to RUN)
+
 -- NOTE: You can paste your Google Drive link here (e.g. 'https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing')
 -- The app automatically converts it into a direct download link!
 INSERT INTO public.app_versions (

@@ -137,3 +137,36 @@ export async function installUpdate(apkUrl?: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Subscribe to realtime updates on the app_versions table in Supabase
+ */
+export function subscribeToAppUpdates(onUpdate: () => void) {
+  try {
+    const channel = supabase
+      .channel("app_versions_realtime")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "app_versions",
+        },
+        (payload: any) => {
+          console.log("[UpdateService] Realtime update event received from DB:", payload);
+          onUpdate();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch (e) {}
+    };
+  } catch (err) {
+    console.warn("[UpdateService] Realtime subscription error:", err);
+    return () => {};
+  }
+}
+
