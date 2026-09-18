@@ -47,31 +47,28 @@ const createMockSupabase = () => ({
       return { data: { subscription: { unsubscribe: () => {} } } };
     },
   },
-  from: (table: string) => ({
-    select: () => ({
-      eq: () => ({
-        order: () => Promise.resolve({ data: [], error: null }),
-        maybeSingle: () => Promise.resolve({ data: null, error: null }),
-        single: () => Promise.resolve({ data: null, error: null }),
-        then: (cb: any) => cb({ data: [], error: null }),
-      }),
-      or: () => ({
-        eq: () => ({
-          maybeSingle: () => Promise.resolve({ data: null, error: null }),
-        }),
-      }),
-      order: () => Promise.resolve({ data: [], error: null }),
+  from: (table: string) => {
+    const builder: any = {
+      select: () => builder,
+      eq: () => builder,
+      or: () => builder,
+      order: () => builder,
+      limit: () => builder,
       maybeSingle: () => Promise.resolve({ data: null, error: null }),
       single: () => Promise.resolve({ data: null, error: null }),
-      then: (cb: any) => cb({ data: [], error: null }),
-    }),
-    insert: (data: any) => Promise.resolve({ data, error: null }),
-    update: (data: any) => ({ eq: () => Promise.resolve({ data, error: null }) }),
-    delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
-    upsert: (data: any) => Promise.resolve({ data, error: null }),
-  }),
+      then: (resolve: any, reject?: any) => Promise.resolve({ data: [], error: null }).then(resolve, reject),
+    };
+    return {
+      select: () => builder,
+      insert: (data: any) => Promise.resolve({ data, error: null }),
+      update: (data: any) => ({ eq: () => Promise.resolve({ data, error: null }) }),
+      delete: () => ({ eq: () => Promise.resolve({ error: null }) }),
+      upsert: (data: any) => Promise.resolve({ data, error: null }),
+    };
+  },
   rpc: () => Promise.resolve({ data: true, error: null }),
 });
+
 
 if (isPlaceholder) {
   useMockSupabase = true;

@@ -7,9 +7,10 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "build:apk": "cd android && ./gradlew :app:assembleDebug",
-    "build:apk:release": "cd android && ./gradlew :app:assembleRelease"
+    "build:apk": "export JAVA_HOME=\"$HOME/jdk/jdk-17.0.11+9/Contents/Home\" && export ANDROID_HOME=\"$HOME/Library/Android/sdk\" && export PATH=\"$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH\" && cd android && ./gradlew :app:assembleDebug",
+    "build:apk:release": "export JAVA_HOME=\"$HOME/jdk/jdk-17.0.11+9/Contents/Home\" && export ANDROID_HOME=\"$HOME/Library/Android/sdk\" && export PATH=\"$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$PATH\" && cd android && ./gradlew :app:assembleRelease"
   },
+
   "dependencies": {
     "@aruvi/shared": "workspace:*",
     "@expo/vector-icons": "^14.0.0",

@@ -24,6 +24,8 @@ import { useLibraryStore } from "../../store/likedStore";
 import { usePlayerStore } from "../../store/playerStore";
 import { useTheme } from "../../utils/theme";
 import { useSettingsStore } from "../../store/settingsStore";
+import { useUpdateStore } from "../../store/updateStore";
+import { getCurrentAppVersion } from "../../services/updateService";
 
 const SUPPORTED_LANGUAGES = [
   { id: "tamil", label: "Tamil", native: "தமிழ்" },
@@ -70,7 +72,16 @@ export default function ProfileScreen() {
   const currentSong = usePlayerStore((s) => s.current);
   const playSong = usePlayerStore((s) => s.playSong);
 
+  const updateInfo = useUpdateStore((s) => s.updateInfo);
+  const isCheckingUpdate = useUpdateStore((s) => s.isChecking);
+  const checkUpdate = useUpdateStore((s) => s.checkUpdate);
+  const installUpdateAction = useUpdateStore((s) => s.install);
+  const openUpdateModal = useUpdateStore((s) => s.openModal);
+
+  const { versionName: currentVersion, versionCode: currentVersionCode } = getCurrentAppVersion();
+
   const bottomPadding = currentSong ? 210 : 150;
+
 
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveEmail, setSaveEmail] = useState("");
@@ -460,8 +471,125 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* APP UPDATES & VERSION CARD */}
+        <View
+          className="mx-5 mb-5 p-5 rounded-3xl border shadow-sm"
+          style={{
+            backgroundColor: updateInfo?.hasUpdate ? `${theme.accent}12` : theme.card,
+            borderColor: updateInfo?.hasUpdate ? `${theme.accent}50` : theme.border,
+          }}
+        >
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1 pr-2">
+              <View
+                className="w-10 h-10 rounded-2xl items-center justify-center mr-3 border"
+                style={{
+                  backgroundColor: updateInfo?.hasUpdate ? `${theme.accent}20` : `${theme.accent}15`,
+                  borderColor: updateInfo?.hasUpdate ? theme.accent : `${theme.accent}30`,
+                }}
+              >
+                <Icon
+                  name={updateInfo?.hasUpdate ? "download" : "refresh"}
+                  size={18}
+                  color={theme.accent}
+                />
+              </View>
+              <View className="flex-1">
+                <View className="flex-row items-center">
+                  <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
+                    {updateInfo?.hasUpdate ? "Update Available!" : "App Version"}
+                  </Text>
+                  {updateInfo?.hasUpdate && (
+                    <View
+                      className="ml-2 px-2 py-0.5 rounded-full border"
+                      style={{ backgroundColor: `${theme.accent}25`, borderColor: theme.accent }}
+                    >
+                      <Text className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: theme.accent }}>
+                        v{updateInfo.versionName}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+                <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
+                  {updateInfo?.hasUpdate
+                    ? "A newer version is available in the database."
+                    : `Current version v${currentVersion} (Build ${currentVersionCode})`}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {updateInfo?.hasUpdate ? (
+            <View className="mt-3.5 pt-3.5 border-t" style={{ borderColor: `${theme.accent}30` }}>
+              {Boolean(updateInfo.releaseNotes) && (
+                <View
+                  className="p-3 rounded-2xl border mb-3"
+                  style={{ backgroundColor: theme.elevatedSurface, borderColor: theme.border }}
+                >
+                  <Text className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.accent }}>
+                    What's New:
+                  </Text>
+                  <Text className="text-xs leading-relaxed" style={{ color: theme.primaryText }} numberOfLines={3}>
+                    {updateInfo.releaseNotes}
+                  </Text>
+                </View>
+              )}
+
+              <View className="flex-row space-x-3">
+                <Pressable
+                  onPress={openUpdateModal}
+                  className="flex-1 py-3 rounded-2xl border items-center justify-center active:opacity-80"
+                  style={{ backgroundColor: theme.elevatedSurface, borderColor: theme.border }}
+                >
+                  <Text className="text-xs font-bold" style={{ color: theme.primaryText }}>
+                    View Details
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={installUpdateAction}
+                  className="flex-1 py-3 rounded-2xl bg-accent items-center justify-center flex-row active:opacity-80"
+                >
+                  <Icon name="download" size={14} color="#000000" />
+                  <Text className="text-xs font-extrabold text-black ml-1.5">
+                    Download & Install
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : (
+            <View className="mt-3.5 pt-3.5 border-t flex-row items-center justify-between" style={{ borderColor: theme.border }}>
+              <View className="flex-row items-center">
+                <View className="w-2 h-2 rounded-full bg-emerald-400 mr-2" />
+                <Text className="text-xs font-semibold" style={{ color: theme.secondaryText }}>
+                  Up to date
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={() => checkUpdate(true)}
+                disabled={isCheckingUpdate}
+                className="px-3.5 py-2 rounded-2xl border flex-row items-center active:opacity-80"
+                style={{ backgroundColor: theme.elevatedSurface, borderColor: theme.border }}
+              >
+                {isCheckingUpdate ? (
+                  <ActivityIndicator size="small" color={theme.accent} />
+                ) : (
+                  <>
+                    <Icon name="refresh" size={12} color={theme.accent} />
+                    <Text className="text-xs font-bold ml-1.5" style={{ color: theme.accent }}>
+                      Check for Updates
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
+          )}
+        </View>
+
         {/* SECRET KEY / UNLOCKED LIKED SONGS SECTION (GUEST / SECRET ACCESS ONLY) */}
         {renderSecretKeySection()}
+
 
         {/* Guest Banner Actions */}
         {userProfile?.is_guest ? (

@@ -8,8 +8,19 @@
     "build:web": "pnpm --filter web build",
     "build:mobile": "pnpm --filter mobile build",
     "build:apk": "pnpm --filter mobile build:apk",
-    "build:apk:release": "pnpm --filter mobile build:apk:release"
+    "build:apk:release": "pnpm --filter mobile build:apk:release",
+    "bump:patch": "node scripts/bump-version.js patch",
+    "bump:minor": "node scripts/bump-version.js minor",
+    "bump:major": "node scripts/bump-version.js major",
+    "build:apk:patch": "pnpm bump:patch && pnpm build:apk",
+    "build:apk:minor": "pnpm bump:minor && pnpm build:apk",
+    "build:apk:major": "pnpm bump:major && pnpm build:apk",
+    "build:apk:release:patch": "pnpm bump:patch && pnpm build:apk:release",
+    "build:apk:release:minor": "pnpm bump:minor && pnpm build:apk:release",
+    "build:apk:release:major": "pnpm bump:major && pnpm build:apk:release",
+    "publish:sql": "node scripts/publish-update.js"
   },
+
   "devDependencies": {
     "typescript": "^5.3.3"
   }

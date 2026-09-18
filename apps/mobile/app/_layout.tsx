@@ -9,8 +9,10 @@ import { usePlayerStore } from "../store/playerStore";
 import { useAuthStore } from "../store/authStore";
 import { enableFreeze } from "react-native-screens";
 import { Toast } from "../components/Toast";
+import { UpdateModal } from "../components/UpdateModal";
 import { useToastStore } from "../store/toastStore";
 import { useSettingsStore } from "../store/settingsStore";
+import { useUpdateStore } from "../store/updateStore";
 import { useTheme } from "../utils/theme";
 import * as Linking from "expo-linking";
 
@@ -39,7 +41,7 @@ function RootLayoutNav() {
   const authMode = useAuthStore((s) => s.authMode);
   const theme = useTheme();
 
-  // ── Startup: init player + resolve auth session (once) ───────
+  // ── Startup: init player + resolve auth session + check updates ───────
   useEffect(() => {
     initPlayer().catch((e) => console.warn("initPlayer warning:", e));
     useSettingsStore.getState().hydrate().catch((e) => console.warn("Settings hydrate warning:", e));
@@ -51,7 +53,15 @@ function RootLayoutNav() {
         }
       })
       .catch((err) => console.error("Auth hydration error:", err));
+
+    // Non-blocking background update check after startup
+    const updateTimer = setTimeout(() => {
+      useUpdateStore.getState().checkUpdate(false).catch((e) => console.warn("Update check warning:", e));
+    }, 1500);
+
+    return () => clearTimeout(updateTimer);
   }, []);
+
 
   // ── Deep Link handler for email verification ─────────────────
   const url = Linking.useURL();
@@ -135,9 +145,11 @@ function RootLayoutContent() {
       <StatusBar style={theme.statusBar} />
       <RootLayoutNav />
       <Toast />
+      <UpdateModal />
     </View>
   );
 }
+
 
 export default function RootLayout() {
   return (

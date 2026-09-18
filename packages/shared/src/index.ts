@@ -9,3 +9,4 @@ export * from "./utils/format";
 export * from "./utils/random";
 export * from "./services/saavn";
 export * from "./services/supabase";
+export * from "./utils/version";
