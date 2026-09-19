@@ -1,12 +1,12 @@
 import { create } from "zustand";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase } from "../services/supabase";
-import { dbSaveUser } from "../services/sqlite";
+import { dbSaveUser, dbGetUser } from "../services/sqlite";
 import { useToastStore } from "./toastStore";
 import * as Linking from "expo-linking";
 
-const checkIsAdmin = (isOwner?: boolean | null, metadata?: any) => {
-  if (isOwner === true) return true;
+export const checkIsAdmin = (isOwner?: boolean | number | string | null, metadata?: any) => {
+  if (isOwner === true || isOwner === 1 || isOwner === "true" || isOwner === "1") return true;
   if (metadata?.role === "admin" || metadata?.is_owner === true || metadata?.is_admin === true) return true;
   return false;
 };
@@ -71,12 +71,31 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
       const secretKeyUnlocked = unlockedStr === "true";
       set({ secretKeyUnlocked });
 
+      // 1. First restore immediately from AsyncStorage/SQLite for fast UI startup
+      const localUserStr = await AsyncStorage.getItem("aruvi:user");
+      let restoredUser: UserProfile | null = null;
+      if (localUserStr) {
+        try {
+          const localUser = JSON.parse(localUserStr);
+          if (localUser && localUser.id) {
+            const dbLocal = await dbGetUser(localUser.id);
+            const isOwner = dbLocal?.is_owner === 1 || dbLocal?.is_owner === true || localUser.is_owner === true || localUser.isAdmin === true;
+            const isAdmin = checkIsAdmin(isOwner);
+            restoredUser = { ...localUser, is_owner: isAdmin, isAdmin: isAdmin };
+            const mode = localUser.is_guest ? "guest" : "authenticated";
+            set({ authMode: mode, userProfile: restoredUser });
+          }
+        } catch (e) {
+          console.warn("Failed to parse local user JSON");
+        }
+      }
+
+      // 2. Fetch fresh live session & profile from Supabase
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData?.session;
 
       if (session?.user) {
         const user = session.user;
-        // Reject anonymous sessions — we no longer use them
         if (user.is_anonymous === true) {
           await supabase.auth.signOut().catch(() => {});
           set({ authMode: "unauthenticated", userProfile: null });
@@ -89,7 +108,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
             .from("profiles")
             .select("id, display_name, phone, avatar_url, is_owner, initial_likes_imported, is_guest")
             .eq("id", user.id)
-            .single();
+            .maybeSingle();
 
           if (dbProfile) {
             const isAdmin = checkIsAdmin(dbProfile.is_owner, user.user_metadata);
@@ -105,10 +124,14 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
               initial_likes_imported: dbProfile.initial_likes_imported || false,
             };
           }
-        } catch (_) {}
+        } catch (err) {
+          console.warn("Profile fetch warning:", err);
+        }
 
         if (!profileData) {
-          const isAdmin = checkIsAdmin(false, user.user_metadata);
+          const dbLocal = await dbGetUser(user.id);
+          const isOwner = dbLocal?.is_owner === 1 || dbLocal?.is_owner === true || restoredUser?.is_owner === true;
+          const isAdmin = checkIsAdmin(isOwner, user.user_metadata);
           profileData = {
             id: user.id,
             name: user.email?.split("@")[0] || "Aruvi User",
@@ -134,22 +157,9 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         return;
       }
 
-      // No live session yet → Restore persistent local user (both registered & guest)
-      const localUserStr = await AsyncStorage.getItem("aruvi:user");
-      if (localUserStr) {
-        try {
-          const localUser = JSON.parse(localUserStr);
-          if (localUser && localUser.id) {
-            const isAdmin = checkIsAdmin(localUser.isAdmin || localUser.is_owner);
-            const updatedUser = { ...localUser, is_owner: isAdmin, isAdmin: isAdmin };
-            const mode = localUser.is_guest ? "guest" : "authenticated";
-            set({ authMode: mode, userProfile: updatedUser });
-            hydrateLibrary();
-            return;
-          }
-        } catch (e) {
-          console.warn("Failed to parse local user JSON");
-        }
+      if (restoredUser) {
+        hydrateLibrary();
+        return;
       }
 
       set({ authMode: "unauthenticated", userProfile: null });
@@ -199,7 +209,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
             .from("profiles")
             .select("id, display_name, phone, avatar_url, is_owner, initial_likes_imported, is_guest")
             .eq("id", user.id)
-            .single();
+            .maybeSingle();
           if (dbProfile) {
             const isAdmin = checkIsAdmin(dbProfile.is_owner, user.user_metadata);
             profile = {
@@ -210,8 +220,16 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
               isAdmin: isAdmin,
               initial_likes_imported: dbProfile.initial_likes_imported || false,
             };
+          } else {
+            const isAdmin = checkIsAdmin(false, user.user_metadata);
+            profile.is_owner = isAdmin;
+            profile.isAdmin = isAdmin;
           }
-        } catch (_) {}
+        } catch (_) {
+          const isAdmin = checkIsAdmin(false, user.user_metadata);
+          profile.is_owner = isAdmin;
+          profile.isAdmin = isAdmin;
+        }
 
         await dbSaveUser(profile);
         await AsyncStorage.setItem("aruvi:user", JSON.stringify(profile));
@@ -275,6 +293,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         await supabase.from("profiles").upsert({
           id: user.id,
           display_name: cleanName,
+          is_owner: isAdmin,
           is_guest: false,
           updated_at: new Date().toISOString(),
         });
@@ -415,12 +434,13 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         }
       }
 
+      const isAdmin = checkIsAdmin(false, null);
       const registeredProfile: UserProfile = {
         id: authUser?.id || "unknown",
         name: userProfile?.name || "Aruvi User",
         email: cleanEmail,
-        is_owner: false,
-        isAdmin: false,
+        is_owner: isAdmin,
+        isAdmin: isAdmin,
         is_guest: false,
       };
 
@@ -428,6 +448,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         await supabase.from("profiles").upsert({
           id: registeredProfile.id,
           display_name: registeredProfile.name,
+          is_owner: isAdmin,
           is_guest: false,
           updated_at: new Date().toISOString(),
         });

@@ -66,6 +66,7 @@ export default function ProfileScreen() {
   const liked = useLibraryStore((s) => s.liked);
   const isLiked = useLibraryStore((s) => s.isLiked);
   const toggleLike = useLibraryStore((s) => s.toggleLike);
+  const restoreCuratedLikedSongs = useLibraryStore((s) => s.restoreCuratedLikedSongs);
 
   const currentSong = usePlayerStore((s) => s.current);
   const playSong = usePlayerStore((s) => s.playSong);
@@ -93,7 +94,7 @@ export default function ProfileScreen() {
   const isDark = settingsTheme === "dark" || (settingsTheme === "system" && theme.id === "dark");
   const toggleTheme = () => setTheme(isDark ? "light" : "dark");
 
-  const isAdmin = userProfile?.isAdmin === true || userProfile?.is_owner === true;
+  const isAdmin = userProfile?.isAdmin === true || userProfile?.is_owner === true || (userProfile?.is_owner as any) === 1 || (userProfile?.is_owner as any) === "true";
 
   const handleUnlockSecretKey = async () => {
     setSecretError("");
@@ -379,6 +380,47 @@ export default function ProfileScreen() {
             </Pressable>
           )}
         </View>
+
+        {/* ── Admin Management Tools ──────────────────────────────── */}
+        {isAdmin && (
+          <View
+            className="mx-5 mb-4 p-4 rounded-3xl border shadow-sm"
+            style={{ backgroundColor: `${theme.accent}08`, borderColor: `${theme.accent}30` }}
+          >
+            <View className="flex-row items-center justify-between">
+              <View className="flex-row items-center flex-1 pr-2">
+                <View
+                  className="w-8 h-8 rounded-xl items-center justify-center mr-2.5 border"
+                  style={{ backgroundColor: `${theme.accent}20`, borderColor: `${theme.accent}40` }}
+                >
+                  <Icon name="heart-filled" size={16} color={theme.accent} />
+                </View>
+                <View className="flex-1">
+                  <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>
+                    Admin Curated Library
+                  </Text>
+                  <Text className="text-[11px] mt-0.5" style={{ color: theme.secondaryText }}>
+                    {liked.length} liked songs loaded
+                  </Text>
+                </View>
+              </View>
+
+              <Pressable
+                onPress={() => restoreCuratedLikedSongs()}
+                className="px-3 py-1.5 rounded-xl border flex-row items-center active:opacity-80"
+                style={{
+                  backgroundColor: theme.accent,
+                  borderColor: theme.accent,
+                }}
+              >
+                <Icon name="refresh" size={12} color="#000000" />
+                <Text className="text-xs font-bold ml-1" style={{ color: "#000000" }}>
+                  {liked.length === 0 ? "Load 450+ Songs" : "Sync All"}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        )}
 
         {/* ── 2. Preferred Music Language Section ──────────────────── */}
         <View

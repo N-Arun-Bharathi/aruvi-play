@@ -11,7 +11,7 @@ import { useTheme } from "../../utils/theme";
 import { usePlayerStore } from "../../store/playerStore";
 import { useLibraryStore } from "../../store/likedStore";
 import { useToastStore } from "../../store/toastStore";
-import { dbGetPlaylistSongs, dbDeletePlaylist, dbRemoveSongFromPlaylist, dbAddSongToPlaylist } from "../../services/sqlite";
+import { dbGetPlaylistSongs, dbDeletePlaylist, dbRemoveSongFromPlaylist, dbAddSongToPlaylist, dbSavePlaylist } from "../../services/sqlite";
 import { searchSongs } from "../../services/saavn";
 import { supabase } from "../../services/supabase";
 import { Song } from "../../types/song";
@@ -47,6 +47,9 @@ export default function PlaylistDetail() {
   const loadPlaylistDetails = async () => {
     setLoading(true);
     try {
+      const cachedSongs = (await dbGetPlaylistSongs(id)) || [];
+      setSongs(cachedSongs);
+
       const { data: pl } = await supabase
         .from("playlists")
         .select("*")
@@ -55,12 +58,17 @@ export default function PlaylistDetail() {
       
       if (pl) {
         setPlaylist(pl);
+        await dbSavePlaylist({
+          id: pl.id,
+          userId: pl.user_id || "guest-user",
+          name: pl.name,
+          description: pl.description,
+          coverImage: pl.cover_url,
+          isPublic: pl.is_public,
+        });
       } else {
         setPlaylist({ id, name: "My Playlist", description: "", is_public: true });
       }
-
-      const cachedSongs = await dbGetPlaylistSongs(id);
-      setSongs(cachedSongs);
 
       const { data: serverSongs, error } = await supabase
         .from("playlist_songs")
@@ -85,7 +93,22 @@ export default function PlaylistDetail() {
             } as Song;
           })
           .filter(Boolean) as Song[];
-        setSongs(formatted);
+
+        // Cache all server songs into local SQLite non-destructively
+        for (let i = 0; i < formatted.length; i++) {
+          await dbAddSongToPlaylist(id, formatted[i], i + 1);
+        }
+
+        const mergedMap = new Map<string, Song>();
+        for (const s of formatted) {
+          mergedMap.set(s.id, s);
+        }
+        for (const s of cachedSongs) {
+          if (!mergedMap.has(s.id)) {
+            mergedMap.set(s.id, s);
+          }
+        }
+        setSongs(Array.from(mergedMap.values()));
       }
     } catch (e) {
       console.warn("Failed to load playlist", e);

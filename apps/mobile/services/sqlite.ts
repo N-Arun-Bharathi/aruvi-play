@@ -320,11 +320,22 @@ export async function dbSaveSongMetadata(song: Song): Promise<void> {
   ]);
 }
 
+export async function dbEnsureProfile(userId: string, name = "Aruvi User"): Promise<void> {
+  if (!db || !userId) return;
+  try {
+    await db.runAsync(
+      "INSERT OR IGNORE INTO profiles (id, display_name) VALUES (?, ?)",
+      [userId, name]
+    );
+  } catch (e) {}
+}
+
 // -------------------------------------------------------------
 // LIKED SONGS OPERATIONS
 // -------------------------------------------------------------
 export async function dbSaveLikedSong(userId: string, song: Song): Promise<void> {
-  if (!db) return;
+  if (!db || !userId || !song) return;
+  await dbEnsureProfile(userId);
   await dbSaveSongMetadata(song);
   
   const id = `${userId}_${song.id}`;
@@ -333,13 +344,13 @@ export async function dbSaveLikedSong(userId: string, song: Song): Promise<void>
 }
 
 export async function dbRemoveLikedSong(userId: string, songId: string): Promise<void> {
-  if (!db) return;
+  if (!db || !userId || !songId) return;
   const sql = `DELETE FROM liked_songs WHERE user_id = ? AND song_id = ?`;
   await db.runAsync(sql, [userId, songId]);
 }
 
 export async function dbGetLikedSongs(userId: string): Promise<Song[]> {
-  if (!db) return [];
+  if (!db || !userId) return [];
   const rows = await db.getAllAsync(`
     SELECT s.* FROM songs s
     JOIN liked_songs ls ON ls.song_id = s.id
@@ -354,13 +365,15 @@ export async function dbGetLikedSongs(userId: string): Promise<Song[]> {
 // -------------------------------------------------------------
 export async function dbSavePlaylist(playlist: {
   id: string;
-  userId: string;
+  userId?: string | null;
   name: string;
-  description?: string;
-  coverImage?: string;
+  description?: string | null;
+  coverImage?: string | null;
   isPublic?: boolean;
 }): Promise<void> {
-  if (!db) return;
+  if (!db || !playlist || !playlist.id) return;
+  const safeUserId = playlist.userId || "guest-user";
+  await dbEnsureProfile(safeUserId);
   const sql = `
     INSERT INTO playlists (id, user_id, name, description, cover_url, is_public)
     VALUES (?, ?, ?, ?, ?, ?)
@@ -373,7 +386,7 @@ export async function dbSavePlaylist(playlist: {
   `;
   await db.runAsync(sql, [
     playlist.id,
-    playlist.userId,
+    safeUserId,
     playlist.name,
     playlist.description || null,
     playlist.coverImage || null,
@@ -388,7 +401,15 @@ export async function dbDeletePlaylist(playlistId: string): Promise<void> {
 
 export async function dbGetPlaylists(userId: string): Promise<any[]> {
   if (!db) return [];
-  return await db.getAllAsync("SELECT * FROM playlists WHERE user_id = ? OR is_public = 1 ORDER BY created_at DESC", [userId]);
+  const safeUserId = userId || "guest-user";
+  return await db.getAllAsync(`
+    SELECT p.*, COUNT(ps.id) as song_count
+    FROM playlists p
+    LEFT JOIN playlist_songs ps ON ps.playlist_id = p.id
+    WHERE p.user_id = ? OR p.is_public = 1
+    GROUP BY p.id
+    ORDER BY p.created_at DESC
+  `, [safeUserId]);
 }
 
 export async function dbAddSongToPlaylist(playlistId: string, song: Song, position: number): Promise<void> {

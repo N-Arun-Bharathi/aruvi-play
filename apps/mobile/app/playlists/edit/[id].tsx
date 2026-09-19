@@ -5,7 +5,7 @@ import { AppScreen } from "../../../components/AppScreen";
 import { AppHeader } from "../../../components/AppHeader";
 import { PrimaryButton } from "../../../components/PrimaryButton";
 import { useTheme } from "../../../utils/theme";
-import { dbSavePlaylist } from "../../../services/sqlite";
+import { dbSavePlaylist, dbGetPlaylists } from "../../../services/sqlite";
 import { supabase } from "../../../services/supabase";
 
 export default function EditPlaylist() {
@@ -26,15 +26,30 @@ export default function EditPlaylist() {
 
   const loadPlaylist = async () => {
     try {
+      const cached = (await dbGetPlaylists("guest-user")) || [];
+      const localPl = cached.find((p: any) => p.id === id);
+      if (localPl) {
+        setName(localPl.name);
+        setDesc(localPl.description || "");
+      }
+
       const { data: pl, error } = await supabase
         .from("playlists")
         .select("*")
         .eq("id", id)
-        .single();
+        .maybeSingle();
       
       if (pl) {
         setName(pl.name);
         setDesc(pl.description || "");
+        await dbSavePlaylist({
+          id: pl.id,
+          userId: pl.user_id || "guest-user",
+          name: pl.name,
+          description: pl.description,
+          coverImage: pl.cover_url,
+          isPublic: !!pl.is_public,
+        });
       }
     } catch (e) {
       console.warn("Failed to load playlist", e);
@@ -51,26 +66,39 @@ export default function EditPlaylist() {
 
     setSaving(true);
     try {
-      const { data: pl, error } = await supabase
-        .from("playlists")
-        .update({
-          name: name.trim(),
-          description: desc.trim(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-
       await dbSavePlaylist({
-        id: pl.id,
-        userId: pl.user_id,
-        name: pl.name,
-        description: pl.description,
-        isPublic: !!pl.is_public,
+        id,
+        userId: "guest-user",
+        name: name.trim(),
+        description: desc.trim(),
+        isPublic: true,
       });
+
+      try {
+        const { data: pl, error } = await supabase
+          .from("playlists")
+          .update({
+            name: name.trim(),
+            description: desc.trim(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", id)
+          .select()
+          .maybeSingle();
+
+        if (pl) {
+          await dbSavePlaylist({
+            id: pl.id,
+            userId: pl.user_id || "guest-user",
+            name: pl.name,
+            description: pl.description,
+            coverImage: pl.cover_url,
+            isPublic: !!pl.is_public,
+          });
+        }
+      } catch (serverErr) {
+        console.warn("Server playlist update warning:", serverErr);
+      }
 
       router.back();
     } catch (e: any) {

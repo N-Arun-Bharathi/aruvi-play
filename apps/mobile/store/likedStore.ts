@@ -88,6 +88,7 @@ interface LikedState {
   isLiked: (song: Song) => boolean;
   refreshRecent: () => Promise<void>;
   clearGuestFavourites: () => void;
+  restoreCuratedLikedSongs: () => Promise<void>;
   resolveAndPlay: (item: any, contextList: any[]) => Promise<void>;
 }
 
@@ -115,7 +116,7 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
 
     const isGuest = user?.is_guest ?? false;
     const userId = user?.id || "guest-user";
-    const isAdmin = user?.isAdmin || user?.is_owner || false;
+    const isAdmin = user?.isAdmin === true || user?.is_owner === true;
     const hasSecretAccess = isAdmin || secretKeyUnlocked;
 
     // For Guest Users without secret key access: Do NOT fetch from database or load recent history
@@ -176,10 +177,10 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
 
     rebuildMaps(liked);
 
-    // 2. Fetch fresh liked songs list from Supabase if online session exists
+    // 2. Bidirectional sync with Supabase if online authenticated session exists
     try {
       const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user && !session.user.is_anonymous) {
+      if (session?.user && !session.user.is_anonymous && userId && !userId.startsWith("guest")) {
         const { data: serverLikes, error } = await supabase
           .from("liked_songs")
           .select("song_id, songs(*)")
@@ -203,43 +204,47 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
             })
             .filter(Boolean) as Song[];
 
-          if (serverSongs.length > 0) {
-            const currentLocal = await dbGetLikedSongs(userId);
-            for (const lSong of currentLocal) {
-              if (!serverSongs.some((s) => s.id === lSong.id)) {
-                await dbRemoveLikedSong(userId, lSong.id);
-              }
-            }
-            for (const sSong of serverSongs) {
-              await dbSaveLikedSong(userId, sSong);
-            }
+          const currentLocal = await dbGetLikedSongs(userId);
+          const mergedMap = new Map<string, Song>();
 
-            liked = serverSongs;
-            rebuildMaps(liked);
-          } else if (isAdmin && liked.length > 0) {
-            // Upload pre-seeded admin liked songs to Supabase
-            for (const song of liked) {
-              await supabase.from("songs").upsert({
-                id: song.id,
-                title: song.title,
-                normalized_title: song.normalized_title || song.title.toLowerCase().trim(),
-                artist: song.artist,
-                album: song.album || null,
-                artwork_url: song.artwork || null,
-                duration_seconds: song.duration || null,
-                source_type: song.source || "online",
-                source_url: song.url || null
-              });
+          // Merge server songs into SQLite
+          for (const s of serverSongs) {
+            mergedMap.set(s.id, s);
+            await dbSaveLikedSong(userId, s);
+          }
 
-              await supabase.from("liked_songs").upsert({
-                user_id: userId,
-                song_id: song.id
-              });
+          // Merge local songs into server (Never delete local songs on sync!)
+          for (const lSong of currentLocal) {
+            if (!mergedMap.has(lSong.id)) {
+              mergedMap.set(lSong.id, lSong);
+              try {
+                await supabase.from("songs").upsert({
+                  id: lSong.id,
+                  title: lSong.title,
+                  normalized_title: lSong.normalized_title || lSong.title.toLowerCase().trim(),
+                  artist: lSong.artist,
+                  album: lSong.album || null,
+                  artwork_url: lSong.artwork || null,
+                  duration_seconds: lSong.duration || null,
+                  source_type: lSong.source || "online",
+                  source_url: lSong.url || null,
+                });
+                await supabase.from("liked_songs").upsert({
+                  user_id: userId,
+                  song_id: lSong.id,
+                });
+              } catch (_) {}
             }
           }
+
+          const combined = Array.from(mergedMap.values());
+          liked = combined;
+          rebuildMaps(liked);
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("Supabase liked songs sync error:", e);
+    }
   },
 
   toggleLike: async (song) => {
@@ -368,6 +373,52 @@ export const useLibraryStore = create<LikedState>((set, get) => ({
       parsedLiked: [],
       titleToArtistsMap: new Map(),
     });
+  },
+
+  restoreCuratedLikedSongs: async () => {
+    let user = null;
+    try {
+      const { useAuthStore } = require("./authStore");
+      user = useAuthStore.getState().userProfile;
+    } catch (e) {}
+
+    const userId = user?.id || "guest-user";
+    const isAdmin = user?.isAdmin === true || user?.is_owner === true;
+
+    try {
+      const likedJson = require("../assets/likedSongs.json");
+      const formatted: Song[] = likedJson.map((s: any, i: number) => ({
+        id: s.id || `json:${s.title}-${s.artist}-${i}`,
+        title: s.title,
+        artist: s.artist,
+        album: s.album || "",
+        artwork: s.artwork || "",
+        url: s.url || "",
+        duration: s.duration || 0,
+        source: s.source || "online",
+      }));
+
+      for (const s of formatted) {
+        await dbSaveLikedSong(userId, s);
+      }
+
+      const currentLocal = await dbGetLikedSongs(userId);
+      const parsedLiked = currentLocal.map(getParsedSong);
+      const likedIds = new Set(currentLocal.map((s) => s.id));
+      const titleToArtistsMap = new Map<string, string[][]>();
+      for (const s of currentLocal) {
+        const target = getParsedSong(s);
+        const titleKey = target.normalizedTitle;
+        if (!titleToArtistsMap.has(titleKey)) {
+          titleToArtistsMap.set(titleKey, []);
+        }
+        titleToArtistsMap.get(titleKey)!.push(target.artists);
+      }
+      set({ liked: currentLocal, parsedLiked, likedIds, titleToArtistsMap });
+      useToastStore.getState().show(`Restored ${currentLocal.length} curated liked songs!`);
+    } catch (err) {
+      console.error("Failed to restore curated songs:", err);
+    }
   },
 
   resolveAndPlay: async (item, contextList) => {

@@ -13,7 +13,7 @@ import { SongRow } from "../../components/SongRow";
 import { EmptyState } from "../../components/EmptyState";
 import { SkeletonRow } from "../../components/SkeletonRow";
 import { pickLocalSongs } from "../../services/localFiles";
-import { dbGetPlaylists } from "../../services/sqlite";
+import { dbGetPlaylists, dbSavePlaylist } from "../../services/sqlite";
 import { supabase } from "../../services/supabase";
 import { Song } from "../../types/song";
 
@@ -64,6 +64,14 @@ export default function Library() {
           if (item && item.id) {
             combinedMap.set(String(item.id), {
               ...item,
+              isPublic: item.is_public,
+            });
+            await dbSavePlaylist({
+              id: item.id,
+              userId: item.user_id || userId,
+              name: item.name,
+              description: item.description,
+              coverImage: item.cover_url,
               isPublic: item.is_public,
             });
           }
