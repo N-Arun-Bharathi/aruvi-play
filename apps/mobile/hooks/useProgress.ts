@@ -1,45 +1,19 @@
-import { useEffect, useState } from "react";
-import TrackPlayer from "react-native-track-player";
+import { useProgress as useRNTPProgress } from "react-native-track-player";
 import { usePlayerStore } from "../store/playerStore";
 
-export function useProgress() {
-  const isPlaying = usePlayerStore((s) => s.isPlaying);
-  const currentId = usePlayerStore((s) => s.current?.id);
-  const [state, setState] = useState({ position: 0, duration: 0 });
+export function useProgress(updateInterval = 250) {
+  const current = usePlayerStore((s) => s.current);
+  const rntpProgress = useRNTPProgress(updateInterval);
 
-  useEffect(() => {
-    let mounted = true;
-    let timerId: any = null;
+  const rawPosition = rntpProgress.position || 0;
+  const rawDuration = rntpProgress.duration || 0;
 
-    const tick = async () => {
-      try {
-        const progress = await TrackPlayer.getProgress();
-        if (mounted) {
-          const newPos = Math.round(progress.position || 0);
-          const newDur = Math.round(progress.duration || 0);
-          setState((prev) => {
-            if (prev.position === newPos && prev.duration === newDur) return prev;
-            return { position: newPos, duration: newDur };
-          });
-        }
-      } catch (e) {
-        // Ignore unbound service errors
-      }
+  const position = Math.max(0, rawPosition);
+  const duration = rawDuration > 0 ? rawDuration : (current?.duration || 0);
 
-      if (mounted && isPlaying) {
-        timerId = setTimeout(tick, 500);
-      }
-    };
-
-    tick();
-
-    return () => {
-      mounted = false;
-      if (timerId) {
-        clearTimeout(timerId);
-      }
-    };
-  }, [isPlaying, currentId]);
-
-  return state;
+  return {
+    position,
+    duration,
+    buffered: rntpProgress.buffered || 0,
+  };
 }

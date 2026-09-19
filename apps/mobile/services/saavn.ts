@@ -13,7 +13,6 @@ const songByIdCache = new Map<string, Song>();
 
 const BASE_URLS = [
   "https://www.jiosaavn.com",
-  "https://jiosaavn-api-beta.vercel.app",
 ];
 
 let currentBaseIndex = 0;
@@ -456,4 +455,199 @@ export async function resolveSong(title: string, artist: string, id?: string): P
   }
   return null;
 }
+
+export interface LyricLine {
+  time: number;
+  text: string;
+}
+
+export interface LyricsData {
+  synced: boolean;
+  lines: LyricLine[];
+  plainText: string;
+}
+
+export function parseLrc(lrcText: string): LyricLine[] {
+  if (!lrcText) return [];
+  const lines = lrcText.split(/\r?\n/);
+  const result: LyricLine[] = [];
+  const timeRegex = /\[(\d{1,2}):(\d{1,2}(?:\.\d{1,3})?)\]/g;
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const matches = Array.from(line.matchAll(timeRegex));
+    if (matches.length > 0) {
+      const text = line.replace(timeRegex, "").trim();
+      if (text) {
+        for (const match of matches) {
+          const minutes = parseInt(match[1], 10);
+          const seconds = parseFloat(match[2]);
+          const time = minutes * 60 + seconds;
+          result.push({ time, text });
+        }
+      }
+    }
+  }
+
+  result.sort((a, b) => a.time - b.time);
+  return result;
+}
+
+export async function getSongLyrics(
+  songId?: string,
+  title?: string,
+  artist?: string
+): Promise<LyricsData | null> {
+  const cleanTitle = (title || "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\[[^\]]*\]/g, "")
+    .replace(/feat\..*/i, "")
+    .trim();
+  const firstArtist = artist ? artist.split(/[;,/]/)[0].trim() : "";
+
+  // 1. Primary: Query LRCLIB API for real-time synchronized LRC lyrics
+  if (cleanTitle) {
+    try {
+      const lrcRes = await axios.get("https://lrclib.net/api/get", {
+        params: {
+          track_name: cleanTitle,
+          artist_name: firstArtist,
+        },
+        headers: {
+          "User-Agent": "AruviPlay/1.0.0 (https://aruvi.app)",
+        },
+        timeout: 6000,
+      });
+
+      if (lrcRes.data?.syncedLyrics) {
+        const lines = parseLrc(lrcRes.data.syncedLyrics);
+        if (lines.length > 0) {
+          return {
+            synced: true,
+            lines,
+            plainText: lrcRes.data.plainLyrics || lines.map((l) => l.text).join("\n"),
+          };
+        }
+      }
+      if (lrcRes.data?.plainLyrics) {
+        const plain: string = lrcRes.data.plainLyrics.trim();
+        const lines: LyricLine[] = plain
+          .split("\n")
+          .filter((l: string) => l.trim().length > 0)
+          .map((t: string, idx: number) => ({ time: idx * 4, text: t.trim() }));
+        return { synced: false, lines, plainText: plain };
+      }
+    } catch (e) {}
+
+    // LRCLIB Search fallback
+    try {
+      const searchRes = await axios.get("https://lrclib.net/api/search", {
+        params: { q: `${cleanTitle} ${artist || ""}`.trim() },
+        headers: {
+          "User-Agent": "AruviPlay/1.0.0 (https://aruvi.app)",
+        },
+        timeout: 6000,
+      });
+
+      if (Array.isArray(searchRes.data) && searchRes.data.length > 0) {
+        const syncedItem = searchRes.data.find((x: any) => x.syncedLyrics);
+        if (syncedItem?.syncedLyrics) {
+          const lines = parseLrc(syncedItem.syncedLyrics);
+          if (lines.length > 0) {
+            return {
+              synced: true,
+              lines,
+              plainText: syncedItem.plainLyrics || lines.map((l: LyricLine) => l.text).join("\n"),
+            };
+          }
+        }
+        const plainItem = searchRes.data.find((x: any) => x.plainLyrics);
+        if (plainItem?.plainLyrics) {
+          const plain: string = plainItem.plainLyrics.trim();
+          const lines: LyricLine[] = plain
+            .split("\n")
+            .filter((l: string) => l.trim().length > 0)
+            .map((t: string, idx: number) => ({ time: idx * 4, text: t.trim() }));
+          return { synced: false, lines, plainText: plain };
+        }
+      }
+    } catch (err) {}
+  }
+
+  // 2. Direct JioSaavn lyrics.getLyrics by songId
+  if (songId && !songId.startsWith("local:")) {
+    try {
+      let data = await request("/api.php", {
+        __call: "lyrics.getLyrics",
+        lyrics_id: songId,
+        ctx: "web6dot0",
+        api_version: 4,
+        _format: "json",
+        _marker: "0",
+      });
+      if (typeof data === "string") {
+        try {
+          data = JSON.parse(data);
+        } catch (e) {}
+      }
+      if (data && data.lyrics) {
+        const plain: string = decodeHtml(data.lyrics).trim();
+        const lines: LyricLine[] = plain
+          .split("\n")
+          .filter((l: string) => l.trim().length > 0)
+          .map((t: string, idx: number) => ({ time: idx * 4, text: t.trim() }));
+        return { synced: false, lines, plainText: plain };
+      }
+    } catch (e) {
+      console.warn("JioSaavn lyrics error:", e);
+    }
+  }
+
+  // 3. Fallback: Search Saavn autocomplete to find canonical JioSaavn ID
+  if (cleanTitle) {
+    try {
+      let sData = await request("/api.php", {
+        __call: "autocomplete.get",
+        query: cleanTitle,
+        _format: "json",
+        _marker: "0",
+        ctx: "web6dot0",
+      });
+      if (typeof sData === "string") {
+        try {
+          sData = JSON.parse(sData);
+        } catch (e) {}
+      }
+
+      const songItem = sData?.songs?.data?.[0];
+      if (songItem?.id && songItem.id !== songId) {
+        let lData = await request("/api.php", {
+          __call: "lyrics.getLyrics",
+          lyrics_id: songItem.id,
+          ctx: "web6dot0",
+          api_version: 4,
+          _format: "json",
+          _marker: "0",
+        });
+        if (typeof lData === "string") {
+          try {
+            lData = JSON.parse(lData);
+          } catch (e) {}
+        }
+        if (lData && lData.lyrics) {
+          const plain: string = decodeHtml(lData.lyrics).trim();
+          const lines: LyricLine[] = plain
+            .split("\n")
+            .filter((l: string) => l.trim().length > 0)
+            .map((t: string, idx: number) => ({ time: idx * 4, text: t.trim() }));
+          return { synced: false, lines, plainText: plain };
+        }
+      }
+    } catch (e) {}
+  }
+
+  return null;
+}
+
 

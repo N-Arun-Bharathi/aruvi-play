@@ -118,7 +118,8 @@ export default function Search() {
 
   const handleSongPlay = (song: Song) => {
     saveSearchHistory(q || song.title);
-    playSong(song, [song]);
+    const contextQueue = results && results.length > 0 ? results : [song];
+    playSong(song, contextQueue);
     router.push("/player");
   };
 
@@ -138,22 +139,15 @@ export default function Search() {
       <AppHeader title="Search" />
       
       {/* Search Input Bar */}
-      <View className="px-5 py-3 flex-row items-center">
-        <View className="flex-1">
-          <SearchBar
-            value={q}
-            onChangeText={setQ}
-            onSubmit={() => {
-              Keyboard.dismiss();
-              saveSearchHistory(q);
-            }}
-          />
-          {q.length > 0 && (
-            <Pressable onPress={handleClear} hitSlop={10}>
-              <Icon name="close" size={18} color={theme.secondaryText} />
-            </Pressable>
-          )}
-        </View>
+      <View className="px-5 py-3">
+        <SearchBar
+          value={q}
+          onChangeText={setQ}
+          onSubmit={() => {
+            Keyboard.dismiss();
+            saveSearchHistory(q);
+          }}
+        />
       </View>
 
       {loading && (

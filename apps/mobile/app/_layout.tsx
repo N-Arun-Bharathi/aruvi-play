@@ -83,18 +83,113 @@ function RootLayoutNav() {
 
 
 
-  // ── Deep Link handler for email verification ─────────────────
+  // ── Deep Link handler for shared songs and email verification ──
   const url = Linking.useURL();
+  const lastHandledUrlRef = React.useRef<string | null>(null);
+
   useEffect(() => {
-    if (url && (url.includes("type=signup") || url.includes("type=invite"))) {
+    if (!url || lastHandledUrlRef.current === url) return;
+    lastHandledUrlRef.current = url;
+
+    // 0. Notification Click from system notification bar
+    if (url.includes("notification") || url.includes("trackplayer://")) {
+      const current = usePlayerStore.getState().current;
+      if (current) {
+        router.push("/player" as any);
+      } else {
+        router.replace("/(tabs)" as any);
+      }
+      return;
+    }
+
+    // 1. Email Verification deep link
+    if (url.includes("type=signup") || url.includes("type=invite")) {
       setTimeout(async () => {
         await hydrateAuth();
         const profile = useAuthStore.getState().userProfile;
         const name = (profile as any)?.display_name || profile?.name || "User";
         useToastStore.getState().show(`Congrats ${name}! Your account is verified.`);
       }, 1000);
+      return;
     }
-  }, [url]);
+
+    // 2. Shared Song Deep Link (aruviplay://song?... or https://.../song?...)
+    if (url.includes("song") || url.includes("id=")) {
+      (async () => {
+        try {
+          console.log("[DeepLink] Received shared song URL:", url);
+          const parsed = Linking.parse(url);
+          const queryParams = parsed.queryParams || {};
+
+          let songId = (queryParams.id as string) || "";
+          const rawTitle = (queryParams.title as string) || "";
+          const rawArtist = (queryParams.artist as string) || "";
+          const rawArtwork = (queryParams.artwork as string) || "";
+          const rawSourceUrl = (queryParams.url as string) || "";
+
+          // Extract song ID from path (e.g., /s/song/or8LPjW6 or /song/or8LPjW6)
+          if (!songId && parsed.path) {
+            const parts = parsed.path.split("/").filter(Boolean);
+            if (parts.length > 0) {
+              songId = parts[parts.length - 1];
+            }
+          }
+
+          if (!songId) {
+            const pathMatch = url.match(/\/song\/([a-zA-Z0-9_-]+)/i) || url.match(/\/s\/([a-zA-Z0-9_-]+)/i);
+            if (pathMatch && pathMatch[1]) {
+              songId = pathMatch[1];
+            }
+          }
+
+          const title = rawTitle ? decodeURIComponent(rawTitle) : "";
+          const artist = rawArtist ? decodeURIComponent(rawArtist) : "";
+          const artwork = rawArtwork ? decodeURIComponent(rawArtwork) : "";
+          const sourceUrl = rawSourceUrl ? decodeURIComponent(rawSourceUrl) : "";
+
+          if (!songId && !title) return;
+
+          useToastStore.getState().show(`Loading shared track...`);
+
+          // Ensure player is initialized
+          await initPlayer();
+
+          let songToPlay: any = null;
+
+          if (sourceUrl && title) {
+            songToPlay = {
+              id: songId || `shared-${Date.now()}`,
+              title,
+              artist: artist || "Unknown Artist",
+              album: "Shared Track",
+              artwork: artwork || "",
+              url: sourceUrl,
+              source: "online",
+            };
+          } else {
+            const { resolveSong, getSongById } = require("../services/saavn");
+            if (songId) {
+              songToPlay = await getSongById(songId);
+            }
+            if (!songToPlay && title) {
+              songToPlay = await resolveSong(title, artist, songId);
+            }
+          }
+
+          if (songToPlay) {
+            console.log("[DeepLink] Playing shared song:", songToPlay.title);
+            await usePlayerStore.getState().playSong(songToPlay);
+            router.push("/player" as any);
+            useToastStore.getState().show(`Now Playing: "${songToPlay.title}" 🎶`);
+          } else {
+            useToastStore.getState().show("Could not find the shared song.");
+          }
+        } catch (e) {
+          console.error("[DeepLink] Error playing shared song:", e);
+        }
+      })();
+    }
+  }, [url, initPlayer, hydrateAuth, router]);
 
   // ── Navigation guard — runs on every authMode / segment change ─
   useEffect(() => {
@@ -153,6 +248,7 @@ function RootLayoutNav() {
       <Stack.Screen name="profile/edit" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="profile/appearance" />
       <Stack.Screen name="profile/playback" />
+      <Stack.Screen name="notification.click" />
     </Stack>
   );
 }

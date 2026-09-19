@@ -5,7 +5,6 @@ import {
   Text,
   Pressable,
   ScrollView,
-  Share,
   ActivityIndicator,
 } from "react-native";
 import { Image } from "expo-image";
@@ -99,20 +98,7 @@ export function SongOptionsModal({ song, visible, onClose }: SongOptionsModalPro
     onClose();
   };
 
-  const handleShare = async () => {
-    try {
-      const shareUrl = song.url || `https://saavn.com/s/song/${song.id}`;
-      await Share.share({
-        title: song.title,
-        message: `Listen to "${song.title}" by ${song.artist} on Aruvi Play!\n${shareUrl}`,
-        url: shareUrl,
-      });
-    } catch (e) {
-      console.error("Share error:", e);
-    } finally {
-      onClose();
-    }
-  };
+
 
   const handleAddToSpecificPlaylist = async (playlist: any) => {
     try {
@@ -315,19 +301,6 @@ export function SongOptionsModal({ song, visible, onClose }: SongOptionsModalPro
                   Add to Playlist
                 </Text>
                 <Icon name="chevron-right" size={16} color={theme.mutedText} />
-              </Pressable>
-
-              {/* Option 5: Share Song */}
-              <Pressable
-                onPress={handleShare}
-                className="py-3.5 px-3 rounded-2xl flex-row items-center active:bg-white/10 mb-2"
-              >
-                <View className="w-10 h-10 rounded-2xl items-center justify-center mr-3 bg-amber-500/15 border border-amber-500/30">
-                  <Icon name="share" size={20} color="#F59E0B" />
-                </View>
-                <Text className="text-sm font-bold flex-1" style={{ color: theme.primaryText }}>
-                  Share Song
-                </Text>
               </Pressable>
             </View>
           )}

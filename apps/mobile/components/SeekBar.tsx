@@ -22,11 +22,19 @@ export function SeekBar() {
         minimumTrackTintColor="#1DB954"
         maximumTrackTintColor="#3A3A3A"
         thumbTintColor="#FFFFFF"
-        onSlidingStart={() => setScrubbing(position)}
+        onSlidingStart={(v) => setScrubbing(v)}
         onValueChange={(v) => setScrubbing(v)}
         onSlidingComplete={async (v) => {
-          await seekTo(v);
-          setScrubbing(null);
+          try {
+            setScrubbing(v);
+            await seekTo(v);
+          } catch (e) {
+            console.warn("Seek error:", e);
+          } finally {
+            setTimeout(() => {
+              setScrubbing(null);
+            }, 150);
+          }
         }}
       />
       <View className="flex-row justify-between -mt-1">

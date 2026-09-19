@@ -501,19 +501,20 @@ export class QueueManager {
       const currentSong = this.queue[this.index];
       if (!currentSong) return;
 
-      console.log("QueueManager: onTrackFinished called for song:", currentSong.title, currentSong.id);
+      const trackKey = currentSong.id || currentSong.title;
+      console.log("QueueManager: onTrackFinished called for song:", currentSong.title, trackKey);
 
-      if (this.currentlyPlayingId && this.currentlyPlayingId !== currentSong.id) {
+      if (this.currentlyPlayingId && currentSong.id && this.currentlyPlayingId !== currentSong.id) {
         console.log("QueueManager: Skipping onTrackFinished because currentlyPlayingId doesn't match current song:", this.currentlyPlayingId, currentSong.id);
         return;
       }
 
-      if (this.lastFinishedId === currentSong.id && store.repeat !== "one") {
-        console.log("QueueManager: Skipping onTrackFinished because song already finished:", currentSong.id);
+      if (this.lastFinishedId === trackKey && store.repeat !== "one") {
+        console.log("QueueManager: Skipping onTrackFinished because song already finished:", trackKey);
         return;
       }
 
-      this.lastFinishedId = currentSong.id;
+      this.lastFinishedId = trackKey;
 
       if (store.repeat === "one") {
         if (this.repeatOnePlayedCount < 1) {

@@ -4,14 +4,12 @@ import {
   Text,
   ScrollView,
   Pressable,
-  Switch,
   TextInput,
   Modal,
   KeyboardAvoidingView,
   Platform,
   Alert,
   ActivityIndicator,
-  Linking,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Icon } from "../../components/Icon";
@@ -79,9 +77,7 @@ export default function ProfileScreen() {
   const openUpdateModal = useUpdateStore((s) => s.openModal);
 
   const { versionName: currentVersion, versionCode: currentVersionCode } = getCurrentAppVersion();
-
-  const bottomPadding = currentSong ? 210 : 150;
-
+  const bottomPadding = currentSong ? 210 : 140;
 
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [saveEmail, setSaveEmail] = useState("");
@@ -134,18 +130,17 @@ export default function ProfileScreen() {
   };
 
   const renderSecretKeySection = () => {
-    // Only render secret key / unlocked content for guest users
     if (!userProfile?.is_guest) return null;
 
     if (authMode === "loading") {
       return (
         <View
-          className="mx-5 mb-5 p-5 rounded-3xl border items-center justify-center"
+          className="mx-5 mb-4 p-4 rounded-2xl border items-center justify-center"
           style={{ backgroundColor: theme.card, borderColor: theme.border }}
         >
           <ActivityIndicator size="small" color={theme.accent} />
           <Text className="text-xs font-semibold mt-2" style={{ color: theme.secondaryText }}>
-            Checking profile authorization...
+            Checking authorization...
           </Text>
         </View>
       );
@@ -154,27 +149,27 @@ export default function ProfileScreen() {
     if (secretKeyUnlocked) {
       return (
         <View
-          className="mx-5 mb-5 p-5 rounded-3xl border shadow-sm"
+          className="mx-5 mb-4 p-4 rounded-3xl border shadow-sm"
           style={{ backgroundColor: theme.card, borderColor: theme.border }}
         >
-          <View className="flex-row items-center justify-between mb-4">
+          <View className="flex-row items-center justify-between mb-3">
             <View className="flex-row items-center flex-1 pr-2">
-              <View className="w-10 h-10 rounded-2xl items-center justify-center mr-3 bg-red-500/15 border border-red-500/20">
-                <Icon name="heart-filled" size={20} color="#EF4444" />
+              <View className="w-9 h-9 rounded-xl items-center justify-center mr-2.5 bg-red-500/15 border border-red-500/20">
+                <Icon name="heart-filled" size={18} color="#EF4444" />
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center">
-                  <Text className="text-base font-bold mr-2" style={{ color: theme.primaryText }}>
+                  <Text className="text-sm font-bold mr-2" style={{ color: theme.primaryText }}>
                     Protected Liked Songs
                   </Text>
                   <View className="px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.accent}20` }}>
                     <Text className="text-[9px] font-extrabold uppercase tracking-wider" style={{ color: theme.accent }}>
-                      Secret Unlocked
+                      Unlocked
                     </Text>
                   </View>
                 </View>
-                <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
-                  {liked.length} {liked.length === 1 ? "song" : "songs"} in protected library
+                <Text className="text-[11px] mt-0.5" style={{ color: theme.secondaryText }}>
+                  {liked.length} {liked.length === 1 ? "song" : "songs"}
                 </Text>
               </View>
             </View>
@@ -182,17 +177,17 @@ export default function ProfileScreen() {
             {liked.length > 0 && (
               <Pressable
                 onPress={() => playSong(liked[0], liked)}
-                className="px-3.5 py-2 rounded-xl bg-accent flex-row items-center active:opacity-80"
+                className="px-3 py-1.5 rounded-xl bg-accent flex-row items-center active:opacity-80"
               >
-                <Icon name="play" size={14} color="#000000" />
-                <Text className="text-xs font-bold text-black ml-1.5">Play All</Text>
+                <Icon name="play" size={12} color="#000000" />
+                <Text className="text-xs font-bold text-black ml-1">Play</Text>
               </Pressable>
             )}
           </View>
 
           {liked.length > 0 ? (
             <View className="mt-1">
-              {liked.slice(0, 10).map((song, index) => (
+              {liked.slice(0, 5).map((song, index) => (
                 <SongRow
                   key={song.id || index}
                   song={song}
@@ -201,48 +196,44 @@ export default function ProfileScreen() {
                   onLike={() => toggleLike(song)}
                 />
               ))}
-              {liked.length > 10 && (
+              {liked.length > 5 && (
                 <Pressable
                   onPress={() => router.push("/(tabs)/library" as any)}
-                  className="py-2.5 items-center justify-center border-t border-white/5 mt-2"
+                  className="py-2 items-center justify-center border-t border-white/5 mt-1"
                 >
                   <Text className="text-xs font-bold" style={{ color: theme.accent }}>
-                    View all {liked.length} songs in Library →
+                    View all {liked.length} songs →
                   </Text>
                 </Pressable>
               )}
             </View>
-          ) : (
-            <Text className="text-xs py-4 text-center" style={{ color: theme.secondaryText }}>
-              No liked songs found in your library yet.
-            </Text>
-          )}
+          ) : null}
         </View>
       );
     }
 
     return (
       <View
-        className="mx-5 mb-5 p-5 rounded-3xl border shadow-sm"
+        className="mx-5 mb-4 p-4 rounded-3xl border shadow-sm"
         style={{ backgroundColor: theme.card, borderColor: theme.border }}
       >
-        <View className="flex-row items-center mb-3">
-          <View className="w-10 h-10 rounded-2xl items-center justify-center mr-3 bg-amber-500/10 border border-amber-500/20">
-            <Icon name="lock" size={20} color="#F59E0B" />
+        <View className="flex-row items-center mb-2.5">
+          <View className="w-8 h-8 rounded-xl items-center justify-center mr-2.5 bg-amber-500/10 border border-amber-500/20">
+            <Icon name="lock" size={16} color="#F59E0B" />
           </View>
           <View className="flex-1">
-            <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
-              Protected Liked Songs
+            <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>
+              Protected Access
             </Text>
-            <Text className="text-xs mt-0.5 leading-relaxed" style={{ color: theme.secondaryText }}>
-              Enter your secret access code below to unlock the protected Liked Songs section.
+            <Text className="text-[11px] mt-0.5" style={{ color: theme.secondaryText }}>
+              Enter secret code to unlock protected library
             </Text>
           </View>
         </View>
 
-        <View className="mt-3">
+        <View className="mt-2">
           <View
-            className="flex-row items-center rounded-2xl border px-3"
+            className="flex-row items-center rounded-xl border px-3"
             style={{
               backgroundColor: theme.elevatedSurface,
               borderColor: secretError ? "#EF4444" : theme.border,
@@ -254,53 +245,50 @@ export default function ProfileScreen() {
                 setSecretInput(txt);
                 if (secretError) setSecretError("");
               }}
-              placeholder="Paste secret code here..."
+              placeholder="Enter secret key..."
               placeholderTextColor={theme.mutedText}
               secureTextEntry={!showSecretText}
               autoCapitalize="none"
               autoCorrect={false}
-              className="flex-1 py-3 text-sm"
+              className="flex-1 py-2.5 text-xs"
               style={{ color: theme.primaryText }}
             />
 
             {secretInput.length > 0 && (
               <Pressable
                 onPress={() => setShowSecretText(!showSecretText)}
-                className="p-2 mr-1"
+                className="p-1.5 mr-1"
               >
-                <Icon name={showSecretText ? "eye-off" : "eye"} size={16} color={theme.secondaryText} />
+                <Icon name={showSecretText ? "eye-off" : "eye"} size={15} color={theme.secondaryText} />
               </Pressable>
             )}
 
             <Pressable
               onPress={handlePasteSecret}
-              className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 active:bg-white/10"
+              className="px-2 py-1 rounded-md bg-white/5 border border-white/10 active:bg-white/10"
             >
-              <Text className="text-[11px] font-semibold text-white">Paste</Text>
+              <Text className="text-[10px] font-semibold text-white">Paste</Text>
             </Pressable>
           </View>
 
           {secretError ? (
-            <View className="flex-row items-center mt-2.5 px-1">
-              <Icon name="alert" size={14} color="#EF4444" />
-              <Text className="text-xs font-semibold text-red-400 ml-1.5 flex-1">
-                {secretError}
-              </Text>
-            </View>
+            <Text className="text-[11px] font-semibold text-red-400 mt-1 px-1">
+              {secretError}
+            </Text>
           ) : null}
 
           <Pressable
             onPress={handleUnlockSecretKey}
             disabled={isVerifying}
-            className="mt-4 py-3 rounded-2xl bg-accent items-center justify-center active:opacity-80 flex-row"
+            className="mt-2.5 py-2.5 rounded-xl bg-accent items-center justify-center active:opacity-80 flex-row"
           >
             {isVerifying ? (
               <ActivityIndicator size="small" color="#000000" />
             ) : (
               <>
-                <Icon name="unlock" size={16} color="#000000" />
-                <Text className="text-black font-extrabold text-xs ml-2">
-                  Unlock Protected Content
+                <Icon name="unlock" size={14} color="#000000" />
+                <Text className="text-black font-extrabold text-xs ml-1.5">
+                  Unlock
                 </Text>
               </>
             )}
@@ -312,53 +300,71 @@ export default function ProfileScreen() {
 
   return (
     <AppScreen edges={["top"]}>
-      <AppHeader title="Profile & Settings" />
+      {/* ── Top Header with Theme Toggle Icon Only ───────────────── */}
+      <AppHeader
+        title="Profile"
+        rightActions={
+          <Pressable
+            onPress={toggleTheme}
+            hitSlop={10}
+            className="w-10 h-10 rounded-full border items-center justify-center active:scale-90"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.06)",
+              borderColor: "rgba(255,255,255,0.12)",
+            }}
+          >
+            <Icon name={isDark ? "sun" : "moon"} size={18} color={theme.accent} />
+          </Pressable>
+        }
+      />
+
       <ScrollView
-        contentContainerStyle={{ paddingBottom: bottomPadding }}
+        contentContainerStyle={{ paddingBottom: bottomPadding, paddingTop: 14 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets={true}
       >
-        {/* User Card Frame */}
+        {/* ── 1. User Info Glass Card ──────────────────────────────── */}
         <View
-          className="mx-5 my-5 p-5 rounded-3xl border flex-row items-center relative overflow-hidden shadow-sm"
+          className="mx-5 mb-4 p-4 rounded-3xl border flex-row items-center shadow-sm"
           style={{ backgroundColor: theme.card, borderColor: theme.border }}
         >
-          <ProfileAvatar size={68} />
+          <ProfileAvatar size={56} />
 
-          <View className="flex-1 ml-4 justify-center">
-            <Text className="text-lg font-bold" style={{ color: theme.primaryText }}>
+          <View className="flex-1 ml-3.5 justify-center">
+            <Text className="text-base font-extrabold tracking-tight" style={{ color: theme.primaryText }}>
               {userProfile?.name || "Guest User"}
             </Text>
-            <Text className="text-xs font-semibold mt-0.5" style={{ color: theme.secondaryText }}>
-              {userProfile?.email || (userProfile?.is_guest ? "Temporary Guest Session" : "Free Sync Active")}
+            <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
+              {userProfile?.email || (userProfile?.is_guest ? "Temporary Session" : "Free Sync Active")}
             </Text>
-            <View className="flex-row mt-2.5">
+
+            <View className="flex-row mt-2">
               <View
                 className="px-2.5 py-0.5 rounded-full"
                 style={{
                   backgroundColor: isAdmin
-                    ? `${theme.accent}15`
+                    ? `${theme.accent}20`
                     : userProfile?.is_guest
                     ? `${theme.warning}15`
-                    : theme.elevatedSurface,
+                    : `${theme.accent}15`,
                 }}
               >
                 <Text
-                  className="text-[9px] font-extrabold uppercase tracking-wider"
+                  className="text-[9px] font-black uppercase tracking-wider"
                   style={{
                     color: isAdmin
                       ? theme.accent
                       : userProfile?.is_guest
                       ? theme.warning
-                      : theme.secondaryText,
+                      : theme.accent,
                   }}
                 >
                   {isAdmin
                     ? "Admin"
                     : userProfile?.is_guest
-                    ? "Guest Account"
-                    : "Registered User"}
+                    ? "Guest Mode"
+                    : "Aruvi Member"}
                 </Text>
               </View>
             </View>
@@ -367,88 +373,54 @@ export default function ProfileScreen() {
           {!userProfile?.is_guest && (
             <Pressable
               onPress={() => router.push("/profile/edit" as any)}
-              className="p-2.5 bg-white/5 rounded-full border border-white/5 active:bg-white/10"
+              className="w-9 h-9 rounded-full bg-white/5 border border-white/10 items-center justify-center active:bg-white/10"
             >
-              <Icon name="edit" size={16} color={theme.accent} />
+              <Icon name="edit" size={15} color={theme.accent} />
             </Pressable>
           )}
         </View>
 
-        {/* Quick Dark / Light Theme Switch Card */}
+        {/* ── 2. Preferred Music Language Section ──────────────────── */}
         <View
-          className="mx-5 mb-5 p-5 rounded-3xl border flex-row items-center justify-between shadow-sm"
-          style={{ backgroundColor: theme.glassCard, borderColor: theme.glassBorder }}
-        >
-          <View className="flex-row items-center flex-1 pr-3">
-            <View 
-              className="w-10 h-10 rounded-2xl items-center justify-center mr-3 border"
-              style={{ backgroundColor: theme.accentMuted, borderColor: theme.glassBorder }}
-            >
-              <Icon name={isDark ? "moon" : "sun"} size={20} color={theme.accent} />
-            </View>
-            <View className="flex-1">
-              <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
-                {isDark ? "Dark Theme" : "Light Theme"}
-              </Text>
-              <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
-                {isDark ? "Sleek obsidian glassmorphism mode" : "Luminous bright daylight mode"}
-              </Text>
-            </View>
-          </View>
-
-          <Pressable
-            onPress={toggleTheme}
-            className="px-4 py-2.5 rounded-2xl border flex-row items-center active:opacity-80 shadow-sm"
-            style={{ backgroundColor: theme.accent, borderColor: theme.accent }}
-          >
-            <Icon name={isDark ? "sun" : "moon"} size={16} color="#FFFFFF" />
-            <Text className="text-xs font-bold text-white ml-2">
-              {isDark ? "Light" : "Dark"} Mode
-            </Text>
-          </Pressable>
-        </View>
-
-        {/* Preferred Song Language Customization Card */}
-        <View
-          className="mx-5 mb-5 p-5 rounded-3xl border shadow-sm"
+          className="mx-5 mb-4 p-4 rounded-3xl border shadow-sm"
           style={{ backgroundColor: theme.card, borderColor: theme.border }}
         >
-          <View className="flex-row items-center justify-between mb-1">
+          <View className="flex-row items-center justify-between mb-3">
             <View className="flex-row items-center">
               <View
-                className="w-9 h-9 rounded-2xl items-center justify-center mr-2.5 border"
+                className="w-8 h-8 rounded-xl items-center justify-center mr-2.5 border"
                 style={{ backgroundColor: `${theme.accent}15`, borderColor: `${theme.accent}30` }}
               >
-                <Icon name="music" size={18} color={theme.accent} />
+                <Icon name="music" size={16} color={theme.accent} />
               </View>
               <View>
-                <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
-                  Preferred Song Language
+                <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>
+                  Preferred Music Language
                 </Text>
-                <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
-                  1st priority in search results & recommendations
+                <Text className="text-[11px] mt-0.5" style={{ color: theme.secondaryText }}>
+                  Search and recommendation priority
                 </Text>
               </View>
             </View>
           </View>
 
-          {/* Language Selection Chips */}
-          <View className="flex-row flex-wrap gap-2 mt-3">
+          {/* Language Chips */}
+          <View className="flex-row flex-wrap gap-2">
             {SUPPORTED_LANGUAGES.map((lang) => {
               const isSelected = activeLanguage.toLowerCase() === lang.id.toLowerCase();
               return (
                 <Pressable
                   key={lang.id}
                   onPress={() => handleSelectLanguage(lang.id)}
-                  className="px-3.5 py-2 rounded-2xl border flex-row items-center active:opacity-80 shadow-sm"
+                  className="px-3 py-1.5 rounded-xl border flex-row items-center active:opacity-80"
                   style={{
                     backgroundColor: isSelected ? `${theme.accent}20` : theme.elevatedSurface,
                     borderColor: isSelected ? theme.accent : theme.border,
                   }}
                 >
                   {isSelected && (
-                    <View className="w-4 h-4 rounded-full bg-accent items-center justify-center mr-1.5">
-                      <Icon name="check" size={10} color="#000000" />
+                    <View className="w-3.5 h-3.5 rounded-full bg-accent items-center justify-center mr-1">
+                      <Icon name="check" size={9} color="#000000" />
                     </View>
                   )}
                   <Text
@@ -459,7 +431,7 @@ export default function ProfileScreen() {
                   >
                     {lang.label}{" "}
                     <Text
-                      className="text-[10px] font-normal"
+                      className="text-[10px] font-normal opacity-70"
                       style={{ color: isSelected ? theme.accent : theme.mutedText }}
                     >
                       ({lang.native})
@@ -471,9 +443,9 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* APP UPDATES & VERSION CARD */}
+        {/* ── 3. App Version & Updates ─────────────────────────────── */}
         <View
-          className="mx-5 mb-5 p-5 rounded-3xl border shadow-sm"
+          className="mx-5 mb-4 p-4 rounded-3xl border shadow-sm"
           style={{
             backgroundColor: updateInfo?.hasUpdate ? `${theme.accent}12` : theme.card,
             borderColor: updateInfo?.hasUpdate ? `${theme.accent}50` : theme.border,
@@ -482,157 +454,109 @@ export default function ProfileScreen() {
           <View className="flex-row items-center justify-between">
             <View className="flex-row items-center flex-1 pr-2">
               <View
-                className="w-10 h-10 rounded-2xl items-center justify-center mr-3 border"
+                className="w-8 h-8 rounded-xl items-center justify-center mr-2.5 border"
                 style={{
-                  backgroundColor: updateInfo?.hasUpdate ? `${theme.accent}20` : `${theme.accent}15`,
+                  backgroundColor: updateInfo?.hasUpdate ? `${theme.accent}25` : `${theme.accent}15`,
                   borderColor: updateInfo?.hasUpdate ? theme.accent : `${theme.accent}30`,
                 }}
               >
                 <Icon
                   name={updateInfo?.hasUpdate ? "download" : "refresh"}
-                  size={18}
+                  size={16}
                   color={theme.accent}
                 />
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center">
-                  <Text className="text-base font-bold" style={{ color: theme.primaryText }}>
-                    {updateInfo?.hasUpdate ? "Update Available!" : "App Version"}
+                  <Text className="text-sm font-bold" style={{ color: theme.primaryText }}>
+                    {updateInfo?.hasUpdate ? "Update Ready" : "Aruvi Play"}
                   </Text>
-                  {updateInfo?.hasUpdate && (
-                    <View
-                      className="ml-2 px-2 py-0.5 rounded-full border"
-                      style={{ backgroundColor: `${theme.accent}25`, borderColor: theme.accent }}
-                    >
-                      <Text className="text-[10px] font-extrabold uppercase tracking-wider" style={{ color: theme.accent }}>
-                        v{updateInfo.versionName}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-                <Text className="text-xs mt-0.5" style={{ color: theme.secondaryText }}>
-                  {updateInfo?.hasUpdate
-                    ? "A newer version is available in the database."
-                    : `Current version v${currentVersion} (Build ${currentVersionCode})`}
-                </Text>
-              </View>
-            </View>
-          </View>
-
-          {updateInfo?.hasUpdate ? (
-            <View className="mt-3.5 pt-3.5 border-t" style={{ borderColor: `${theme.accent}30` }}>
-              {Boolean(updateInfo.releaseNotes) && (
-                <View
-                  className="p-3 rounded-2xl border mb-3"
-                  style={{ backgroundColor: theme.elevatedSurface, borderColor: theme.border }}
-                >
-                  <Text className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: theme.accent }}>
-                    What's New:
-                  </Text>
-                  <Text className="text-xs leading-relaxed" style={{ color: theme.primaryText }} numberOfLines={3}>
-                    {updateInfo.releaseNotes}
-                  </Text>
-                </View>
-              )}
-
-              <View className="flex-row space-x-3">
-                <Pressable
-                  onPress={openUpdateModal}
-                  className="flex-1 py-3 rounded-2xl border items-center justify-center active:opacity-80"
-                  style={{ backgroundColor: theme.elevatedSurface, borderColor: theme.border }}
-                >
-                  <Text className="text-xs font-bold" style={{ color: theme.primaryText }}>
-                    View Details
-                  </Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={installUpdateAction}
-                  className="flex-1 py-3 rounded-2xl bg-accent items-center justify-center flex-row active:opacity-80"
-                >
-                  <Icon name="download" size={14} color="#000000" />
-                  <Text className="text-xs font-extrabold text-black ml-1.5">
-                    Download & Install
-                  </Text>
-                </Pressable>
-              </View>
-            </View>
-          ) : (
-            <View className="mt-3.5 pt-3.5 border-t flex-row items-center justify-between" style={{ borderColor: theme.border }}>
-              <View className="flex-row items-center">
-                <View className="w-2 h-2 rounded-full bg-emerald-400 mr-2" />
-                <Text className="text-xs font-semibold" style={{ color: theme.secondaryText }}>
-                  Up to date
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() => checkUpdate(true)}
-                disabled={isCheckingUpdate}
-                className="px-3.5 py-2 rounded-2xl border flex-row items-center active:opacity-80"
-                style={{ backgroundColor: theme.elevatedSurface, borderColor: theme.border }}
-              >
-                {isCheckingUpdate ? (
-                  <ActivityIndicator size="small" color={theme.accent} />
-                ) : (
-                  <>
-                    <Icon name="refresh" size={12} color={theme.accent} />
-                    <Text className="text-xs font-bold ml-1.5" style={{ color: theme.accent }}>
-                      Check for Updates
+                  <View
+                    className="ml-2 px-2 py-0.2 rounded-full border"
+                    style={{
+                      backgroundColor: `${theme.accent}20`,
+                      borderColor: `${theme.accent}40`,
+                    }}
+                  >
+                    <Text className="text-[9px] font-black" style={{ color: theme.accent }}>
+                      v{updateInfo?.hasUpdate ? updateInfo.versionName : currentVersion}
                     </Text>
-                  </>
-                )}
-              </Pressable>
+                  </View>
+                </View>
+                <Text className="text-[11px] mt-0.5" style={{ color: theme.secondaryText }}>
+                  {updateInfo?.hasUpdate
+                    ? "A newer version is ready to install."
+                    : `Up to date (Build ${currentVersionCode})`}
+                </Text>
+              </View>
             </View>
-          )}
+
+            <Pressable
+              onPress={updateInfo?.hasUpdate ? installUpdateAction : () => checkUpdate(true)}
+              disabled={isCheckingUpdate}
+              className="px-3 py-1.5 rounded-xl border flex-row items-center active:opacity-80"
+              style={{
+                backgroundColor: updateInfo?.hasUpdate ? theme.accent : theme.elevatedSurface,
+                borderColor: updateInfo?.hasUpdate ? theme.accent : theme.border,
+              }}
+            >
+              {isCheckingUpdate ? (
+                <ActivityIndicator size="small" color={theme.accent} />
+              ) : (
+                <Text
+                  className="text-xs font-bold"
+                  style={{ color: updateInfo?.hasUpdate ? "#000000" : theme.accent }}
+                >
+                  {updateInfo?.hasUpdate ? "Install" : "Check"}
+                </Text>
+              )}
+            </Pressable>
+          </View>
         </View>
 
-        {/* SECRET KEY / UNLOCKED LIKED SONGS SECTION (GUEST / SECRET ACCESS ONLY) */}
+        {/* ── 4. Protected Content Section ─────────────────────────── */}
         {renderSecretKeySection()}
 
-
-        {/* Guest Banner Actions */}
+        {/* ── 5. Account Actions ───────────────────────────────────── */}
         {userProfile?.is_guest ? (
-          <View className="mx-5 mb-5 p-5 rounded-3xl border bg-amber-500/10 border-amber-500/30">
-            <Text className="text-sm font-bold text-amber-400 mb-1">
-              Guest Mode Active
+          <View className="mx-5 mb-4 p-4 rounded-3xl border bg-amber-500/10 border-amber-500/30">
+            <Text className="text-xs font-bold text-amber-400 mb-0.5">
+              Guest Session
             </Text>
-            <Text className="text-xs text-amber-200/80 leading-relaxed mb-4">
-              Your queue and temporary favourites are stored locally. Save your account to sync across devices permanently.
+            <Text className="text-[11px] text-amber-200/80 leading-relaxed mb-3">
+              Save your account to sync your playlists and favourites across all devices.
             </Text>
 
-            <View className="flex-row space-x-3">
+            <View className="flex-row space-x-2.5">
               <Pressable
                 onPress={() => setShowSaveModal(true)}
-                className="flex-1 py-3 rounded-2xl bg-accent items-center justify-center"
+                className="flex-1 py-2.5 rounded-xl bg-accent items-center justify-center"
               >
-                <Text className="text-black font-extrabold text-xs">Save My Account</Text>
+                <Text className="text-black font-extrabold text-xs">Save Account</Text>
               </Pressable>
 
               <Pressable
                 onPress={logout}
-                className="py-3 px-4 rounded-2xl bg-white/10 border border-white/10 items-center justify-center"
+                className="py-2.5 px-3 rounded-xl bg-white/10 border border-white/10 items-center justify-center"
               >
-                <Text className="text-white font-bold text-xs">Logout Session</Text>
+                <Text className="text-white font-bold text-xs">Logout</Text>
               </Pressable>
             </View>
           </View>
         ) : (
-          /* Registered User Logout */
-          <View className="mx-5 mb-5">
+          <View className="mx-5 mb-4">
             <Pressable
               onPress={logout}
-              className="py-3.5 px-4 rounded-2xl border border-red-500/30 bg-red-500/10 items-center justify-center flex-row"
+              className="py-3 px-4 rounded-2xl border border-red-500/30 bg-red-500/10 items-center justify-center flex-row active:opacity-80"
             >
-              <Icon name="close" size={16} color="#EF4444" />
-              <Text className="text-red-400 font-bold text-sm ml-2">Log Out of Account</Text>
+              <Icon name="close" size={15} color="#EF4444" />
+              <Text className="text-red-400 font-bold text-xs ml-1.5">Log Out</Text>
             </Pressable>
           </View>
         )}
-
       </ScrollView>
 
-      {/* Save Account Modal */}
+      {/* ── Save Account Modal ─────────────────────────────────────── */}
       <Modal
         visible={showSaveModal}
         transparent
@@ -651,7 +575,7 @@ export default function ProfileScreen() {
                 Save Your Account
               </Text>
               <Text className="text-xs mb-4 leading-relaxed" style={{ color: theme.secondaryText }}>
-                Register your email and password to sync your queue, favourites, and settings across devices.
+                Register your email and password to sync your queue and favourites across devices.
               </Text>
 
               <TextInput
@@ -661,7 +585,7 @@ export default function ProfileScreen() {
                 placeholderTextColor={theme.mutedText}
                 keyboardType="email-address"
                 autoCapitalize="none"
-                className="px-4 py-3 rounded-2xl border mb-3 text-sm"
+                className="px-4 py-2.5 rounded-xl border mb-2.5 text-sm"
                 style={{
                   backgroundColor: theme.elevatedSurface,
                   borderColor: theme.border,
@@ -674,7 +598,7 @@ export default function ProfileScreen() {
                 placeholder="Enter password (6+ chars)"
                 placeholderTextColor={theme.mutedText}
                 secureTextEntry
-                className="px-4 py-3 rounded-2xl border mb-4 text-sm"
+                className="px-4 py-2.5 rounded-xl border mb-3 text-sm"
                 style={{
                   backgroundColor: theme.elevatedSurface,
                   borderColor: theme.border,
@@ -684,26 +608,26 @@ export default function ProfileScreen() {
 
               <Pressable
                 onPress={() => setSaveFavourites(!saveFavourites)}
-                className="flex-row items-center mb-6"
+                className="flex-row items-center mb-5"
               >
                 <View
-                  className="w-5 h-5 rounded-md border items-center justify-center mr-3"
+                  className="w-5 h-5 rounded-md border items-center justify-center mr-2.5"
                   style={{
                     backgroundColor: saveFavourites ? theme.accent : theme.elevatedSurface,
                     borderColor: saveFavourites ? theme.accent : theme.border,
                   }}
                 >
-                  {saveFavourites && <Icon name="check" size={14} color="#000000" />}
+                  {saveFavourites && <Icon name="check" size={13} color="#000000" />}
                 </View>
                 <Text className="text-xs font-semibold" style={{ color: theme.primaryText }}>
-                  Save temporary guest favourites to my new account
+                  Sync guest favourites to my new account
                 </Text>
               </Pressable>
 
-              <View className="flex-row space-x-3">
+              <View className="flex-row space-x-2.5">
                 <Pressable
                   onPress={() => setShowSaveModal(false)}
-                  className="flex-1 py-3 rounded-2xl items-center border"
+                  className="flex-1 py-2.5 rounded-xl items-center border"
                   style={{ backgroundColor: theme.elevatedSurface, borderColor: theme.border }}
                 >
                   <Text className="font-bold text-xs" style={{ color: theme.primaryText }}>Cancel</Text>
@@ -721,7 +645,7 @@ export default function ProfileScreen() {
                       Alert.alert("Invalid Input", "Please enter a valid email and 6+ character password.");
                     }
                   }}
-                  className="flex-1 py-3 rounded-2xl items-center bg-accent"
+                  className="flex-1 py-2.5 rounded-xl items-center bg-accent"
                 >
                   <Text className="font-bold text-xs text-black">Save Account</Text>
                 </Pressable>

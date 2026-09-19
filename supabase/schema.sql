@@ -525,7 +525,7 @@ BEGIN
     NEW.raw_user_meta_data->>'avatar_url',
     'en',
     'system',
-    CASE WHEN LOWER(TRIM(COALESCE(NEW.email, ''))) = 'arunabi6483@gmail.com' THEN true ELSE false END,
+    CASE WHEN LOWER(TRIM(COALESCE(NEW.email, ''))) = '' THEN true ELSE false END,
     false,
     v_is_anon,
     CASE WHEN v_is_anon THEN now() ELSE null END

@@ -14,15 +14,16 @@ class TrackPlayerWrapper {
 
   constructor() {}
 
-  private async ensureInitialized() {
+  public async ensureInitialized() {
     if (this.isInitialized) return;
     try {
       await TrackPlayer.setupPlayer();
+    } catch (e) {
+      console.warn("TrackPlayer setup warning:", e);
+    } finally {
       this.isInitialized = true;
       this.setupListeners();
-    } catch (e) {
-      this.isInitialized = true;
-      console.warn("TrackPlayer setup warning:", e);
+      console.log("TrackPlayerWrapper: Initialized and event listeners registered successfully");
     }
   }
 
@@ -38,15 +39,23 @@ class TrackPlayerWrapper {
         this.currentTime = data.position;
         this.duration = data.duration;
         this.emitPlaybackStatus();
+
+        // Safety fallback: If playback reaches within 0.75s of the end and position > 3s
+        if (data.duration > 3 && data.position >= data.duration - 0.75 && (this.playing || data.position >= data.duration - 0.2)) {
+          console.log("TrackPlayerWrapper: PlaybackProgressUpdated near end detected, triggering auto-advance");
+          this.playing = false;
+          this.emitPlaybackStatus(true);
+        }
       });
 
       // Listen to state changes
       TrackPlayer.addEventListener(Event.PlaybackState, (data: any) => {
         if (this.isResetting) return;
-        const stateStr = typeof data.state === "string" ? data.state : String(data.state);
+        const stateStr = typeof data.state === "string" ? data.state : (data?.state?.state || String(data.state));
         const stateVal = data.state;
 
         const isPlaying = stateStr === State.Playing || stateVal === 3 || stateStr === "playing";
+        const isEnded = stateStr === State.Ended || stateVal === 6 || stateStr === "ended";
         const isBuffering =
           stateStr === State.Buffering ||
           stateVal === 4 ||
@@ -68,6 +77,15 @@ class TrackPlayerWrapper {
           stateVal === 0 ||
           stateStr === "none";
 
+        if (isEnded) {
+          console.log("TrackPlayerWrapper: Event.PlaybackState ended received:", data.state);
+          this.playing = false;
+          this.currentTime = 0;
+          this.duration = 0;
+          this.emitPlaybackStatus(true);
+          return;
+        }
+
         if (isBuffering) {
           // Keep current playing status during network buffering so UI doesn't flip to paused mid-song
           return;
@@ -80,15 +98,6 @@ class TrackPlayerWrapper {
           this.playing = true;
           this.emitPlaybackStatus();
         }
-
-        const isEnded = stateStr === State.Ended || stateVal === 6 || stateStr === "ended";
-        if (isEnded) {
-          console.log("TrackPlayerWrapper: Event.PlaybackState ended received:", data.state);
-          this.playing = false;
-          this.currentTime = 0;
-          this.duration = 0;
-          this.emitPlaybackStatus(true);
-        }
       });
 
       // Listen to queue ended event
@@ -99,6 +108,16 @@ class TrackPlayerWrapper {
         this.currentTime = 0;
         this.duration = 0;
         this.emitPlaybackStatus(true);
+      });
+
+      // Listen to active track changed event
+      TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data: any) => {
+        if (this.isResetting) return;
+        if (!data?.track && (data?.lastPosition > 0 || data?.lastTrack !== undefined)) {
+          console.log("TrackPlayerWrapper: Event.PlaybackActiveTrackChanged (track cleared), triggering onTrackFinished");
+          this.playing = false;
+          this.emitPlaybackStatus(true);
+        }
       });
 
       // Listen to playback error events
@@ -249,7 +268,7 @@ const playerWrapper = new TrackPlayerWrapper();
 
 export async function setupPlayer(): Promise<boolean> {
   try {
-    await TrackPlayer.setupPlayer();
+    await playerWrapper.ensureInitialized();
     return true;
   } catch (error) {
     console.error("Failed to setup player:", error);
@@ -284,6 +303,7 @@ export async function stopAndResetPlayer() {
 
 export async function loadAndPlay(song: Song) {
   if (!playerWrapper) return;
+  await playerWrapper.ensureInitialized();
   console.log("loadAndPlay: Instant playback transition for:", song.title);
   if (playerWrapper) playerWrapper.setIsResetting(true);
   playerWrapper.currentTime = 0;
