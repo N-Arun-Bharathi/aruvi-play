@@ -1,13 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://your-supabase-project.supabase.co";
-const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlvdXItc3VwYWJhc2UtcHJvamVjdCIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzAwMDAwMDAwLCJleHAiOjIwMDAwMDAwMDB9.FakeKeyPlaceholder123456789";
+const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL || "https://bkluiuzuojqqnkvopmnw.supabase.co";
+const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "sb_publishable_xkrhoN_MOl6CWAEjNcLbbw_OQkO5tMj";
 
 let supabase: any;
 let useMockSupabase = false;
 
-const isPlaceholder = SUPABASE_URL.includes("your-supabase-project") || SUPABASE_ANON_KEY.includes("FakeKey");
+const isPlaceholder = !SUPABASE_URL || !SUPABASE_ANON_KEY || SUPABASE_URL.includes("your-supabase-project") || SUPABASE_ANON_KEY.includes("FakeKey");
 
 const createMockSupabase = () => ({
   auth: {

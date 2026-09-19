@@ -63,7 +63,8 @@ function RootLayoutNav() {
 
     // Listen for Realtime database updates on app_versions table
     const unsubscribeRealtime = subscribeToAppUpdates(() => {
-      useUpdateStore.getState().checkUpdate(false).catch((e) => console.warn("Realtime update check warning:", e));
+      console.log("[RootLayout] Realtime version push received from DB! Displaying update popup...");
+      useUpdateStore.getState().checkUpdate(true).catch((e) => console.warn("Realtime update check warning:", e));
     });
 
     // Check for updates when app returns to foreground

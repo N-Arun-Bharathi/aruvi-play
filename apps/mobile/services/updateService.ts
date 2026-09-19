@@ -3,6 +3,8 @@ import Constants from "expo-constants";
 import { supabase } from "./supabase";
 import { APP_VERSION, APP_VERSION_CODE } from "@aruvi/shared";
 
+import * as Application from "expo-application";
+
 export interface AppUpdateInfo {
   hasUpdate: boolean;
   versionName: string;
@@ -15,7 +17,7 @@ export interface AppUpdateInfo {
 }
 
 /**
- * Compare two semver strings (e.g. "1.0.2" vs "1.0.1")
+ * Compare two semver strings (e.g. "1.0.5" vs "1.0.4")
  * Returns true if remote is strictly newer than current.
  */
 export function isNewerVersion(remoteVer: string, currentVer: string): boolean {
@@ -40,8 +42,11 @@ export function isNewerVersion(remoteVer: string, currentVer: string): boolean {
  * Get current running app version and android versionCode
  */
 export function getCurrentAppVersion(): { versionName: string; versionCode: number } {
-  const versionName = APP_VERSION || Constants.expoConfig?.version || "1.0.0";
-  const versionCode = APP_VERSION_CODE || Constants.expoConfig?.android?.versionCode || 1;
+  const nativeVer = Application.nativeApplicationVersion;
+  const nativeCode = Application.nativeBuildVersion ? parseInt(Application.nativeBuildVersion, 10) : undefined;
+
+  const versionName = nativeVer || APP_VERSION || Constants.expoConfig?.version || "1.0.0";
+  const versionCode = nativeCode || APP_VERSION_CODE || Constants.expoConfig?.android?.versionCode || 1;
   return { versionName, versionCode };
 }
 
@@ -59,14 +64,20 @@ export async function checkForUpdate(): Promise<AppUpdateInfo> {
       .order("version_code", { ascending: false })
       .limit(1);
 
+    if (error) {
+      console.warn("[UpdateService] Supabase app_versions query error:", error);
+    }
+
     const latest = Array.isArray(data) ? data[0] : data;
 
-    if (!error && latest && latest.version_name) {
+    if (latest && latest.version_name) {
       const remoteVer = String(latest.version_name).trim();
       const remoteCode = Number(latest.version_code) || 1;
       const isCodeNewer = remoteCode > currentCode;
       const isVerNewer = isNewerVersion(remoteVer, currentVer);
       const hasUpdate = isCodeNewer || isVerNewer;
+
+      console.log(`[UpdateService] Version Check -> Local: v${currentVer} (#${currentCode}) | DB Latest: v${remoteVer} (#${remoteCode}) | hasUpdate: ${hasUpdate}`);
 
       return {
         hasUpdate,

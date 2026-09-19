@@ -2,7 +2,7 @@
   "expo": {
     "name": "Aruvi Play",
     "slug": "aruvi-play",
-    "version": "1.0.2",
+    "version": "1.0.4",
     "orientation": "portrait",
     "icon": "./assets/aruvi-play.png",
     "scheme": "aruviplay",
@@ -27,7 +27,7 @@
     },
     "android": {
       "package": "com.aruvi.play",
-      "versionCode": 3,
+      "versionCode": 5,
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
         "INTERNET",
@@ -52,6 +52,11 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "EXPO_PUBLIC_SUPABASE_URL": "https://bkluiuzuojqqnkvopmnw.supabase.co",
+      "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_xkrhoN_MOl6CWAEjNcLbbw_OQkO5tMj",
+      "EXPO_PUBLIC_SECRET_KEY": "Aruvi5868"
     }
   }
 }

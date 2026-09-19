@@ -119,9 +119,17 @@ if (fs.existsSync(buildGradlePath)) {
   console.log(` ✓ Updated ${path.relative(rootDir, buildGradlePath)}`);
 }
 
-console.log(`\n🎉 Version files sync complete! Current version is now v${newVersion} (code ${newVersionCode}).\n`);
+// 12. Ensure .env files are in sync across apps
+const rootEnv = path.join(rootDir, ".env");
+if (fs.existsSync(rootEnv)) {
+  const mobileEnv = path.join(rootDir, "apps/mobile/.env");
+  const webEnv = path.join(rootDir, "apps/web/.env");
+  fs.copyFileSync(rootEnv, mobileEnv);
+  fs.copyFileSync(rootEnv, webEnv);
+  console.log(" ✓ Synced .env to apps/mobile and apps/web");
+}
 
-// 12. Automatically trigger database synchronization
+// 13. Automatically trigger database synchronization
 try {
   const { execSync } = require("child_process");
   execSync("node scripts/sync-version.js", { stdio: "inherit", cwd: rootDir });

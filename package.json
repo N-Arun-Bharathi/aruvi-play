@@ -1,7 +1,7 @@
 {
   "name": "aruvi-play",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.4",
   "scripts": {
     "dev:web": "pnpm --filter web dev --port 3000",
     "dev:mobile": "pnpm --filter mobile start",
