@@ -43,3 +43,18 @@ export interface SaavnSong {
   };
   language?: string;
 }
+
+
+export interface SaavnPlaylist {
+  id: string;
+  title: string;
+  subtitle?: string;
+  headerDesc?: string;
+  image?: string;
+  songCount?: number;
+  followerCount?: string;
+  permaUrl?: string;
+  language?: string;
+  songs?: Song[];
+}
+

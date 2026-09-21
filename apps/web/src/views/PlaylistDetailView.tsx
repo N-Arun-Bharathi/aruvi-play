@@ -58,7 +58,9 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
           className="w-40 h-40 sm:w-48 sm:h-48 rounded-2xl object-cover shadow-2xl shrink-0"
         />
         <div className="space-y-2 text-center sm:text-left flex-1">
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">Playlist</span>
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">
+            {(activePlaylist as any).is_saavn ? "JioSaavn Curated" : "Playlist"}
+          </span>
           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">{activePlaylist.name}</h1>
           <p className="text-xs text-zinc-400">{activePlaylist.description || "No description provided."}</p>
           <div className="text-xs text-zinc-500 font-medium pt-1">{activePlaylist.songs.length} songs</div>
@@ -72,15 +74,18 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
             >
               <Play className="w-4 h-4 fill-current" /> Play All
             </button>
-            <button
-              onClick={handleDelete}
-              className="p-3 text-zinc-400 hover:text-rose-400 bg-zinc-900 border border-zinc-800 rounded-full transition-colors"
-              title="Delete Playlist"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            {!(activePlaylist as any).is_saavn && (
+              <button
+                onClick={handleDelete}
+                className="p-3 text-zinc-400 hover:text-rose-400 bg-zinc-900 border border-zinc-800 rounded-full transition-colors"
+                title="Delete Playlist"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
+
       </div>
 
       {/* Song List */}

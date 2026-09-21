@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, FlatList, Pressable, Alert, Modal, TextInput, ScrollView } from "react-native";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { AppScreen } from "../../components/AppScreen";
 import { AppHeader } from "../../components/AppHeader";
@@ -12,12 +13,18 @@ import { usePlayerStore } from "../../store/playerStore";
 import { useLibraryStore } from "../../store/likedStore";
 import { useToastStore } from "../../store/toastStore";
 import { dbGetPlaylistSongs, dbDeletePlaylist, dbRemoveSongFromPlaylist, dbAddSongToPlaylist, dbSavePlaylist } from "../../services/sqlite";
-import { searchSongs } from "../../services/saavn";
+import { searchSongs, getPlaylistDetails } from "../../services/saavn";
 import { supabase } from "../../services/supabase";
 import { Song } from "../../types/song";
 
 export default function PlaylistDetail() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, isSaavn, name: passedName, coverUrl: passedCover, subtitle: passedSubtitle } = useLocalSearchParams<{
+    id: string;
+    isSaavn?: string;
+    name?: string;
+    coverUrl?: string;
+    subtitle?: string;
+  }>();
   const router = useRouter();
   const theme = useTheme();
   const toast = useToastStore();
@@ -47,6 +54,33 @@ export default function PlaylistDetail() {
   const loadPlaylistDetails = async () => {
     setLoading(true);
     try {
+      const isJioSaavn = isSaavn === "true" || /^\d+$/.test(id);
+      if (isJioSaavn) {
+        const saavnPl = await getPlaylistDetails(id);
+        if (saavnPl) {
+          setPlaylist({
+            id: saavnPl.id,
+            name: saavnPl.title || passedName || "Playlist",
+            description: saavnPl.subtitle || saavnPl.headerDesc || passedSubtitle || "",
+            cover_url: saavnPl.image || passedCover || "",
+            is_public: true,
+            is_saavn: true,
+          });
+          setSongs(saavnPl.songs || []);
+        } else {
+          setPlaylist({
+            id,
+            name: passedName || "Playlist",
+            description: passedSubtitle || "",
+            cover_url: passedCover || "",
+            is_public: true,
+            is_saavn: true,
+          });
+        }
+        setLoading(false);
+        return;
+      }
+
       const cachedSongs = (await dbGetPlaylistSongs(id)) || [];
       setSongs(cachedSongs);
 
@@ -116,6 +150,7 @@ export default function PlaylistDetail() {
       setLoading(false);
     }
   };
+
 
   const handlePlayAll = (shuffle = false) => {
     if (songs.length === 0) return;
@@ -252,57 +287,85 @@ export default function PlaylistDetail() {
     <AppScreen edges={["top", "bottom"]}>
       <AppHeader
         title={playlist.name}
-        subtitle="Playlist"
+        subtitle={playlist.is_saavn ? "JioSaavn Playlist" : "Playlist"}
         showBack
         rightActions={
-          <View className="flex-row items-center">
-            <Pressable
-              onPress={() => setShowAddModal(true)}
-              className="p-2 mr-2 bg-accent/20 rounded-full active:bg-accent/30 flex-row items-center px-3 py-1.5"
-            >
-              <Icon name="plus" size={14} color={theme.accent} />
-              <Text className="text-xs font-bold ml-1.5" style={{ color: theme.accent }}>Add Songs</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleDelete}
-              className="p-2 bg-red-500/10 rounded-full active:bg-red-500/20"
-            >
-              <Icon name="trash" size={18} color={theme.error} />
-            </Pressable>
-          </View>
+          playlist.is_saavn ? (
+            <View className="flex-row items-center">
+              <Pressable
+                onPress={() => {
+                  songs.forEach((s) => addToQueue(s));
+                  toast.show("Added playlist to queue!");
+                }}
+                className="p-2 bg-accent/20 rounded-full active:bg-accent/30 flex-row items-center px-3 py-1.5"
+              >
+                <Icon name="queue" size={14} color={theme.accent} />
+                <Text className="text-xs font-bold ml-1.5" style={{ color: theme.accent }}>Queue All</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View className="flex-row items-center">
+              <Pressable
+                onPress={() => setShowAddModal(true)}
+                className="p-2 mr-2 bg-accent/20 rounded-full active:bg-accent/30 flex-row items-center px-3 py-1.5"
+              >
+                <Icon name="plus" size={14} color={theme.accent} />
+                <Text className="text-xs font-bold ml-1.5" style={{ color: theme.accent }}>Add Songs</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleDelete}
+                className="p-2 bg-red-500/10 rounded-full active:bg-red-500/20"
+              >
+                <Icon name="trash" size={18} color={theme.error} />
+              </Pressable>
+            </View>
+          )
         }
       />
 
       <FlatList
         data={songs}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => `${item.id}_${index}`}
         contentContainerStyle={{ paddingBottom: 100 }}
         ListHeaderComponent={
           <View className="p-5 border-b" style={{ borderBottomColor: theme.border }}>
+            {playlist.cover_url ? (
+              <View className="items-center mb-4">
+                <Image
+                  source={{ uri: playlist.cover_url }}
+                  style={{ width: 160, height: 160, borderRadius: 24 }}
+                  className="border border-white/10 shadow-2xl"
+                  contentFit="cover"
+                />
+              </View>
+            ) : null}
+
             {playlist.description ? (
-              <Text className="text-sm leading-relaxed mb-3" style={{ color: theme.secondaryText }}>
+              <Text className="text-sm leading-relaxed mb-3 text-center" style={{ color: theme.secondaryText }}>
                 {playlist.description}
               </Text>
             ) : null}
-            <Text className="text-xs font-semibold mb-4" style={{ color: theme.mutedText }}>
-              {songs.length} songs • Visible to everyone
+            <Text className="text-xs font-semibold mb-4 text-center" style={{ color: theme.mutedText }}>
+              {songs.length} songs {playlist.is_saavn ? "• JioSaavn Curated" : "• Visible to everyone"}
             </Text>
 
             <View className="flex-row space-x-2">
-              <Pressable
-                onPress={() => setShowAddModal(true)}
-                className="flex-1 flex-row items-center justify-center py-3 rounded-2xl border active:bg-white/5"
-                style={{ backgroundColor: theme.glassCard, borderColor: theme.glassBorder }}
-              >
-                <Icon name="plus" size={16} color={theme.accent} />
-                <Text className="font-bold ml-2 text-xs" style={{ color: theme.accent }}>+ Add Songs</Text>
-              </Pressable>
+              {!playlist.is_saavn && (
+                <Pressable
+                  onPress={() => setShowAddModal(true)}
+                  className="flex-1 flex-row items-center justify-center py-3 rounded-2xl border active:bg-white/5"
+                  style={{ backgroundColor: theme.glassCard, borderColor: theme.glassBorder }}
+                >
+                  <Icon name="plus" size={16} color={theme.accent} />
+                  <Text className="font-bold ml-2 text-xs" style={{ color: theme.accent }}>+ Add Songs</Text>
+                </Pressable>
+              )}
 
               {songs.length > 0 && (
                 <>
                   <Pressable
                     onPress={() => handlePlayAll(false)}
-                    className="flex-1 flex-row items-center justify-center py-3 rounded-2xl active:opacity-90"
+                    className="flex-1 flex-row items-center justify-center py-3 rounded-2xl active:opacity-90 shadow-md"
                     style={{ backgroundColor: theme.accent }}
                   >
                     <Icon name="play" size={16} color="#000000" />
@@ -310,7 +373,7 @@ export default function PlaylistDetail() {
                   </Pressable>
                   <Pressable
                     onPress={() => handlePlayAll(true)}
-                    className="p-3 rounded-2xl border active:bg-white/5 items-center justify-center"
+                    className="p-3 rounded-2xl border active:bg-white/5 items-center justify-center px-4"
                     style={{ backgroundColor: theme.elevatedSurface, borderColor: theme.border }}
                   >
                     <Icon name="shuffle" size={16} color={theme.primaryText} />
@@ -334,14 +397,17 @@ export default function PlaylistDetail() {
                 }}
               />
             </View>
-            <Pressable
-              onPress={() => removeSong(item.id)}
-              className="pr-4 pl-2 py-3 active:opacity-60"
-            >
-              <Icon name="close" size={18} color={theme.mutedText} />
-            </Pressable>
+            {!playlist.is_saavn && (
+              <Pressable
+                onPress={() => removeSong(item.id)}
+                className="pr-4 pl-2 py-3 active:opacity-60"
+              >
+                <Icon name="close" size={18} color={theme.mutedText} />
+              </Pressable>
+            )}
           </View>
         )}
+
         ListEmptyComponent={
           <View className="px-5 py-12 items-center justify-center">
             <Icon name="music" size={48} color={theme.mutedText} />

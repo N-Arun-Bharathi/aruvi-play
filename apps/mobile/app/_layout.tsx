@@ -239,6 +239,7 @@ function RootLayoutNav() {
         name="queue"
         options={{ presentation: "modal", animation: "slide_from_bottom" }}
       />
+      <Stack.Screen name="playlists/index" />
       <Stack.Screen name="playlists/[id]" />
       <Stack.Screen name="playlists/create" options={{ presentation: "modal", animation: "slide_from_bottom" }} />
       <Stack.Screen name="playlists/edit/[id]" options={{ presentation: "modal", animation: "slide_from_bottom" }} />

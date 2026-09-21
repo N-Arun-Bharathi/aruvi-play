@@ -1,5 +1,5 @@
 import React from "react";
-import { Home, Search, Library, Users, Settings } from "lucide-react";
+import { Home, Search, ListMusic, Library, Users, Settings } from "lucide-react";
 
 interface SidebarProps {
   activeView: string;
@@ -10,6 +10,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeView, setActiveView }) =
   const mainNav = [
     { id: "home", label: "Home", icon: Home },
     { id: "search", label: "Search", icon: Search },
+    { id: "playlists", label: "Playlists", icon: ListMusic },
     { id: "library", label: "Library", icon: Library },
     { id: "rooms", label: "Social Rooms", icon: Users },
   ];

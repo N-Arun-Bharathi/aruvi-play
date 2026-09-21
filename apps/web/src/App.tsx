@@ -10,6 +10,7 @@ import { ToastContainer } from "./components/ToastContainer";
 
 import { HomeView } from "./views/HomeView";
 import { SearchView } from "./views/SearchView";
+import { PlaylistsView } from "./views/PlaylistsView";
 import { LibraryView } from "./views/LibraryView";
 import { PlaylistDetailView } from "./views/PlaylistDetailView";
 import { RoomsView } from "./views/RoomsView";
@@ -66,7 +67,7 @@ export function App() {
       case "liked":
         return <LibraryView initialTab="liked" setActiveView={setActiveView} />;
       case "playlists":
-        return <LibraryView initialTab="playlists" setActiveView={setActiveView} />;
+        return <PlaylistsView setActiveView={setActiveView} />;
       case "playlist-detail":
         return <PlaylistDetailView setActiveView={setActiveView} />;
       case "history":

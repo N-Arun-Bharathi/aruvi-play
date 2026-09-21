@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import CryptoJS from "crypto-js";
-import { Song, SaavnSong } from "../types/song";
+import { Song, SaavnSong, SaavnPlaylist } from "../types/song";
 import { detectSongContext } from "../utils/contextDetector";
 import { getSearchPriority, normalizeSongTitle } from "../utils/songUtils";
 
@@ -114,6 +114,9 @@ export function mapSaavnToSong(s: any): Song | null {
       artist = names.join(", ");
       primaryArtist = names[0] || "";
     }
+  }
+  if (!artist && s.subtitle && typeof s.subtitle === "string") {
+    artist = decodeHtml(s.subtitle.includes("-") ? s.subtitle.split("-")[0].trim() : s.subtitle);
   }
   if (!artist) artist = "Unknown Artist";
 
@@ -307,3 +310,189 @@ export async function getSongById(id: string): Promise<Song | null> {
   const results = await searchSongs(id);
   return results.length > 0 ? results[0] : null;
 }
+
+function pickPlaylistImage(image: any): string | undefined {
+  if (!image) return undefined;
+  if (typeof image === "string") {
+    return image
+      .replace("50x50", "500x500")
+      .replace("150x150", "500x500")
+      .replace(/^http:/, "https:");
+  }
+  if (Array.isArray(image) && image.length > 0) {
+    const high = image.find((i: any) => i.quality === "500x500");
+    const fallback = image[image.length - 1];
+    const url = high?.url || high?.link || fallback?.url || fallback?.link;
+    if (url) return url.replace("50x50", "500x500").replace("150x150", "500x500").replace(/^http:/, "https:");
+  }
+  return undefined;
+}
+
+export async function getPlaylistDetails(listId: string): Promise<SaavnPlaylist | null> {
+  if (!listId) return null;
+  apiCallCount++;
+
+  try {
+    const res = await client.get("/api.php", {
+      params: {
+        __call: "playlist.getDetails",
+        listid: listId,
+        _format: "json",
+        _marker: "0",
+        api_version: "4",
+        ctx: "web6dot0",
+      },
+    });
+
+    const data = res.data;
+    if (!data) return null;
+
+    const rawList: any[] = data.list || data.songs || [];
+    const songs: Song[] = rawList
+      .map(mapSaavnToSong)
+      .filter((s: Song | null): s is Song => s !== null);
+
+    return {
+      id: String(data.id || data.listid || listId),
+      title: decodeHtml(data.title || data.listname || "Untitled Playlist"),
+      subtitle: decodeHtml(data.subtitle || data.header_desc || ""),
+      headerDesc: decodeHtml(data.header_desc || ""),
+      image: pickPlaylistImage(data.image),
+      songCount: data.list_count ? parseInt(data.list_count, 10) : songs.length,
+      followerCount: data.more_info?.follower_count || data.follower_count,
+      permaUrl: data.perma_url,
+      language: data.language,
+      songs,
+    };
+  } catch (err) {
+    console.error("Failed to get playlist details:", err);
+    return null;
+  }
+}
+
+export async function searchPlaylistsPaged(
+  query: string,
+  limit = 20,
+  page = 1
+): Promise<{ playlists: SaavnPlaylist[]; total: number; page: number }> {
+  if (!query.trim()) return { playlists: [], total: 0, page };
+  apiCallCount++;
+
+  try {
+    const res = await client.get("/api.php", {
+      params: {
+        __call: "search.getPlaylistResults",
+        q: query,
+        _format: "json",
+        _marker: "0",
+        api_version: "4",
+        n: limit,
+        p: page,
+        ctx: "web6dot0",
+      },
+    });
+
+    const rawList: any[] = res.data?.results || [];
+    const total = parseInt(res.data?.total || "0", 10) || rawList.length;
+    const playlists = rawList.map((item: any) => ({
+      id: String(item.id || item.listid),
+      title: decodeHtml(item.title || item.name || "Untitled Playlist"),
+      subtitle: decodeHtml(item.subtitle || item.description || ""),
+      headerDesc: decodeHtml(item.header_desc || ""),
+      image: pickPlaylistImage(item.image),
+      songCount: item.more_info?.song_count
+        ? parseInt(item.more_info.song_count, 10)
+        : item.song_count
+        ? parseInt(item.song_count, 10)
+        : undefined,
+      followerCount: item.more_info?.follower_count || item.follower_count,
+      permaUrl: item.perma_url,
+      language: item.language || item.more_info?.language,
+    }));
+
+    return { playlists, total, page };
+  } catch (err) {
+    console.error("Failed to search playlists paged:", err);
+    return { playlists: [], total: 0, page };
+  }
+}
+
+export async function searchPlaylists(query: string, limit = 20, page = 1): Promise<SaavnPlaylist[]> {
+  const res = await searchPlaylistsPaged(query, limit, page);
+  return res.playlists;
+}
+
+export async function getFeaturedPlaylists(languages: string[] = ["tamil"]): Promise<SaavnPlaylist[]> {
+  apiCallCount++;
+  const validLangs = languages && languages.length > 0 ? languages : ["tamil"];
+  const langStr = validLangs.map((l) => l.trim().toLowerCase()).join(",");
+
+  try {
+    // 1. Try launch data with language cookie
+    const res = await client.get("/api.php", {
+      params: {
+        __call: "webapi.getLaunchData",
+        _format: "json",
+        _marker: "0",
+        api_version: "4",
+        ctx: "web6dot0",
+      },
+      headers: {
+        Cookie: `L=${encodeURIComponent(langStr)}`,
+      },
+    });
+
+    const topPlaylists: any[] = res.data?.top_playlists || [];
+    const charts: any[] = (res.data?.charts || []).filter((c: any) => c.type === "playlist");
+
+    const combined = [...topPlaylists, ...charts];
+
+    // Verify if returned playlists correspond to requested languages
+    const isHindiRequested = validLangs.some((l) => l.toLowerCase().includes("hindi"));
+    const matchesUserLang = combined.some((item: any) => {
+      const title = (item.title || "").toLowerCase();
+      const sub = (item.subtitle || "").toLowerCase();
+      return validLangs.some((l) => title.includes(l.toLowerCase()) || sub.includes(l.toLowerCase()));
+    });
+
+    if (combined.length > 0 && (matchesUserLang || isHindiRequested)) {
+      const seen = new Set<string>();
+      const playlists: SaavnPlaylist[] = [];
+      for (const item of combined) {
+        const id = String(item.id || item.listid);
+        if (!seen.has(id)) {
+          seen.add(id);
+          playlists.push({
+            id,
+            title: decodeHtml(item.title || item.name || "Featured Playlist"),
+            subtitle: decodeHtml(item.subtitle || (item.count ? `${item.count} Songs` : "")),
+            headerDesc: decodeHtml(item.header_desc || ""),
+            image: pickPlaylistImage(item.image),
+            songCount: item.more_info?.song_count
+              ? parseInt(item.more_info.song_count, 10)
+              : item.count
+              ? parseInt(item.count, 10)
+              : undefined,
+            followerCount: item.more_info?.follower_count || item.follower_count,
+            permaUrl: item.perma_url,
+            language: item.language || item.more_info?.language,
+          });
+        }
+      }
+      return playlists;
+    }
+
+    // 2. Fallback: Search for trending playlists in preferred languages
+    const searchQueries = validLangs.map((l) => `${l} trending hits`);
+    const searchResults = await Promise.all(searchQueries.map((q) => searchPlaylists(q, 10)));
+    return searchResults.flat();
+  } catch (err) {
+    console.error("Failed to get featured playlists:", err);
+    try {
+      return await searchPlaylists(`${validLangs[0] || "tamil"} hits`, 15);
+    } catch {
+      return [];
+    }
+  }
+}
+

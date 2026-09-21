@@ -350,20 +350,20 @@ export class QueueManager {
     }
   }
 
-  public togglePlay() {
+  public async togglePlay() {
     const player = tryGetPlayer();
     if (!player) return;
 
     if (this.currentlyPlayingId === null && this.index >= 0 && this.index < this.queue.length) {
-      this.loadIndex(this.index);
+      await this.loadIndex(this.index);
       return;
     }
 
-    if (player.playing) {
-      player.pause();
+    if (this.isPlaying) {
+      await player.pause();
       this.isPlaying = false;
     } else {
-      player.play();
+      await player.play();
       this.isPlaying = true;
     }
     this.syncWithZustand();
@@ -391,7 +391,7 @@ export class QueueManager {
     this.syncWithZustand();
   }
 
-  private async loadIndex(idx: number) {
+  public async loadIndex(idx: number) {
     const song = this.queue[idx];
     if (!song) return;
 

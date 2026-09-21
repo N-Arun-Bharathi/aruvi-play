@@ -21,8 +21,8 @@ import { SectionHeader } from "../../components/SectionHeader";
 import { ProfileAvatar } from "../../components/ProfileAvatar";
 import { SkeletonCard } from "../../components/SkeletonCard";
 import { SkeletonRow } from "../../components/SkeletonRow";
-import { Song } from "../../types/song";
-import { getTrending, searchSongs } from "../../services/saavn";
+import { Song, SaavnPlaylist } from "../../types/song";
+import { getTrending, searchSongs, getFeaturedPlaylists } from "../../services/saavn";
 import { SongOptionsModal } from "../../components/SongOptionsModal";
 import { AnimatedHeart } from "../../components/AnimatedHeart";
 
@@ -99,6 +99,7 @@ export default function Home() {
   const [activeTabLang, setActiveTabLang] = useState<string>("all");
   const [trending, setTrending] = useState<Song[]>([]);
   const [recommended, setRecommended] = useState<Song[]>([]);
+  const [featuredPlaylists, setFeaturedPlaylists] = useState<SaavnPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedOptionsSong, setSelectedOptionsSong] = useState<Song | null>(null);
@@ -116,13 +117,23 @@ export default function Home() {
   const loadFeed = useCallback(async () => {
     try {
       refreshRecent();
-      const queryLang = activeTabLang === "all" ? languages.join(",") : activeTabLang;
-      const [trendSongs, recSongs] = await Promise.all([
+      const activeLanguages = languages && languages.length > 0 ? languages : ["tamil"];
+      const queryLang = activeTabLang === "all" ? activeLanguages.join(",") : activeTabLang;
+      const playlistLangs = activeTabLang === "all" ? activeLanguages : [activeTabLang];
+
+      const [trendSongs, recSongs, fPlaylists] = await Promise.all([
         getTrending(queryLang),
-        searchSongs(activeTabLang === "all" ? "tamil super hit melodies" : `${activeTabLang} trending top hits`, 10),
+        searchSongs(
+          activeTabLang === "all"
+            ? `${activeLanguages[0]} super hit melodies`
+            : `${activeTabLang} trending top hits`,
+          10
+        ),
+        getFeaturedPlaylists(playlistLangs),
       ]);
       setTrending(trendSongs || []);
       setRecommended(recSongs || []);
+      setFeaturedPlaylists(fPlaylists || []);
     } catch (err) {
       console.warn("Feed load error:", err);
     } finally {
@@ -408,7 +419,7 @@ export default function Home() {
                     icon: "list",
                     color: "#8B5CF6",
                     bg: "rgba(139, 92, 246, 0.15)",
-                    onPress: () => router.push(isGuest ? "/(tabs)/queue" as any : "/(tabs)/library" as any),
+                    onPress: () => router.push("/playlists" as any),
                   },
                   {
                     label: "Downloads",
@@ -574,6 +585,91 @@ export default function Home() {
                         style={{ color: theme.secondaryText }}
                       >
                         {s.artist}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* ── Featured JioSaavn Playlists ─────────────────────── */}
+            {featuredPlaylists.length > 0 && (
+              <View className="mt-7">
+                <SectionHeader
+                  title="Featured Playlists"
+                  onSeeAll={() =>
+                    handleSearchPrefill(
+                      activeTabLang === "all" ? "tamil top hits" : `${activeTabLang} hits`
+                    )
+                  }
+                />
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{ paddingHorizontal: 20, gap: 14 }}
+                  className="mt-2.5"
+                >
+                  {featuredPlaylists.map((pl) => (
+                    <Pressable
+                      key={pl.id}
+                      onPress={() => {
+                        router.push({
+                          pathname: "/playlists/[id]",
+                          params: {
+                            id: pl.id,
+                            isSaavn: "true",
+                            name: pl.title,
+                            coverUrl: pl.image || "",
+                            subtitle: pl.subtitle || "",
+                          },
+                        });
+                      }}
+                      className="w-36 active:scale-95 transition-transform"
+                    >
+                      <View className="relative">
+                        <Image
+                          source={{
+                            uri:
+                              pl.image ||
+                              "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+                          }}
+                          style={{ width: 144, height: 144, borderRadius: 22 }}
+                          className="border border-white/10 shadow-md"
+                          contentFit="cover"
+                        />
+                        {pl.songCount ? (
+                          <View
+                            className="absolute top-2.5 left-2.5 px-2 py-0.5 rounded-lg border shadow-sm"
+                            style={{
+                              backgroundColor: "rgba(0,0,0,0.75)",
+                              borderColor: "rgba(255,255,255,0.15)",
+                            }}
+                          >
+                            <Text className="text-[10px] font-bold text-white">
+                              {pl.songCount} Tracks
+                            </Text>
+                          </View>
+                        ) : null}
+                        <View
+                          className="w-9 h-9 rounded-full items-center justify-center absolute right-2.5 bottom-2.5 shadow-md"
+                          style={{ backgroundColor: theme.accent }}
+                        >
+                          <Icon name="play" size={16} color="#000000" />
+                        </View>
+                      </View>
+                      <Text
+                        className="text-sm font-bold mt-2.5 text-left"
+                        numberOfLines={1}
+                        style={{ color: theme.primaryText }}
+                      >
+                        {pl.title}
+                      </Text>
+                      <Text
+                        className="text-xs font-medium mt-0.5 text-left"
+                        numberOfLines={1}
+                        style={{ color: theme.secondaryText }}
+                      >
+                        {pl.subtitle || "JioSaavn Playlist"}
                       </Text>
                     </Pressable>
                   ))}

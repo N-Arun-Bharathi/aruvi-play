@@ -1,11 +1,12 @@
 import { create } from "zustand";
-import { Song, Playlist } from "@aruvi/shared";
+import { Song, Playlist, getPlaylistDetails } from "@aruvi/shared";
 import { useToastStore } from "./toastStore";
 
 interface PlaylistState {
   playlists: Playlist[];
   activePlaylist: Playlist | null;
   loadPlaylists: () => void;
+  loadSaavnPlaylist: (listId: string) => Promise<Playlist | null>;
   createPlaylist: (name: string, description?: string, coverUrl?: string, isPublic?: boolean) => Playlist;
   editPlaylist: (id: string, updates: Partial<Playlist>) => void;
   deletePlaylist: (id: string) => void;
@@ -42,6 +43,31 @@ export const usePlaylistStore = create<PlaylistState>((set, get) => ({
     } catch (e) {
       console.warn("Failed to load playlists:", e);
     }
+  },
+
+  loadSaavnPlaylist: async (listId: string) => {
+    try {
+      const saavnPl = await getPlaylistDetails(listId);
+      if (saavnPl) {
+        const pl: Playlist & { is_saavn?: boolean } = {
+          id: saavnPl.id,
+          name: saavnPl.title,
+          description: saavnPl.subtitle || saavnPl.headerDesc || "",
+          cover_url:
+            saavnPl.image ||
+            "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=500&q=80",
+          is_public: true,
+          songs: saavnPl.songs || [],
+          created_at: new Date().toISOString(),
+          is_saavn: true,
+        };
+        set({ activePlaylist: pl as any });
+        return pl;
+      }
+    } catch (e) {
+      console.error("Failed to load JioSaavn playlist:", e);
+    }
+    return null;
   },
 
   createPlaylist: (name, description = "", coverUrl, isPublic = true) => {

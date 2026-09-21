@@ -1,6 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import CryptoJS from "crypto-js";
-import { Song, SaavnSong } from "../types/song";
+import { Song, SaavnSong, SaavnPlaylist } from "../types/song";
+export type { SaavnPlaylist };
 import { detectSongContext } from "../utils/contextDetector";
 import { getSearchPriority, normalizeSongTitle } from "../utils/songUtils";
 
@@ -66,7 +67,12 @@ export function decryptMediaUrl(encryptedUrl?: string): string | undefined {
   }
 }
 
-async function request(url: string, params: any = {}, signal?: AbortSignal): Promise<any> {
+async function request(
+  url: string,
+  params: any = {},
+  signal?: AbortSignal,
+  headers: Record<string, string> = {}
+): Promise<any> {
   apiCallCount++;
   const maxRetries = BASE_URLS.length * 2;
   let lastError: any = null;
@@ -83,7 +89,13 @@ async function request(url: string, params: any = {}, signal?: AbortSignal): Pro
         reqUrl = `/api${url}`;
       }
 
-      const res = await client.get(reqUrl, { params, signal });
+      const res = await client.get(reqUrl, {
+        params,
+        signal,
+        headers: {
+          ...headers,
+        },
+      });
 
       // Handle cases where response returns non-200 or Vercel error payload
       if (
@@ -118,24 +130,39 @@ function pickImage(image: SaavnSong["image"] | any): string | undefined {
     const high = image.find((i) => i.quality === "500x500");
     const fallback = image[image.length - 1];
     const url = (high ?? fallback)?.url ?? (high ?? fallback)?.link;
-    if (url) return url.replace(/^http:/, "https:");
+    if (url) return url.replace("50x50", "500x500").replace("150x150", "500x500").replace(/^http:/, "https:");
   }
   return undefined;
 }
 
 function pickUrl(s: SaavnSong | any): string | undefined {
-  // First try DES decryption of encrypted_media_url / media_preview_url
-  if (s.encrypted_media_url) {
-    const decrypted = decryptMediaUrl(s.encrypted_media_url);
+  const encUrl =
+    s.encrypted_media_url ||
+    s.more_info?.encrypted_media_url ||
+    s.encryptedMediaUrl ||
+    s.more_info?.encryptedMediaUrl;
+  if (encUrl) {
+    const decrypted = decryptMediaUrl(encUrl);
     if (decrypted) return decrypted;
   }
-  if (s.media_preview_url) {
-    const decrypted = decryptMediaUrl(s.media_preview_url);
+
+  const vlinkUrl = s.vlink || s.more_info?.vlink;
+  if (vlinkUrl && typeof vlinkUrl === "string" && vlinkUrl.startsWith("http")) {
+    return vlinkUrl;
+  }
+
+  const previewUrl =
+    s.media_preview_url ||
+    s.more_info?.media_preview_url ||
+    s.mediaPreviewUrl ||
+    s.more_info?.mediaPreviewUrl;
+  if (previewUrl) {
+    const decrypted = decryptMediaUrl(previewUrl);
     if (decrypted) return decrypted;
   }
 
   // Fallback to downloadUrl if present and valid
-  const downloadUrl = s.downloadUrl;
+  const downloadUrl = s.downloadUrl || s.more_info?.downloadUrl;
   if (Array.isArray(downloadUrl) && downloadUrl.length > 0) {
     const high = downloadUrl.find((d: any) => d.quality === "320kbps");
     const fallback = downloadUrl[downloadUrl.length - 1];
@@ -147,16 +174,38 @@ function pickUrl(s: SaavnSong | any): string | undefined {
 }
 
 function artistName(s: SaavnSong | any): string {
-  if (s.primary_artists && typeof s.primary_artists === "string") return s.primary_artists;
-  if (s.singers && typeof s.singers === "string") return s.singers;
-  if (s.primaryArtists && typeof s.primaryArtists === "string") return s.primaryArtists;
+  const primaryArtistsStr =
+    s.primary_artists ||
+    s.primaryArtists ||
+    s.more_info?.primary_artists ||
+    s.singers ||
+    s.more_info?.singers;
+  if (typeof primaryArtistsStr === "string" && primaryArtistsStr.trim().length > 0) {
+    return primaryArtistsStr;
+  }
 
   const primary = s.artists?.primary;
   if (primary?.length) return primary.map((a: any) => a.name).join(", ");
+
+  const artistMap = s.more_info?.artistMap;
+  if (artistMap) {
+    if (Array.isArray(artistMap.primary_artists) && artistMap.primary_artists.length > 0) {
+      return artistMap.primary_artists.map((a: any) => a.name).join(", ");
+    }
+    if (Array.isArray(artistMap.artists) && artistMap.artists.length > 0) {
+      return artistMap.artists.map((a: any) => a.name).join(", ");
+    }
+  }
+
+  if (s.subtitle && typeof s.subtitle === "string" && s.subtitle.includes("-")) {
+    return s.subtitle.split("-")[0].trim();
+  }
+
   return "Unknown";
 }
 
 function albumName(s: SaavnSong | any): string {
+  if (s.more_info?.album && typeof s.more_info.album === "string") return s.more_info.album;
   if (typeof s.album === "string") return s.album;
   return s.album?.name ?? "";
 }
@@ -224,7 +273,12 @@ export function mapSaavnToSong(s: SaavnSong | any): Song | null {
     }
   }
 
-  const primaryArtistsStr = s.primary_artists || s.primaryArtists || s.more_info?.primary_artists ? decodeHtml(s.primary_artists || s.primaryArtists || s.more_info?.primary_artists) : "";
+  const primaryArtistsStr =
+    s.primary_artists ||
+    s.primaryArtists ||
+    s.more_info?.primary_artists
+      ? decodeHtml(s.primary_artists || s.primaryArtists || s.more_info?.primary_artists)
+      : "";
   if (!primaryArtist && primaryArtistsStr) {
     primaryArtist = primaryArtistsStr.split(/[;,]/)[0].trim();
   }
@@ -250,16 +304,21 @@ export function mapSaavnToSong(s: SaavnSong | any): Song | null {
   } as Song;
   const context = detectSongContext(tempSongForContext);
 
-  const lang = s.language ? s.language.toLowerCase() : context.language;
+  const lang = s.language ? s.language.toLowerCase() : s.more_info?.language ? s.more_info.language.toLowerCase() : context.language;
+
+  const rawDuration = s.more_info?.duration || s.duration;
+  const duration = typeof rawDuration === "string" ? parseInt(rawDuration, 10) : (rawDuration || 0);
+
+  const rawArtwork = s.image || s.artwork_url || s.more_info?.image || s.more_info?.artwork_url;
 
   return {
     id: String(s.id),
     title,
     artist: mappedArtist,
     album: decodeHtml(albumName(s)),
-    artwork: pickImage(s.image || s.artwork_url),
+    artwork: pickImage(rawArtwork),
     url,
-    duration: typeof s.duration === "string" ? parseInt(s.duration, 10) : (s.duration || 0),
+    duration,
     source: "online",
     primaryArtists: primaryArtistsStr || undefined,
     primaryArtist,
@@ -649,5 +708,186 @@ export async function getSongLyrics(
 
   return null;
 }
+
+function pickPlaylistImage(image: any): string | undefined {
+  if (!image) return undefined;
+  if (typeof image === "string") {
+    return image
+      .replace("50x50", "500x500")
+      .replace("150x150", "500x500")
+      .replace(/^http:/, "https:");
+  }
+  if (Array.isArray(image) && image.length > 0) {
+    const high = image.find((i: any) => i.quality === "500x500");
+    const fallback = image[image.length - 1];
+    const url = high?.url || high?.link || fallback?.url || fallback?.link;
+    if (url) return url.replace("50x50", "500x500").replace("150x150", "500x500").replace(/^http:/, "https:");
+  }
+  return undefined;
+}
+
+export async function getPlaylistDetails(listId: string): Promise<SaavnPlaylist | null> {
+  if (!listId) return null;
+  apiCallCount++;
+
+  try {
+    const data = await request("/api.php", {
+      __call: "playlist.getDetails",
+      listid: listId,
+      _format: "json",
+      _marker: "0",
+      api_version: "4",
+      ctx: "web6dot0",
+    });
+
+    if (!data) return null;
+
+    const rawList: any[] = data.list || data.songs || [];
+    const songs: Song[] = rawList
+      .map(mapSaavnToSong)
+      .filter((s: Song | null): s is Song => s !== null);
+
+    return {
+      id: String(data.id || data.listid || listId),
+      title: decodeHtml(data.title || data.listname || "Untitled Playlist"),
+      subtitle: decodeHtml(data.subtitle || data.header_desc || ""),
+      headerDesc: decodeHtml(data.header_desc || ""),
+      image: pickPlaylistImage(data.image),
+      songCount: data.list_count ? parseInt(data.list_count, 10) : songs.length,
+      followerCount: data.more_info?.follower_count || data.follower_count,
+      permaUrl: data.perma_url,
+      language: data.language,
+      songs,
+    };
+  } catch (err) {
+    console.error("Failed to get playlist details:", err);
+    return null;
+  }
+}
+
+export async function searchPlaylistsPaged(
+  query: string,
+  limit = 20,
+  page = 1
+): Promise<{ playlists: SaavnPlaylist[]; total: number; page: number }> {
+  if (!query.trim()) return { playlists: [], total: 0, page };
+  apiCallCount++;
+
+  try {
+    const data = await request("/api.php", {
+      __call: "search.getPlaylistResults",
+      q: query,
+      _format: "json",
+      _marker: "0",
+      api_version: "4",
+      n: limit,
+      p: page,
+      ctx: "web6dot0",
+    });
+
+    const rawList: any[] = data?.results || [];
+    const total = parseInt(data?.total || "0", 10) || rawList.length;
+    const playlists = rawList.map((item: any) => ({
+      id: String(item.id || item.listid),
+      title: decodeHtml(item.title || item.name || "Untitled Playlist"),
+      subtitle: decodeHtml(item.subtitle || item.description || ""),
+      headerDesc: decodeHtml(item.header_desc || ""),
+      image: pickPlaylistImage(item.image),
+      songCount: item.more_info?.song_count
+        ? parseInt(item.more_info.song_count, 10)
+        : item.song_count
+        ? parseInt(item.song_count, 10)
+        : undefined,
+      followerCount: item.more_info?.follower_count || item.follower_count,
+      permaUrl: item.perma_url,
+      language: item.language || item.more_info?.language,
+    }));
+
+    return { playlists, total, page };
+  } catch (err) {
+    console.error("Failed to search playlists paged:", err);
+    return { playlists: [], total: 0, page };
+  }
+}
+
+export async function searchPlaylists(query: string, limit = 20, page = 1): Promise<SaavnPlaylist[]> {
+  const res = await searchPlaylistsPaged(query, limit, page);
+  return res.playlists;
+}
+
+export async function getFeaturedPlaylists(languages: string[] = ["tamil"]): Promise<SaavnPlaylist[]> {
+  apiCallCount++;
+  const validLangs = languages && languages.length > 0 ? languages : ["tamil"];
+  const langStr = validLangs.map((l) => l.trim().toLowerCase()).join(",");
+
+  try {
+    const data = await request(
+      "/api.php",
+      {
+        __call: "webapi.getLaunchData",
+        _format: "json",
+        _marker: "0",
+        api_version: "4",
+        ctx: "web6dot0",
+      },
+      undefined,
+      {
+        Cookie: `L=${encodeURIComponent(langStr)}`,
+      }
+    );
+
+    const topPlaylists: any[] = data?.top_playlists || [];
+    const charts: any[] = (data?.charts || []).filter((c: any) => c.type === "playlist");
+
+    const combined = [...topPlaylists, ...charts];
+
+    // Verify if returned playlists correspond to requested languages
+    const isHindiRequested = validLangs.some((l) => l.toLowerCase().includes("hindi"));
+    const matchesUserLang = combined.some((item: any) => {
+      const title = (item.title || "").toLowerCase();
+      const sub = (item.subtitle || "").toLowerCase();
+      return validLangs.some((l) => title.includes(l.toLowerCase()) || sub.includes(l.toLowerCase()));
+    });
+
+    if (combined.length > 0 && (matchesUserLang || isHindiRequested)) {
+      const seen = new Set<string>();
+      const playlists: SaavnPlaylist[] = [];
+      for (const item of combined) {
+        const id = String(item.id || item.listid);
+        if (!seen.has(id)) {
+          seen.add(id);
+          playlists.push({
+            id,
+            title: decodeHtml(item.title || item.name || "Featured Playlist"),
+            subtitle: decodeHtml(item.subtitle || (item.count ? `${item.count} Songs` : "")),
+            headerDesc: decodeHtml(item.header_desc || ""),
+            image: pickPlaylistImage(item.image),
+            songCount: item.more_info?.song_count
+              ? parseInt(item.more_info.song_count, 10)
+              : item.count
+              ? parseInt(item.count, 10)
+              : undefined,
+            followerCount: item.more_info?.follower_count || item.follower_count,
+            permaUrl: item.perma_url,
+            language: item.language || item.more_info?.language,
+          });
+        }
+      }
+      return playlists;
+    }
+
+    const searchQueries = validLangs.map((l) => `${l} trending hits`);
+    const searchResults = await Promise.all(searchQueries.map((q) => searchPlaylists(q, 10)));
+    return searchResults.flat();
+  } catch (err) {
+    console.error("Failed to get featured playlists:", err);
+    try {
+      return await searchPlaylists(`${validLangs[0] || "tamil"} hits`, 15);
+    } catch {
+      return [];
+    }
+  }
+}
+
 
 

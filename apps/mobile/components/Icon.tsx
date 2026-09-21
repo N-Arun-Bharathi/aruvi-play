@@ -53,11 +53,36 @@ export type IconName =
   | "download"
   | "volume-off"
   | "volume-low"
-  | "volume-high";
+  | "volume-high"
+  | "sparkles"
+  | "disc";
 
 export function Icon({ name, size = 24, color = "#FFFFFF" }: Props) {
   const props = { width: size, height: size, viewBox: "0 0 24 24", fill: "none" };
   switch (name) {
+    case "sparkles":
+      return (
+        <Svg {...props}>
+          <Path
+            d="M12 2L14.4 8.6L21 11L14.4 13.4L12 20L9.6 13.4L3 11L9.6 8.6L12 2Z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M19 17L19.8 19.2L22 20L19.8 20.8L19 23L18.2 20.8L16 20L18.2 19.2L19 17Z"
+            fill={color}
+          />
+        </Svg>
+      );
+    case "disc":
+      return (
+        <Svg {...props}>
+          <Circle cx="12" cy="12" r="10" stroke={color} strokeWidth={2} />
+          <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth={2} />
+        </Svg>
+      );
     case "refresh":
       return (
         <Svg {...props}>

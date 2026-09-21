@@ -1,5 +1,5 @@
 import React from "react";
-import { Home, Search, Library, Radio, User } from "lucide-react";
+import { Home, Search, ListMusic, Library, Radio } from "lucide-react";
 
 interface MobileBottomNavProps {
   activeView: string;
@@ -10,9 +10,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeView, se
   const tabs = [
     { id: "home", label: "Home", icon: Home },
     { id: "search", label: "Search", icon: Search },
+    { id: "playlists", label: "Playlists", icon: ListMusic },
     { id: "library", label: "Library", icon: Library },
     { id: "rooms", label: "Rooms", icon: Radio },
-    { id: "profile", label: "Profile", icon: User },
   ];
 
   return (

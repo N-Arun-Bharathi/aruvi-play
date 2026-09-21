@@ -9,9 +9,10 @@ import Animated, {
 } from "react-native-reanimated";
 import { useTheme } from "../utils/theme";
 
-export function SkeletonCard() {
+export function SkeletonCard({ size }: { size?: number } = {}) {
   const theme = useTheme();
   const opacity = useSharedValue(0.4);
+  const cardSize = size || 120;
 
   useEffect(() => {
     opacity.value = withRepeat(
@@ -29,25 +30,26 @@ export function SkeletonCard() {
   }));
 
   return (
-    <View className="mr-4">
+    <View style={{ width: cardSize }} className="mr-4">
       <Animated.View
         style={[
           animatedStyle,
-          { width: 120, height: 120, borderRadius: 16, backgroundColor: theme.elevatedSurface },
+          { width: cardSize, height: cardSize, borderRadius: 16, backgroundColor: theme.elevatedSurface },
         ]}
       />
       <Animated.View
         style={[
           animatedStyle,
-          { width: 100, height: 14, borderRadius: 4, backgroundColor: theme.elevatedSurface, marginTop: 8, marginBottom: 4 },
+          { width: cardSize * 0.8, height: 14, borderRadius: 4, backgroundColor: theme.elevatedSurface, marginTop: 8, marginBottom: 4 },
         ]}
       />
       <Animated.View
         style={[
           animatedStyle,
-          { width: 70, height: 10, borderRadius: 4, backgroundColor: theme.elevatedSurface },
+          { width: cardSize * 0.5, height: 10, borderRadius: 4, backgroundColor: theme.elevatedSurface },
         ]}
       />
     </View>
   );
 }
+

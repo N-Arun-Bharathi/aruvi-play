@@ -1,5 +1,50 @@
-import TrackPlayer, { Capability, State, Event } from "react-native-track-player";
+import TrackPlayer, {
+  Capability,
+  State,
+  Event,
+  AppKilledPlaybackBehavior,
+} from "react-native-track-player";
 import { Song } from "../types/song";
+
+export const DEFAULT_TRACK_PLAYER_OPTIONS = {
+  android: {
+    appKilledPlaybackBehavior:
+      AppKilledPlaybackBehavior.StopPlaybackAndRemoveNotification,
+    alwaysPauseOnInterruption: false,
+    stopForegroundGracePeriod: 5,
+  },
+  stoppingAppPausesPlayback: true,
+  alwaysPauseOnInterruption: false,
+  forwardJumpInterval: 10,
+  backwardJumpInterval: 10,
+  progressUpdateEventInterval: 0.5,
+  capabilities: [
+    Capability.Play,
+    Capability.Pause,
+    Capability.SkipToNext,
+    Capability.SkipToPrevious,
+    Capability.SeekTo,
+    Capability.JumpForward,
+    Capability.JumpBackward,
+    Capability.Stop,
+  ],
+  notificationCapabilities: [
+    Capability.Play,
+    Capability.Pause,
+    Capability.SkipToNext,
+    Capability.SkipToPrevious,
+    Capability.SeekTo,
+    Capability.Stop,
+  ],
+  compactCapabilities: [
+    Capability.Play,
+    Capability.Pause,
+    Capability.SkipToNext,
+    Capability.SkipToPrevious,
+  ],
+};
+
+import { playbackService } from "./playbackService";
 
 class TrackPlayerWrapper {
   private listeners: { [event: string]: Function[] } = {};
@@ -17,12 +62,16 @@ class TrackPlayerWrapper {
   public async ensureInitialized() {
     if (this.isInitialized) return;
     try {
-      await TrackPlayer.setupPlayer();
+      await TrackPlayer.setupPlayer({
+        autoHandleInterruptions: true,
+      });
+      await TrackPlayer.updateOptions(DEFAULT_TRACK_PLAYER_OPTIONS);
     } catch (e) {
       console.warn("TrackPlayer setup warning:", e);
     } finally {
       this.isInitialized = true;
       this.setupListeners();
+      playbackService().catch(() => {});
       console.log("TrackPlayerWrapper: Initialized and event listeners registered successfully");
     }
   }
@@ -221,34 +270,17 @@ class TrackPlayerWrapper {
         await TrackPlayer.reset();
         
         const currentTrack = {
-          id: metadata.id || metadata.title || "track",
+          id: String(metadata.id || metadata.title || "track"),
           url: this.currentUri,
           title: metadata.title,
           artist: metadata.artist,
-          album: metadata.albumTitle,
-          artwork: metadata.artworkUrl,
+          album: metadata.albumTitle || metadata.album || "Aruvi Play",
+          artwork: metadata.artworkUrl || metadata.artwork || undefined,
+          duration: metadata.duration || undefined,
         };
         
         await TrackPlayer.add([currentTrack]);
-        
-        await TrackPlayer.updateOptions({
-          stoppingAppPausesPlayback: true,
-          alwaysPauseOnInterruption: false,
-          progressUpdateEventInterval: 0.25,
-          capabilities: [
-            Capability.Play,
-            Capability.Pause,
-            Capability.SkipToNext,
-            Capability.SkipToPrevious,
-            Capability.SeekTo,
-          ],
-          compactCapabilities: [
-            Capability.Play,
-            Capability.Pause,
-            Capability.SkipToNext,
-            Capability.SkipToPrevious,
-          ],
-        });
+        await TrackPlayer.updateOptions(DEFAULT_TRACK_PLAYER_OPTIONS);
       } else {
         await TrackPlayer.reset();
       }
@@ -311,23 +343,22 @@ export async function loadAndPlay(song: Song) {
   playerWrapper.playing = true;
   playerWrapper.replace({ uri: song.url });
 
-  const { useLibraryStore } = require("../store/likedStore");
-  const isLiked = useLibraryStore.getState().isLiked(song);
-
   const currentTrack = {
-    id: song.id || song.title,
+    id: String(song.id || song.title),
     url: song.url,
     title: song.title,
-    artist: song.artist,
-    album: song.album,
-    artwork: song.artwork,
+    artist: song.artist || "Unknown Artist",
+    album: song.album || "Aruvi Play",
+    artwork: song.artwork || undefined,
+    duration: song.duration || undefined,
   };
 
   try {
     await TrackPlayer.reset();
     await TrackPlayer.add([currentTrack]);
+    await TrackPlayer.updateOptions(DEFAULT_TRACK_PLAYER_OPTIONS);
     await TrackPlayer.play();
-    console.log("loadAndPlay: Playback started instantly!");
+    console.log("loadAndPlay: Playback started instantly with notification capabilities!");
   } catch (playErr) {
     console.error("loadAndPlay: playerWrapper.play failed:", playErr);
     throw playErr;
@@ -336,26 +367,6 @@ export async function loadAndPlay(song: Song) {
       if (playerWrapper) playerWrapper.setIsResetting(false);
     }, 300);
   }
-
-  // Update lockscreen options asynchronously in background
-  TrackPlayer.updateOptions({
-    stoppingAppPausesPlayback: true,
-    alwaysPauseOnInterruption: false,
-    progressUpdateEventInterval: 0.25,
-    capabilities: [
-      Capability.Play,
-      Capability.Pause,
-      Capability.SkipToNext,
-      Capability.SkipToPrevious,
-      Capability.SeekTo,
-    ],
-    compactCapabilities: [
-      Capability.Play,
-      Capability.Pause,
-      Capability.SkipToNext,
-      Capability.SkipToPrevious,
-    ],
-  }).catch(() => {});
 }
 
 export function updateLockScreen(song: Song) {

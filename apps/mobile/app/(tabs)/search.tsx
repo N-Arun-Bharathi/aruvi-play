@@ -13,8 +13,8 @@ import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SearchBar } from "../../components/SearchBar";
 import { SongRow } from "../../components/SongRow";
-import { searchSongs } from "../../services/saavn";
-import { Song } from "../../types/song";
+import { searchSongs, searchPlaylists } from "../../services/saavn";
+import { Song, SaavnPlaylist } from "../../types/song";
 import { usePlayerStore } from "../../store/playerStore";
 import { useLibraryStore } from "../../store/likedStore";
 import { useTheme } from "../../utils/theme";
@@ -38,6 +38,7 @@ export default function Search() {
 
   const [q, setQ] = useState("");
   const [results, setResults] = useState<Song[]>([]);
+  const [playlistResults, setPlaylistResults] = useState<SaavnPlaylist[]>([]);
   const [loading, setLoading] = useState(false);
   const [history, setHistory] = useState<string[]>([]);
   
@@ -62,6 +63,7 @@ export default function Search() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!q.trim()) {
       setResults([]);
+      setPlaylistResults([]);
       setLoading(false);
       return;
     }
@@ -77,9 +79,13 @@ export default function Search() {
       abortControllerRef.current = controller;
       
       try {
-        const r = await searchSongs(q, 20, controller.signal);
+        const [r, pl] = await Promise.all([
+          searchSongs(q, 20, controller.signal),
+          searchPlaylists(q, 8).catch(() => []),
+        ]);
         if (!controller.signal.aborted) {
           setResults(r);
+          setPlaylistResults(pl || []);
         }
       } catch (err: any) {
         const isCancel = err?.name === "CanceledError" || err?.name === "AbortError" || err?.message === "canceled";
@@ -244,36 +250,98 @@ export default function Search() {
               contentContainerStyle={{ paddingBottom: bottomPadding }}
               keyboardShouldPersistTaps="handled"
               ListHeaderComponent={
-                topResult ? (
+                topResult || playlistResults.length > 0 ? (
                   <View className="mb-4">
-                    <Text className="text-xs uppercase font-bold tracking-wider px-5 mb-3" style={{ color: theme.secondaryText }}>
-                      Top Result
-                    </Text>
-                    <Pressable
-                      onPress={() => handleSongPlay(topResult)}
-                      className="mx-5 p-4 rounded-3xl border flex-row items-center active:bg-white/5 mb-5 relative overflow-hidden"
-                      style={{ backgroundColor: theme.card, borderColor: theme.border }}
-                    >
-                      <Image
-                        source={{ uri: topResult.artwork }}
-                        style={{ width: 68, height: 68, borderRadius: 16 }}
-                        className="border border-white/5"
-                      />
-                      <View className="flex-1 ml-4 justify-center pr-8">
-                        <Text className="text-base font-bold" numberOfLines={1} style={{ color: theme.primaryText }}>
-                          {topResult.title}
+                    {topResult && (
+                      <>
+                        <Text className="text-xs uppercase font-bold tracking-wider px-5 mb-3" style={{ color: theme.secondaryText }}>
+                          Top Result
                         </Text>
-                        <Text className="text-xs font-semibold mt-0.5" style={{ color: theme.accent }}>
-                          Song • {topResult.artist}
+                        <Pressable
+                          onPress={() => handleSongPlay(topResult)}
+                          className="mx-5 p-4 rounded-3xl border flex-row items-center active:bg-white/5 mb-5 relative overflow-hidden"
+                          style={{ backgroundColor: theme.card, borderColor: theme.border }}
+                        >
+                          <Image
+                            source={{ uri: topResult.artwork }}
+                            style={{ width: 68, height: 68, borderRadius: 16 }}
+                            className="border border-white/5"
+                          />
+                          <View className="flex-1 ml-4 justify-center pr-8">
+                            <Text className="text-base font-bold" numberOfLines={1} style={{ color: theme.primaryText }}>
+                              {topResult.title}
+                            </Text>
+                            <Text className="text-xs font-semibold mt-0.5" style={{ color: theme.accent }}>
+                              Song • {topResult.artist}
+                            </Text>
+                          </View>
+                          <View 
+                            className="w-10 h-10 rounded-full items-center justify-center absolute right-4" 
+                            style={{ backgroundColor: theme.accent }}
+                          >
+                            <Icon name="play" size={16} color="#000000" />
+                          </View>
+                        </Pressable>
+                      </>
+                    )}
+
+                    {playlistResults.length > 0 && (
+                      <View className="mb-5">
+                        <Text className="text-xs uppercase font-bold tracking-wider px-5 mb-3" style={{ color: theme.secondaryText }}>
+                          Playlists
                         </Text>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          contentContainerStyle={{ paddingHorizontal: 20, gap: 12 }}
+                        >
+                          {playlistResults.map((pl) => (
+                            <Pressable
+                              key={pl.id}
+                              onPress={() => {
+                                router.push({
+                                  pathname: "/playlists/[id]",
+                                  params: {
+                                    id: pl.id,
+                                    isSaavn: "true",
+                                    name: pl.title,
+                                    coverUrl: pl.image || "",
+                                    subtitle: pl.subtitle || "",
+                                  },
+                                });
+                              }}
+                              className="w-32 active:scale-95 transition-transform"
+                            >
+                              <Image
+                                source={{
+                                  uri:
+                                    pl.image ||
+                                    "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4",
+                                }}
+                                style={{ width: 128, height: 128, borderRadius: 18 }}
+                                className="border border-white/10"
+                                contentFit="cover"
+                              />
+                              <Text
+                                className="text-xs font-bold mt-2 text-left"
+                                numberOfLines={1}
+                                style={{ color: theme.primaryText }}
+                              >
+                                {pl.title}
+                              </Text>
+                              <Text
+                                className="text-[11px] font-medium mt-0.5 text-left"
+                                numberOfLines={1}
+                                style={{ color: theme.secondaryText }}
+                              >
+                                {pl.subtitle || "JioSaavn Playlist"}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
                       </View>
-                      <View 
-                        className="w-10 h-10 rounded-full items-center justify-center absolute right-4" 
-                        style={{ backgroundColor: theme.accent }}
-                      >
-                        <Icon name="play" size={16} color="#000000" />
-                      </View>
-                    </Pressable>
+                    )}
+
                     {remainingSongs.length > 0 && (
                       <Text className="text-xs uppercase font-bold tracking-wider px-5 mb-2" style={{ color: theme.secondaryText }}>
                         Songs

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Song, getTrendingSongs } from "@aruvi/shared";
+import { Song, SaavnPlaylist, getTrendingSongs, getFeaturedPlaylists } from "@aruvi/shared";
 import { useAuthStore } from "../store/authStore";
 import { usePlayerStore } from "../store/playerStore";
+import { usePlaylistStore } from "../store/playlistStore";
+import { useSettingsStore } from "../store/settingsStore";
 import { useRoomStore } from "../store/roomStore";
-import { Play, Users, Volume2 } from "lucide-react";
+import { Play, Users, Volume2, ListMusic } from "lucide-react";
 
 interface HomeViewProps {
   setActiveView: (view: string) => void;
@@ -12,10 +14,13 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
   const { userProfile } = useAuthStore();
   const { playSong, currentSong, isPlaying } = usePlayerStore();
+  const { loadSaavnPlaylist } = usePlaylistStore();
+  const { preferredLanguage } = useSettingsStore();
   const { fetchActiveRooms } = useRoomStore();
 
   const [recommended, setRecommended] = useState<Song[]>([]);
   const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>([]);
+  const [featuredPlaylists, setFeaturedPlaylists] = useState<SaavnPlaylist[]>([]);
   const [loading, setLoading] = useState(true);
 
   const userName = userProfile?.name || "Arun";
@@ -24,18 +29,24 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
     async function loadData() {
       setLoading(true);
       try {
-        const trending = await getTrendingSongs();
+        const lang = (preferredLanguage || "tamil").toLowerCase();
+        const [trending, playlists] = await Promise.all([
+          getTrendingSongs([lang]),
+          getFeaturedPlaylists([lang]),
+        ]);
 
         // 3 Featured Recommended Songs
-        const featuredRecs = trending.slice(0, 3);
+        const featuredRecs = (trending || []).slice(0, 3);
         setRecommended(featuredRecs);
 
         // Recently Played Songs
-        const recent = trending.slice(3, 7);
+        const recent = (trending || []).slice(3, 7);
         setRecentlyPlayed(recent);
 
+        setFeaturedPlaylists(playlists || []);
         fetchActiveRooms();
       } catch (err) {
+
         console.error("Home loading error:", err);
       } finally {
         setLoading(false);
@@ -43,6 +54,12 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
     }
     loadData();
   }, []);
+
+  const handleOpenPlaylist = async (plId: string) => {
+    await loadSaavnPlaylist(plId);
+    setActiveView("playlist-detail");
+  };
+
 
   return (
     <div className="p-6 sm:p-8 space-y-10 max-w-7xl mx-auto pb-36">
@@ -138,7 +155,60 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
               })}
             </div>
           </section>
+
+          {/* Featured JioSaavn Playlists */}
+          {featuredPlaylists.length > 0 && (
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-bold text-white tracking-wide flex items-center gap-2">
+                  <ListMusic className="w-4 h-4 text-cyan-400" /> Featured JioSaavn Playlists
+                </h2>
+                <button
+                  onClick={() => setActiveView("playlists")}
+                  className="text-[11px] font-bold text-cyan-400 hover:underline"
+                >
+                  View All
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {featuredPlaylists.slice(0, 8).map((pl) => (
+                  <div
+                    key={pl.id}
+                    onClick={() => handleOpenPlaylist(pl.id)}
+                    className="group bg-zinc-900/50 hover:bg-zinc-850/80 border border-zinc-850 hover:border-cyan-500/40 rounded-2xl p-3 cursor-pointer transition-all hover:scale-[1.02] relative overflow-hidden"
+                  >
+                    <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 bg-zinc-800">
+                      <img
+                        src={pl.image || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4"}
+                        alt={pl.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      />
+                      {pl.songCount && (
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 border border-white/10 text-[10px] font-bold text-white">
+                          {pl.songCount} Tracks
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button className="w-10 h-10 rounded-full bg-cyan-400 text-zinc-950 flex items-center justify-center shadow-lg">
+                          <Play className="w-4 h-4 fill-zinc-950 ml-0.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <h4 className="text-xs font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                      {pl.title}
+                    </h4>
+                    <p className="text-[11px] text-zinc-400 truncate mt-0.5 font-medium">
+                      {pl.subtitle || "JioSaavn Playlist"}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
+
 
         {/* Right Column: Active Rooms Widget */}
         <div className="space-y-4">

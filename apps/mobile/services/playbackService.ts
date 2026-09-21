@@ -1,67 +1,126 @@
 import TrackPlayer, { Event } from "react-native-track-player";
 
 export async function playbackService() {
-  console.log("PlaybackService: Registering remote event listeners...");
+  console.log("PlaybackService: Registering remote notification event listeners...");
 
-  TrackPlayer.addEventListener(Event.RemotePlay, () => {
+  TrackPlayer.addEventListener(Event.RemotePlay, async () => {
     console.log("PlaybackService: RemotePlay triggered");
     try {
+      await TrackPlayer.play();
       const { QueueManager } = require("./queueManager");
       const manager = QueueManager.getInstance();
       if (!manager.isPlaying) {
-        manager.togglePlay();
-      } else {
-        TrackPlayer.play().catch((err) => console.error("PlaybackService: play error:", err));
+        manager.isPlaying = true;
+        manager.syncWithZustand();
       }
     } catch (e) {
-      TrackPlayer.play().catch((err) => console.error("PlaybackService: play fallback error:", err));
+      console.error("PlaybackService: RemotePlay error:", e);
     }
   });
 
-  TrackPlayer.addEventListener(Event.RemotePause, () => {
+  TrackPlayer.addEventListener(Event.RemotePause, async () => {
     console.log("PlaybackService: RemotePause triggered");
     try {
+      await TrackPlayer.pause();
       const { QueueManager } = require("./queueManager");
       const manager = QueueManager.getInstance();
       if (manager.isPlaying) {
-        manager.togglePlay();
-      } else {
-        TrackPlayer.pause().catch((err) => console.error("PlaybackService: pause error:", err));
+        manager.isPlaying = false;
+        manager.syncWithZustand();
       }
     } catch (e) {
-      TrackPlayer.pause().catch((err) => console.error("PlaybackService: pause fallback error:", err));
+      console.error("PlaybackService: RemotePause error:", e);
     }
   });
 
-  TrackPlayer.addEventListener(Event.RemoteNext, () => {
+  TrackPlayer.addEventListener(Event.RemoteNext, async () => {
     console.log("PlaybackService: RemoteNext triggered -> QueueManager.playNext()");
     try {
       const { QueueManager } = require("./queueManager");
-      QueueManager.getInstance().playNext();
+      await QueueManager.getInstance().playNext();
     } catch (e) {
-      console.error("PlaybackService: Failed to trigger playNext:", e);
+      console.error("PlaybackService: RemoteNext error:", e);
     }
   });
 
-  TrackPlayer.addEventListener(Event.RemotePrevious, () => {
+  TrackPlayer.addEventListener(Event.RemotePrevious, async () => {
     console.log("PlaybackService: RemotePrevious triggered -> QueueManager.playPrevious()");
     try {
       const { QueueManager } = require("./queueManager");
-      QueueManager.getInstance().playPrevious();
+      await QueueManager.getInstance().playPrevious();
     } catch (e) {
-      console.error("PlaybackService: Failed to trigger playPrevious:", e);
+      console.error("PlaybackService: RemotePrevious error:", e);
     }
   });
 
-  TrackPlayer.addEventListener(Event.RemoteSeek, (event) => {
-    console.log("PlaybackService: RemoteSeek triggered to:", event.position);
-    TrackPlayer.seekTo(event.position).catch((err) => console.error("PlaybackService: seekTo error:", err));
+  TrackPlayer.addEventListener(Event.RemoteSkip, async (event: any) => {
+    console.log("PlaybackService: RemoteSkip triggered to index:", event?.index);
+    try {
+      const { QueueManager } = require("./queueManager");
+      const manager = QueueManager.getInstance();
+      if (typeof event?.index === "number" && event.index >= 0 && event.index < manager.queue.length) {
+        manager.index = event.index;
+        manager.isPlaying = true;
+        manager.syncWithZustand();
+        await manager.loadIndex(event.index);
+      } else {
+        await manager.playNext();
+      }
+    } catch (e) {
+      console.error("PlaybackService: RemoteSkip error:", e);
+    }
+  });
+
+  TrackPlayer.addEventListener(Event.RemoteJumpForward, async (event: any) => {
+    console.log("PlaybackService: RemoteJumpForward triggered:", event?.interval);
+    try {
+      const interval = event?.interval || 10;
+      const progress = await TrackPlayer.getProgress().catch(() => ({ position: 0 }));
+      await TrackPlayer.seekTo(progress.position + interval);
+    } catch (e) {
+      console.error("PlaybackService: RemoteJumpForward error:", e);
+    }
+  });
+
+  TrackPlayer.addEventListener(Event.RemoteJumpBackward, async (event: any) => {
+    console.log("PlaybackService: RemoteJumpBackward triggered:", event?.interval);
+    try {
+      const interval = event?.interval || 10;
+      const progress = await TrackPlayer.getProgress().catch(() => ({ position: 0 }));
+      await TrackPlayer.seekTo(Math.max(0, progress.position - interval));
+    } catch (e) {
+      console.error("PlaybackService: RemoteJumpBackward error:", e);
+    }
+  });
+
+  TrackPlayer.addEventListener(Event.RemoteSeek, async (event: any) => {
+    console.log("PlaybackService: RemoteSeek triggered to:", event?.position);
+    try {
+      if (typeof event?.position === "number") {
+        await TrackPlayer.seekTo(event.position);
+      }
+    } catch (err) {
+      console.error("PlaybackService: RemoteSeek error:", err);
+    }
+  });
+
+  TrackPlayer.addEventListener(Event.RemoteStop, async () => {
+    console.log("PlaybackService: RemoteStop triggered");
+    try {
+      await TrackPlayer.pause().catch(() => {});
+      const { QueueManager } = require("./queueManager");
+      const manager = QueueManager.getInstance();
+      manager.isPlaying = false;
+      manager.syncWithZustand();
+    } catch (e) {
+      console.error("PlaybackService: RemoteStop error:", e);
+    }
   });
 
   let wasPlayingBeforeDuck = false;
 
   TrackPlayer.addEventListener(Event.RemoteDuck, async (event: any) => {
-    console.log("PlaybackService: RemoteDuck (audio interruption / call / video) triggered:", event);
+    console.log("PlaybackService: RemoteDuck (audio interruption) triggered:", event);
     try {
       const { QueueManager } = require("./queueManager");
       const manager = QueueManager.getInstance();
@@ -78,7 +137,7 @@ export async function playbackService() {
 
       // 1. Ducking for notification sounds / navigation audio prompts
       if (event.ducking) {
-        console.log("PlaybackService: Transient audio ducking (notification) -> lowering volume");
+        console.log("PlaybackService: Transient audio ducking -> lowering volume");
         await TrackPlayer.setVolume(0.2).catch(() => {});
       } else if (!event.paused) {
         // Restore volume when ducking ends
@@ -96,7 +155,7 @@ export async function playbackService() {
       } else if (event.shouldResume || (!event.paused && !event.ducking)) {
         await TrackPlayer.setVolume(1.0).catch(() => {});
         if (wasPlayingBeforeDuck) {
-          console.log("PlaybackService: Call/interruption ended. Resuming playback...");
+          console.log("PlaybackService: Interruption ended. Resuming playback...");
           wasPlayingBeforeDuck = false;
           manager.isPlaying = true;
           manager.syncWithZustand();
@@ -107,29 +166,5 @@ export async function playbackService() {
       TrackPlayer.pause().catch(() => {});
     }
   });
-
-  TrackPlayer.addEventListener(Event.RemoteStop, () => {
-    console.log("PlaybackService: RemoteStop triggered");
-    try {
-      const { QueueManager } = require("./queueManager");
-      const manager = QueueManager.getInstance();
-      if (manager.isPlaying) {
-        manager.togglePlay();
-      } else {
-        TrackPlayer.pause().catch(() => {});
-      }
-    } catch (e) {
-      TrackPlayer.pause().catch(() => {});
-    }
-  });
-
-  TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
-    console.log("PlaybackService: PlaybackQueueEnded triggered");
-    try {
-      const { QueueManager } = require("./queueManager");
-      QueueManager.getInstance().onTrackFinished();
-    } catch (e) {
-      console.error("PlaybackService: Error on PlaybackQueueEnded handler:", e);
-    }
-  });
 }
+
