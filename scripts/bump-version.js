@@ -3,6 +3,7 @@ const path = require("path");
 
 const rootDir = path.resolve(__dirname, "..");
 const bumpType = process.argv[2] || "patch";
+const customReleaseNotes = process.argv[3] || "";
 
 if (!["patch", "minor", "major"].includes(bumpType)) {
   console.error(`Invalid bump type: "${bumpType}". Must be "patch", "minor", or "major".`);
@@ -129,12 +130,32 @@ if (fs.existsSync(rootEnv)) {
   console.log(" ✓ Synced .env to apps/mobile and apps/web");
 }
 
-// 13. Automatically trigger database synchronization
-try {
-  const { execSync } = require("child_process");
-  execSync("node scripts/sync-version.js", { stdio: "inherit", cwd: rootDir });
-} catch (e) {
-  // Graceful fallback
+// 13. Maintain CHANGELOG.md with unique version notes
+const changelogPath = path.join(rootDir, "CHANGELOG.md");
+const dateStr = new Date().toISOString().split("T")[0];
+const notesToRecord = customReleaseNotes || "• Performance improvements and bug fixes.\n• Audio playback optimizations.";
+const changelogEntry = `\n## [${newVersion}] - ${dateStr} (Code ${newVersionCode})\n${notesToRecord}\n`;
+
+if (fs.existsSync(changelogPath)) {
+  const existing = fs.readFileSync(changelogPath, "utf-8");
+  const cleaned = existing.replace(/^# Changelog\s*\n?/, "");
+  fs.writeFileSync(changelogPath, `# Changelog\n${changelogEntry}\n${cleaned}`, "utf-8");
+} else {
+  fs.writeFileSync(changelogPath, `# Changelog\n${changelogEntry}`, "utf-8");
 }
+console.log(` ✓ Updated ${path.relative(rootDir, changelogPath)} for v${newVersion}`);
+
+// 14. Automatically trigger database synchronization
+try {
+  const { spawnSync } = require("child_process");
+  const syncArgs = ["scripts/sync-version.js"];
+  if (customReleaseNotes) {
+    syncArgs.push(customReleaseNotes);
+  }
+  spawnSync("node", syncArgs, { stdio: "inherit", cwd: rootDir });
+} catch (e) {
+  console.warn("Sync version warning:", e.message || e);
+}
+
 
 
