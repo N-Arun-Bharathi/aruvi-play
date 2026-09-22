@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { SaavnPlaylist, getFeaturedPlaylists, searchPlaylists } from "@aruvi/shared";
+import { SaavnPlaylist, getFeaturedPlaylists } from "@aruvi/shared";
 import { useAuthStore } from "../store/authStore";
 import { useLikedStore } from "../store/likedStore";
 import { usePlaylistStore } from "../store/playlistStore";
 import { useSettingsStore } from "../store/settingsStore";
 import { useHistoryStore } from "../store/historyStore";
 import { SongListRow } from "../components/SongListRow";
-import { SongCard } from "../components/SongCard";
-import { Heart, ListMusic, History, Plus, Play, Shuffle, Lock, Sparkles, Trash2, Globe } from "lucide-react";
+import { Heart, ListMusic, History, Plus, Play, Lock, Sparkles, Trash2 } from "lucide-react";
 
 interface LibraryViewProps {
   initialTab?: "liked" | "playlists" | "history";
@@ -17,7 +16,7 @@ interface LibraryViewProps {
 export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", setActiveView }) => {
   const { authMode, openAuthModal } = useAuthStore();
   const { likedSongs } = useLikedStore();
-  const { playlists, createPlaylist, loadSaavnPlaylist } = usePlaylistStore();
+  const { playlists, createPlaylist } = usePlaylistStore();
   const { preferredLanguage } = useSettingsStore();
   const { history, clearHistory } = useHistoryStore();
 
@@ -30,7 +29,6 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
   const [loadingSaavn, setLoadingSaavn] = useState(false);
 
   const isGuest = authMode === "guest";
-
   const activeLang = (preferredLanguage || "Tamil").toLowerCase();
 
   useEffect(() => {
@@ -60,24 +58,23 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
     setActiveView(`/playlists/${id}`);
   };
 
-
   const renderGuestPrompt = (title: string, description: string) => (
-    <div className="p-8 max-w-2xl mx-auto text-center my-12 space-y-6">
-      <div className="w-16 h-16 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/20">
+    <div className="p-8 max-w-2xl mx-auto text-center my-12 space-y-6 bg-slate-800/60 border border-white/15 backdrop-blur-xl rounded-3xl shadow-xl">
+      <div className="w-16 h-16 rounded-full bg-sky-500/15 text-sky-400 flex items-center justify-center mx-auto border border-sky-500/30 shadow-lg shadow-sky-500/10">
         <Lock className="w-8 h-8" />
       </div>
       <h2 className="text-2xl font-black text-white">{title}</h2>
-      <p className="text-sm text-zinc-400 leading-relaxed">{description}</p>
+      <p className="text-sm text-slate-300 leading-relaxed">{description}</p>
       <div className="flex justify-center gap-3 pt-2">
         <button
           onClick={() => openAuthModal("login")}
-          className="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-full shadow-lg transition-all"
+          className="px-6 py-3 bg-gradient-to-r from-sky-400 to-blue-600 hover:from-sky-300 hover:to-blue-500 text-white font-bold text-xs rounded-full shadow-lg shadow-sky-500/30 transition-all"
         >
           Log In
         </button>
         <button
           onClick={() => openAuthModal("register")}
-          className="px-6 py-3 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs rounded-full border border-zinc-700 transition-colors"
+          className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs rounded-full border border-white/15 transition-colors"
         >
           Register Free
         </button>
@@ -89,13 +86,13 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
     <div className="p-4 sm:p-8 space-y-8 max-w-7xl mx-auto pb-32">
       {/* Header Tabs */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 border-b border-zinc-800 pb-4 w-full">
+        <div className="flex items-center gap-2 border-b border-white/10 pb-4 w-full">
           <button
             onClick={() => setActiveTab("liked")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
               activeTab === "liked"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-gradient-to-r from-sky-500/20 to-blue-600/10 text-sky-400 border border-sky-500/40 shadow-sm"
+                : "text-slate-400 hover:text-white"
             }`}
           >
             <Heart className="w-4 h-4" /> Liked Songs ({isGuest ? 0 : likedSongs.length})
@@ -104,8 +101,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             onClick={() => setActiveTab("playlists")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
               activeTab === "playlists"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-gradient-to-r from-sky-500/20 to-blue-600/10 text-sky-400 border border-sky-500/40 shadow-sm"
+                : "text-slate-400 hover:text-white"
             }`}
           >
             <ListMusic className="w-4 h-4" /> Playlists ({isGuest ? saavnPlaylists.length : playlists.length + saavnPlaylists.length})
@@ -114,8 +111,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             onClick={() => setActiveTab("history")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
               activeTab === "history"
-                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                : "text-zinc-400 hover:text-white"
+                ? "bg-gradient-to-r from-sky-500/20 to-blue-600/10 text-sky-400 border border-sky-500/40 shadow-sm"
+                : "text-slate-400 hover:text-white"
             }`}
           >
             <History className="w-4 h-4" /> History ({isGuest ? 0 : history.length})
@@ -135,15 +132,15 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-black text-white">Liked Songs</h2>
-                <p className="text-xs text-zinc-400">{likedSongs.length} tracks saved to your library</p>
+                <p className="text-xs text-slate-400">{likedSongs.length} tracks saved to your library</p>
               </div>
             </div>
 
             {likedSongs.length === 0 ? (
-              <div className="p-12 text-center border border-dashed border-zinc-800 rounded-3xl space-y-2">
-                <Heart className="w-10 h-10 text-zinc-600 mx-auto" />
+              <div className="p-12 text-center border border-dashed border-white/15 rounded-3xl space-y-2 bg-slate-800/40 backdrop-blur-xl">
+                <Heart className="w-10 h-10 text-slate-400 mx-auto" />
                 <h3 className="text-base font-bold text-white">No liked songs yet</h3>
-                <p className="text-xs text-zinc-400">Click the heart icon on any song to save it to your library!</p>
+                <p className="text-xs text-slate-400">Click the heart icon on any song to save it to your library!</p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -164,7 +161,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-black text-white">Your Custom Playlists</h2>
-                <p className="text-xs text-zinc-400">Personal mixes created by you</p>
+                <p className="text-xs text-slate-400">Personal mixes created by you</p>
               </div>
               <button
                 onClick={() => {
@@ -174,14 +171,14 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
                     setShowCreateModal(true);
                   }
                 }}
-                className="flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-xl shadow-lg transition-all"
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-sky-400 to-blue-600 hover:from-sky-300 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-sky-500/25 transition-all"
               >
                 <Plus className="w-4 h-4" /> Create Playlist
               </button>
             </div>
 
             {playlists.length === 0 ? (
-              <div className="p-8 text-center border border-dashed border-zinc-800 rounded-2xl text-zinc-500 text-xs">
+              <div className="p-8 text-center border border-dashed border-white/15 rounded-2xl text-slate-400 text-xs bg-slate-800/40 backdrop-blur-xl">
                 {isGuest
                   ? "Sign in to build and save your own custom playlists."
                   : "No custom playlists created yet. Click \"Create Playlist\" above to start!"}
@@ -195,16 +192,16 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
                       usePlaylistStore.getState().setActivePlaylist(pl);
                       setActiveView(`/playlists/${pl.id}`);
                     }}
-                    className="group p-4 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-850 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-lg flex flex-col justify-between"
+                    className="group p-4 bg-slate-800/60 hover:bg-slate-800/90 border border-white/[0.08] hover:border-sky-400/40 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-xl flex flex-col justify-between backdrop-blur-xl"
                   >
                     <img
                       src={pl.cover_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=500&q=80"}
                       alt={pl.name}
-                      className="w-full aspect-square rounded-xl object-cover mb-3"
+                      className="w-full aspect-square rounded-xl object-cover mb-3 shadow-inner"
                     />
                     <div>
-                      <h3 className="text-sm font-bold text-white group-hover:text-emerald-400 truncate">{pl.name}</h3>
-                      <p className="text-xs text-zinc-400 truncate">{pl.songs.length} songs</p>
+                      <h3 className="text-sm font-bold text-white group-hover:text-sky-400 truncate">{pl.name}</h3>
+                      <p className="text-xs text-slate-400 truncate">{pl.songs.length} songs</p>
                     </div>
                   </div>
                 ))}
@@ -217,9 +214,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-black text-white flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-cyan-400" /> Featured JioSaavn Playlists
+                  <Sparkles className="w-5 h-5 text-sky-400" /> Featured JioSaavn Playlists
                 </h2>
-                <p className="text-xs text-zinc-400">
+                <p className="text-xs text-slate-400">
                   Trending {activeLang.toUpperCase()} & global charts directly from JioSaavn
                 </p>
               </div>
@@ -228,10 +225,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             {loadingSaavn ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="p-4 bg-zinc-900/40 border border-zinc-850 rounded-2xl animate-pulse space-y-3">
-                    <div className="w-full aspect-square bg-zinc-800 rounded-xl" />
-                    <div className="h-4 bg-zinc-800 rounded w-3/4" />
-                    <div className="h-3 bg-zinc-800 rounded w-1/2" />
+                  <div key={i} className="p-4 bg-slate-800/40 border border-white/[0.06] rounded-2xl animate-pulse space-y-3">
+                    <div className="w-full aspect-square bg-slate-800 rounded-xl" />
+                    <div className="h-4 bg-slate-800 rounded w-3/4" />
+                    <div className="h-3 bg-slate-800/60 rounded w-1/2" />
                   </div>
                 ))}
               </div>
@@ -241,28 +238,28 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
                   <div
                     key={pl.id}
                     onClick={() => handleOpenSaavnPlaylist(pl.id)}
-                    className="group p-4 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-850 hover:border-cyan-500/40 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-lg flex flex-col justify-between relative overflow-hidden"
+                    className="group p-4 bg-slate-800/60 hover:bg-slate-800/90 border border-white/[0.08] hover:border-sky-400/40 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-xl flex flex-col justify-between relative overflow-hidden backdrop-blur-xl"
                   >
-                    <div className="relative w-full aspect-square rounded-xl overflow-hidden mb-3 bg-zinc-800">
+                    <div className="relative w-full aspect-square rounded-xl overflow-hidden mb-3 bg-slate-900">
                       <img
                         src={pl.image || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4"}
                         alt={pl.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                       {pl.songCount && (
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 border border-white/10 text-[10px] font-bold text-white">
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-slate-950/80 border border-white/10 text-[10px] font-bold text-white">
                           {pl.songCount} Tracks
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button className="w-10 h-10 rounded-full bg-cyan-400 text-zinc-950 flex items-center justify-center shadow-lg">
-                          <Play className="w-4 h-4 fill-zinc-950 ml-0.5" />
+                      <div className="absolute inset-0 bg-slate-950/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button className="w-10 h-10 rounded-full bg-gradient-to-r from-sky-400 to-blue-600 text-white flex items-center justify-center shadow-lg">
+                          <Play className="w-4 h-4 fill-white ml-0.5" />
                         </button>
                       </div>
                     </div>
                     <div>
-                      <h3 className="text-sm font-bold text-white group-hover:text-cyan-400 truncate">{pl.title}</h3>
-                      <p className="text-xs text-zinc-400 truncate mt-0.5">{pl.subtitle || "JioSaavn Playlist"}</p>
+                      <h3 className="text-sm font-bold text-white group-hover:text-sky-400 truncate">{pl.title}</h3>
+                      <p className="text-xs text-slate-400 truncate mt-0.5">{pl.subtitle || "JioSaavn Playlist"}</p>
                     </div>
                   </div>
                 ))}
@@ -284,12 +281,12 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-2xl font-black text-white">Listening History</h2>
-                <p className="text-xs text-zinc-400">Recently played tracks</p>
+                <p className="text-xs text-slate-400">Recently played tracks</p>
               </div>
               {history.length > 0 && (
                 <button
                   onClick={clearHistory}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-zinc-400 hover:text-rose-400 bg-zinc-900 border border-zinc-800 rounded-xl transition-colors font-medium"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-300 hover:text-rose-400 bg-slate-800 border border-white/10 rounded-xl transition-colors font-medium"
                 >
                   <Trash2 className="w-3.5 h-3.5" /> Clear History
                 </button>
@@ -297,10 +294,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
             </div>
 
             {history.length === 0 ? (
-              <div className="p-12 text-center border border-dashed border-zinc-800 rounded-3xl space-y-2">
-                <History className="w-10 h-10 text-zinc-600 mx-auto" />
+              <div className="p-12 text-center border border-dashed border-white/15 rounded-3xl space-y-2 bg-slate-800/40 backdrop-blur-xl">
+                <History className="w-10 h-10 text-slate-400 mx-auto" />
                 <h3 className="text-base font-bold text-white">No listening history yet</h3>
-                <p className="text-xs text-zinc-400">Songs you play will appear here automatically.</p>
+                <p className="text-xs text-slate-400">Songs you play will appear here automatically.</p>
               </div>
             ) : (
               <div className="space-y-1">
@@ -315,41 +312,41 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
 
       {/* CREATE PLAYLIST MODAL */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4">
+        <div className="fixed inset-0 z-[9990] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xl animate-fade-in">
+          <div className="bg-slate-900 border border-white/15 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-4">
             <h3 className="text-xl font-bold text-white">Create New Playlist</h3>
             <form onSubmit={handleCreatePlaylist} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Playlist Name</label>
+                <label className="block text-xs font-medium text-slate-200 mb-1.5">Playlist Name</label>
                 <input
                   type="text"
                   required
                   value={newPlName}
                   onChange={(e) => setNewPlName(e.target.value)}
                   placeholder="My Party Bangers"
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-800 border border-white/15 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-sky-400"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-1.5">Description (optional)</label>
+                <label className="block text-xs font-medium text-slate-200 mb-1.5">Description (optional)</label>
                 <textarea
                   value={newPlDesc}
                   onChange={(e) => setNewPlDesc(e.target.value)}
-                  placeholder="High energy Tamil dance tracks..."
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 h-20 resize-none"
+                  placeholder="High energy dance tracks..."
+                  className="w-full bg-slate-800 border border-white/15 text-white text-sm rounded-xl px-4 py-2.5 focus:outline-none focus:border-sky-400 h-20 resize-none"
                 />
               </div>
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-zinc-400 hover:text-white"
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-xl shadow-md"
+                  className="px-5 py-2.5 bg-gradient-to-r from-sky-400 to-blue-600 hover:from-sky-300 hover:to-blue-500 text-white font-bold text-xs rounded-xl shadow-md shadow-sky-500/30"
                 >
                   Create Playlist
                 </button>

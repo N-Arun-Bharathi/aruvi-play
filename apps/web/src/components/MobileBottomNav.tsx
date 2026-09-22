@@ -16,7 +16,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeView, se
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-zinc-950/95 backdrop-blur-xl border-t border-zinc-800/80 flex items-center justify-around z-40 md:hidden select-none px-2">
+    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-slate-950/95 backdrop-blur-2xl border-t border-slate-800 flex items-center justify-around z-40 md:hidden select-none px-2 shadow-2xl">
       {tabs.map((tab) => {
         const Icon = tab.icon;
         const isActive = activeView === tab.id;
@@ -25,7 +25,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({ activeView, se
             key={tab.id}
             onClick={() => setActiveView(tab.id)}
             className={`flex flex-col items-center justify-center flex-1 py-1 transition-all ${
-              isActive ? "text-emerald-400 font-bold" : "text-zinc-500 hover:text-zinc-300"
+              isActive ? "text-[#38bdf8] font-bold drop-shadow-[0_0_8px_rgba(56,189,248,0.5)]" : "text-slate-400 hover:text-white"
             }`}
           >
             <Icon className={`w-5 h-5 mb-0.5 ${isActive ? "scale-110" : ""}`} />

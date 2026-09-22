@@ -166,5 +166,29 @@ export async function playbackService() {
       TrackPlayer.pause().catch(() => {});
     }
   });
+
+  // Track completion handling in background / headless service
+  TrackPlayer.addEventListener(Event.PlaybackQueueEnded, async (data: any) => {
+    console.log("PlaybackService: PlaybackQueueEnded received:", data);
+    try {
+      const { QueueManager } = require("./queueManager");
+      await QueueManager.getInstance().onTrackFinished();
+    } catch (e) {
+      console.error("PlaybackService: PlaybackQueueEnded error:", e);
+    }
+  });
+
+  TrackPlayer.addEventListener(Event.PlaybackState, async (data: any) => {
+    const stateStr = typeof data.state === "string" ? data.state : (data?.state?.state || String(data.state));
+    if (stateStr === "ended" || data.state === 6) {
+      console.log("PlaybackService: PlaybackState ended received:", data.state);
+      try {
+        const { QueueManager } = require("./queueManager");
+        await QueueManager.getInstance().onTrackFinished();
+      } catch (e) {
+        console.error("PlaybackService: PlaybackState ended error:", e);
+      }
+    }
+  });
 }
 

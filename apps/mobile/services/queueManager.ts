@@ -26,7 +26,6 @@ export class QueueManager {
   private isFetchingRelated: boolean = false;
   private isTransitioning: boolean = false;
   private isFinishing: boolean = false;
-  private repeatOnePlayedCount: number = 0;
   private lastSessionSyncTime: number = 0;
   private queueSaveTimer: any = null;
 
@@ -139,11 +138,6 @@ export class QueueManager {
 
     // Single listener for playback status updates
     player.addListener("playbackStatusUpdate", (status: any) => {
-      if (status.playing !== this.isPlaying) {
-        this.isPlaying = status.playing;
-        this.syncWithZustand();
-      }
-
       if (status.error) {
         console.error("Playback status error:", status.error);
         this.handlePlaybackError(this.index);
@@ -152,6 +146,13 @@ export class QueueManager {
 
       if (status.didJustFinish) {
         this.onTrackFinished();
+        return;
+      }
+
+      // Only sync isPlaying from native events when not busy transitioning/resolving tracks
+      if (status.playing !== this.isPlaying && !this.isResolving && !this.isTransitioning) {
+        this.isPlaying = status.playing;
+        this.syncWithZustand();
       }
     });
 
@@ -303,6 +304,7 @@ export class QueueManager {
             if (store.repeat === "all" && this.queue.length > 0) {
               nextIdx = 0;
             } else {
+              console.log("QueueManager: Reached end of queue with no more songs.");
               this.isPlaying = false;
               this.syncWithZustand();
               clearLockScreen();
@@ -395,13 +397,10 @@ export class QueueManager {
     const song = this.queue[idx];
     if (!song) return;
 
-    // Immediately stop and reset native TrackPlayer audio so old track never keeps playing in background
-    await stopAndResetPlayer();
-
     this.lastFinishedId = null;
-    this.repeatOnePlayedCount = 0;
     this.currentlyPlayingId = song.id;
     this.isResolving = true;
+    this.isPlaying = true;
     this.syncWithZustand();
 
     let songToPlay = song;
@@ -428,6 +427,7 @@ export class QueueManager {
     try {
       await loadAndPlay(songToPlay);
       this.currentlyPlayingId = songToPlay.id;
+      this.isPlaying = true;
       
       pushRecent(songToPlay).catch(() => {});
       saveLastPlayed(songToPlay, 0).catch(() => {});
@@ -444,6 +444,7 @@ export class QueueManager {
     }
 
     this.isResolving = false;
+    this.isPlaying = true;
     this.syncWithZustand();
     
     // Prefetch URL for the next song in queue so playback transition is instant
@@ -489,63 +490,53 @@ export class QueueManager {
 
   public async onTrackFinished() {
     if (this.isResolving || this.isTransitioning || this.isFinishing) {
-      console.log("QueueManager: Skipping onTrackFinished because player is resolving/transitioning/finishing");
+      console.log("QueueManager: Skipping onTrackFinished because player is busy", {
+        resolving: this.isResolving,
+        transitioning: this.isTransitioning,
+        finishing: this.isFinishing,
+      });
+      return;
+    }
+
+    const currentSong = this.queue[this.index];
+    if (!currentSong) return;
+
+    const trackKey = `${currentSong.id || currentSong.title}_${this.index}`;
+    if (this.lastFinishedId === trackKey) {
+      console.log("QueueManager: Skipping onTrackFinished because song already handled:", trackKey);
       return;
     }
 
     this.isFinishing = true;
+    this.lastFinishedId = trackKey;
 
     try {
       const { usePlayerStore } = require("../store/playerStore");
       const store = usePlayerStore.getState();
-      const currentSong = this.queue[this.index];
-      if (!currentSong) return;
 
-      const trackKey = currentSong.id || currentSong.title;
-      console.log("QueueManager: onTrackFinished called for song:", currentSong.title, trackKey);
-
-      if (this.currentlyPlayingId && currentSong.id && this.currentlyPlayingId !== currentSong.id) {
-        console.log("QueueManager: Skipping onTrackFinished because currentlyPlayingId doesn't match current song:", this.currentlyPlayingId, currentSong.id);
-        return;
-      }
-
-      if (this.lastFinishedId === trackKey && store.repeat !== "one") {
-        console.log("QueueManager: Skipping onTrackFinished because song already finished:", trackKey);
-        return;
-      }
-
-      this.lastFinishedId = trackKey;
+      console.log("QueueManager: onTrackFinished called for song:", currentSong.title, "at index:", this.index);
 
       if (store.repeat === "one") {
-        if (this.repeatOnePlayedCount < 1) {
-          this.repeatOnePlayedCount++;
-          console.log(`QueueManager: Repeat One active -> repeating track ${currentSong.title} (1 extra play)`);
-          this.lastFinishedId = null;
-          const player = tryGetPlayer();
-          if (player) {
-            await player.seekTo(0);
-            await player.play();
-            this.isPlaying = true;
-            this.syncWithZustand();
-          } else {
-            await this.loadIndex(this.index);
-          }
-          useToastStore.getState().show("Repeating current song (1/1)");
-          return;
+        console.log(`QueueManager: Repeat One active -> repeating track ${currentSong.title}`);
+        const player = tryGetPlayer();
+        if (player) {
+          await player.seekTo(0);
+          await player.play();
+          this.isPlaying = true;
+          this.syncWithZustand();
         } else {
-          console.log(`QueueManager: Repeat One completed 1 extra repeat -> resetting repeat mode to off and advancing to next track`);
-          this.repeatOnePlayedCount = 0;
-          usePlayerStore.setState({ repeat: "off" });
-          await this.playNext();
-          return;
+          await this.loadIndex(this.index);
         }
+        return;
       }
 
       await this.playNext();
+    } catch (e) {
+      console.error("QueueManager: Error during onTrackFinished:", e);
     } finally {
       setTimeout(() => {
         this.isFinishing = false;
-      }, 500);
+      }, 800);
     }
   }
 
@@ -745,8 +736,6 @@ export class QueueManager {
   }
 
   public async appendRecommendations(seedSong: Song): Promise<void> {
-    if (this.isResolving) return;
-
     console.log(`QueueManager: Building recommendations seeded by: ${seedSong.title}`);
     const recommendations = await this.buildArtistQueue(seedSong);
 
@@ -759,7 +748,7 @@ export class QueueManager {
   }
 
   public async appendRecommendedSongsIfNeeded() {
-    if (this.isResolving || this.isFetchingRelated) return;
+    if (this.isFetchingRelated) return;
 
     const remaining = this.queue.length - 1 - this.index;
     if (remaining < 5 || this.queue.length < 10) {
@@ -781,7 +770,7 @@ export class QueueManager {
   }
 
   public async appendRecommendedSongs() {
-    const currentSong = this.queue[this.index];
+    const currentSong = this.queue[this.index] || (this.queue.length > 0 ? this.queue[this.queue.length - 1] : null);
     if (!currentSong) return;
 
     this.isFetchingRelated = true;

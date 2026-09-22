@@ -89,8 +89,8 @@ class TrackPlayerWrapper {
         this.duration = data.duration;
         this.emitPlaybackStatus();
 
-        // Safety fallback: If playback reaches within 0.75s of the end and position > 3s
-        if (data.duration > 3 && data.position >= data.duration - 0.75 && (this.playing || data.position >= data.duration - 0.2)) {
+        // Safety fallback: If playback reaches within 0.5s of the end and position > 3s
+        if (data.duration > 3 && data.position >= data.duration - 0.5 && this.playing) {
           console.log("TrackPlayerWrapper: PlaybackProgressUpdated near end detected, triggering auto-advance");
           this.playing = false;
           this.emitPlaybackStatus(true);
@@ -99,7 +99,6 @@ class TrackPlayerWrapper {
 
       // Listen to state changes
       TrackPlayer.addEventListener(Event.PlaybackState, (data: any) => {
-        if (this.isResetting) return;
         const stateStr = typeof data.state === "string" ? data.state : (data?.state?.state || String(data.state));
         const stateVal = data.state;
 
@@ -140,6 +139,11 @@ class TrackPlayerWrapper {
           return;
         }
 
+        if (this.isResetting) {
+          // During reset/loading transitions, ignore temporary intermediate pause/stop states
+          return;
+        }
+
         if (isPausedOrStopped && this.playing) {
           this.playing = false;
           this.emitPlaybackStatus();
@@ -157,16 +161,6 @@ class TrackPlayerWrapper {
         this.currentTime = 0;
         this.duration = 0;
         this.emitPlaybackStatus(true);
-      });
-
-      // Listen to active track changed event
-      TrackPlayer.addEventListener(Event.PlaybackActiveTrackChanged, (data: any) => {
-        if (this.isResetting) return;
-        if (!data?.track && (data?.lastPosition > 0 || data?.lastTrack !== undefined)) {
-          console.log("TrackPlayerWrapper: Event.PlaybackActiveTrackChanged (track cleared), triggering onTrackFinished");
-          this.playing = false;
-          this.emitPlaybackStatus(true);
-        }
       });
 
       // Listen to playback error events
@@ -328,7 +322,7 @@ export async function stopAndResetPlayer() {
     if (playerWrapper) {
       setTimeout(() => {
         playerWrapper.setIsResetting(false);
-      }, 200);
+      }, 300);
     }
   }
 }
@@ -337,11 +331,13 @@ export async function loadAndPlay(song: Song) {
   if (!playerWrapper) return;
   await playerWrapper.ensureInitialized();
   console.log("loadAndPlay: Instant playback transition for:", song.title);
-  if (playerWrapper) playerWrapper.setIsResetting(true);
-  playerWrapper.currentTime = 0;
-  playerWrapper.duration = 0;
-  playerWrapper.playing = true;
-  playerWrapper.replace({ uri: song.url });
+  if (playerWrapper) {
+    playerWrapper.setIsResetting(true);
+    playerWrapper.currentTime = 0;
+    playerWrapper.duration = song.duration || 0;
+    playerWrapper.playing = true;
+    playerWrapper.replace({ uri: song.url });
+  }
 
   const currentTrack = {
     id: String(song.id || song.title),
@@ -365,7 +361,7 @@ export async function loadAndPlay(song: Song) {
   } finally {
     setTimeout(() => {
       if (playerWrapper) playerWrapper.setIsResetting(false);
-    }, 300);
+    }, 400);
   }
 }
 

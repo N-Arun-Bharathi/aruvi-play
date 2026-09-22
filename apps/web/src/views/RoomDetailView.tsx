@@ -44,7 +44,7 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
   if (loadingRoom) {
     return (
       <div className="p-12 text-center my-16 space-y-4">
-        <Loader2 className="w-10 h-10 text-emerald-400 mx-auto animate-spin" />
+        <Loader2 className="w-10 h-10 text-[#38bdf8] mx-auto animate-spin" />
         <h3 className="text-base font-bold text-white">Connecting to Room...</h3>
       </div>
     );
@@ -53,11 +53,11 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
   if (!currentRoom) {
     return (
       <div className="p-8 text-center my-16 space-y-4">
-        <Radio className="w-12 h-12 text-zinc-600 mx-auto" />
+        <Radio className="w-12 h-12 text-slate-600 mx-auto" />
         <h3 className="text-xl font-bold text-white">No Active Room</h3>
         <button
           onClick={handleBack}
-          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-full transition-all"
+          className="px-5 py-2.5 bg-gradient-to-r from-[#38bdf8] to-[#2563eb] hover:from-[#0ea5e9] hover:to-[#1d4ed8] text-slate-950 font-black text-xs rounded-full shadow-lg shadow-[#38bdf8]/25 transition-all"
         >
           Back to Rooms
         </button>
@@ -92,28 +92,30 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
   return (
     <div className="p-4 sm:p-8 space-y-8 max-w-7xl mx-auto pb-32">
       {/* Header Info Banner */}
-      <div className="bg-gradient-to-r from-emerald-950/80 via-zinc-900 to-zinc-900 border border-emerald-500/20 p-6 sm:p-8 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-2xl">
-        <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-xs font-bold text-emerald-400">
+      <div className="bg-gradient-to-r from-slate-900/90 via-slate-800/85 to-[#0b1329]/85 border border-slate-700/60 p-6 sm:p-8 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-2xl relative overflow-hidden backdrop-blur-xl">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-[#38bdf8]/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="space-y-2 relative z-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#38bdf8]/15 border border-[#38bdf8]/35 rounded-full text-xs font-bold text-[#38bdf8]">
             <Radio className="w-3.5 h-3.5 animate-pulse" /> Live Room Session
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">{currentRoom.name}</h1>
-          <p className="text-xs text-zinc-400">Host: {currentRoom.host_name}</p>
+          <p className="text-xs text-slate-400">Host: {currentRoom.host_name}</p>
         </div>
 
         {/* Room Code Box & Copy */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 bg-zinc-950 border border-zinc-800 px-4 py-2.5 rounded-2xl">
+        <div className="flex flex-wrap items-center gap-3 relative z-10">
+          <div className="flex items-center gap-3 bg-slate-900/80 border border-slate-700/60 px-4 py-2.5 rounded-2xl backdrop-blur-md">
             <div className="text-left">
-              <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block">Room Code</span>
-              <span className="text-sm font-mono font-black text-emerald-400 tracking-wider">{currentRoom.code}</span>
+              <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider block">Room Code</span>
+              <span className="text-sm font-mono font-black text-[#38bdf8] tracking-wider">{currentRoom.code}</span>
             </div>
             <button
               onClick={copyCode}
-              className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors"
+              className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors"
               title="Copy Code"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Check className="w-4 h-4 text-[#38bdf8]" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
 
@@ -133,25 +135,25 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
         {/* Left 2 Cols: Shared Queue & Search */}
         <div className="lg:col-span-2 space-y-6">
           {/* Add Song to Room Queue */}
-          <div className="bg-zinc-900/60 border border-zinc-850 p-6 rounded-3xl space-y-4">
+          <div className="bg-slate-900/75 border border-slate-800/80 p-6 rounded-3xl space-y-4 shadow-xl backdrop-blur-xl">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Plus className="w-4 h-4 text-emerald-400" /> Add Songs to Shared Room Queue
+              <Plus className="w-4 h-4 text-[#38bdf8]" /> Add Songs to Shared Room Queue
             </h3>
             <form onSubmit={handleSearch} className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3.5 top-3 w-4 h-4 text-zinc-500" />
+                <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search song to add to room..."
-                  className="w-full bg-zinc-950 border border-zinc-800 text-white text-xs rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-950/80 border border-slate-800 text-white placeholder-slate-500 text-xs rounded-xl pl-10 pr-4 py-2.5 focus:outline-none focus:border-[#38bdf8] focus:ring-1 focus:ring-[#38bdf8]"
                 />
               </div>
               <button
                 type="submit"
                 disabled={searching}
-                className="px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold rounded-xl transition-all"
+                className="px-4 py-2.5 bg-gradient-to-r from-[#38bdf8] to-[#2563eb] hover:from-[#0ea5e9] hover:to-[#1d4ed8] text-slate-950 text-xs font-black rounded-xl shadow-md shadow-[#38bdf8]/25 transition-all"
               >
                 Search
               </button>
@@ -162,13 +164,13 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
                 {searchResults.map((song) => (
                   <div
                     key={song.id}
-                    className="flex items-center justify-between p-2.5 bg-zinc-950 border border-zinc-850 rounded-xl"
+                    className="flex items-center justify-between p-2.5 bg-slate-800/60 border border-slate-700/50 rounded-xl"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <img src={song.artwork || "/aruvi-play.png"} alt={song.title} className="w-8 h-8 rounded-lg object-cover" />
                       <div className="min-w-0">
                         <h5 className="text-xs font-bold text-white truncate">{song.title}</h5>
-                        <p className="text-[11px] text-zinc-400 truncate">{song.artist}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{song.artist}</p>
                       </div>
                     </div>
                     <button
@@ -177,7 +179,7 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
                         setSearchResults([]);
                         setSearchQuery("");
                       }}
-                      className="px-3 py-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold rounded-lg transition-all"
+                      className="px-3 py-1 bg-[#38bdf8]/15 hover:bg-[#38bdf8]/25 text-[#38bdf8] border border-[#38bdf8]/35 text-xs font-bold rounded-lg transition-all"
                     >
                       + Add
                     </button>
@@ -190,10 +192,10 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
           {/* Shared Room Queue */}
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <Music className="w-4 h-4 text-emerald-400" /> Shared Room Queue ({roomQueue.length})
+              <Music className="w-4 h-4 text-[#38bdf8]" /> Shared Room Queue ({roomQueue.length})
             </h3>
             {roomQueue.length === 0 ? (
-              <div className="p-8 text-center border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-xs">
+              <div className="p-8 text-center border border-dashed border-slate-700/60 rounded-3xl text-slate-400 text-xs bg-slate-900/40 backdrop-blur-md">
                 No songs added to the room queue yet. Use the search box above to add songs!
               </div>
             ) : (
@@ -201,26 +203,26 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
                 {roomQueue.map((song, idx) => (
                   <div
                     key={`${song.id}_${idx}`}
-                    className="flex items-center justify-between p-3 bg-zinc-900/60 border border-zinc-850 rounded-2xl hover:border-zinc-750 transition-all"
+                    className="flex items-center justify-between p-3 bg-slate-900/70 border border-slate-800/80 rounded-2xl hover:border-[#38bdf8]/40 transition-all backdrop-blur-md"
                   >
                     <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                      <span className="text-xs font-bold text-zinc-500 w-5 text-center">{idx + 1}</span>
+                      <span className="text-xs font-bold text-slate-500 w-5 text-center">{idx + 1}</span>
                       <img src={song.artwork || "/aruvi-play.png"} alt={song.title} className="w-10 h-10 rounded-xl object-cover" />
                       <div className="min-w-0 flex-1">
                         <h4 className="text-xs font-bold text-white truncate">{song.title}</h4>
-                        <p className="text-[11px] text-zinc-400 truncate">{song.artist}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{song.artist}</p>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-3">
                       {(song as any).addedBy && (
-                        <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                        <span className="text-[10px] font-bold bg-[#38bdf8]/15 text-[#38bdf8] border border-[#38bdf8]/35 px-2 py-0.5 rounded-full">
                           Added by {(song as any).addedBy}
                         </span>
                       )}
                       <button
                         onClick={() => playSong(song, roomQueue)}
-                        className="p-2 bg-emerald-500 text-zinc-950 hover:bg-emerald-400 rounded-full transition-transform hover:scale-105"
+                        className="p-2 bg-gradient-to-r from-[#38bdf8] to-[#2563eb] text-slate-950 hover:from-[#0ea5e9] hover:to-[#1d4ed8] rounded-full transition-transform hover:scale-105 shadow-md shadow-[#38bdf8]/30"
                       >
                         <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
                       </button>
@@ -234,27 +236,27 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
 
         {/* Right Col: Room Members */}
         <div className="space-y-4">
-          <div className="bg-zinc-900/60 border border-zinc-850 p-6 rounded-3xl space-y-4">
+          <div className="bg-slate-900/75 border border-slate-800/80 p-6 rounded-3xl space-y-4 shadow-xl backdrop-blur-xl">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                <Users className="w-4 h-4 text-emerald-400" /> Connected Members ({members.length})
+                <Users className="w-4 h-4 text-[#38bdf8]" /> Connected Members ({members.length})
               </h3>
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="w-2 h-2 rounded-full bg-[#38bdf8] animate-pulse shadow-sm shadow-[#38bdf8]" />
             </div>
 
             <div className="space-y-3">
               {members.map((m) => (
-                <div key={m.id} className="flex items-center gap-3 p-2.5 bg-zinc-950 border border-zinc-850 rounded-xl">
-                  <div className="w-8 h-8 rounded-full bg-emerald-500 text-zinc-950 font-bold text-xs flex items-center justify-center">
+                <div key={m.id} className="flex items-center gap-3 p-2.5 bg-slate-800/60 border border-slate-700/50 rounded-xl">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#38bdf8] to-[#2563eb] text-slate-950 font-black text-xs flex items-center justify-center shadow-md shadow-[#38bdf8]/20">
                     {m.name.charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <h5 className="text-xs font-bold text-white truncate">{m.name}</h5>
-                    <span className="text-[10px] text-zinc-500">Connected in room</span>
+                    <span className="text-[10px] text-slate-400">Connected in room</span>
                   </div>
                   {m.user_id === currentRoom.host_id && (
                     <span title="Host">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      <ShieldCheck className="w-4 h-4 text-[#38bdf8]" />
                     </span>
                   )}
                 </div>

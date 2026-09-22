@@ -46,7 +46,6 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
         setFeaturedPlaylists(playlists || []);
         fetchActiveRooms();
       } catch (err) {
-
         console.error("Home loading error:", err);
       } finally {
         setLoading(false);
@@ -59,15 +58,14 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
     setActiveView(`/playlists/${plId}`);
   };
 
-
   return (
-    <div className="p-6 sm:p-8 space-y-10 max-w-7xl mx-auto pb-36">
+    <div className="p-6 sm:p-8 space-y-10 max-w-7xl mx-auto pb-36 animate-fade-in">
       {/* Greeting Header */}
       <div className="space-y-1">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
           Good evening, {userName}
         </h1>
-        <p className="text-xs text-zinc-400 font-medium">Here's your personal soundtrack for tonight.</p>
+        <p className="text-xs text-slate-400 font-medium">Here's your personal soundtrack for tonight.</p>
       </div>
 
       {/* Main Grid + Active Rooms Right Sidebar */}
@@ -87,25 +85,25 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
                   <div
                     key={song.id}
                     onClick={() => playSong(song, recommended)}
-                    className="group bg-zinc-900/60 border border-zinc-850 hover:border-cyan-500/40 rounded-3xl p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-xl relative overflow-hidden"
+                    className="group bg-slate-800/60 hover:bg-slate-800/90 border border-white/[0.08] hover:border-sky-400/40 rounded-3xl p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-xl hover:shadow-sky-500/15 backdrop-blur-xl relative overflow-hidden"
                   >
-                    <div className="relative aspect-square rounded-2xl overflow-hidden mb-3.5 bg-zinc-800">
+                    <div className="relative aspect-square rounded-2xl overflow-hidden mb-3.5 bg-slate-900">
                       <img
                         src={song.artwork || "/aruvi-play.png"}
                         alt={song.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button className="w-12 h-12 rounded-full bg-cyan-400 text-zinc-950 flex items-center justify-center shadow-lg shadow-cyan-400/40">
-                          <Play className="w-5 h-5 fill-zinc-950 ml-0.5" />
+                      <div className="absolute inset-0 bg-slate-950/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button className="w-12 h-12 rounded-full bg-gradient-to-tr from-sky-400 to-blue-600 hover:from-sky-300 hover:to-blue-500 text-white flex items-center justify-center shadow-lg shadow-sky-500/40">
+                          <Play className="w-5 h-5 fill-white ml-0.5" />
                         </button>
                       </div>
                     </div>
 
-                    <h3 className="text-sm font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                    <h3 className="text-sm font-bold text-white truncate group-hover:text-sky-400 transition-colors">
                       {song.title}
                     </h3>
-                    <p className="text-xs text-zinc-400 truncate mt-0.5 font-medium">
+                    <p className="text-xs text-slate-400 truncate mt-0.5 font-medium">
                       {song.artist}
                     </p>
                   </div>
@@ -127,25 +125,25 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
                   <div
                     key={song.id}
                     onClick={() => playSong(song, recentlyPlayed)}
-                    className="flex items-center gap-3.5 p-3 bg-zinc-900/50 hover:bg-zinc-850/80 border border-zinc-850 rounded-2xl cursor-pointer transition-all group"
+                    className="flex items-center gap-3.5 p-3 bg-slate-800/50 hover:bg-slate-800/80 border border-white/[0.06] hover:border-sky-400/30 rounded-2xl cursor-pointer transition-all group backdrop-blur-lg"
                   >
-                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-zinc-800 shrink-0 relative">
+                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-900 shrink-0 relative">
                       <img
                         src={song.artwork || "/aruvi-play.png"}
                         alt={song.title}
                         className="w-full h-full object-cover"
                       />
                       {isCurrent && isPlaying && (
-                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                          <Volume2 className="w-4 h-4 text-cyan-400 animate-pulse" />
+                        <div className="absolute inset-0 bg-slate-950/60 flex items-center justify-center">
+                          <Volume2 className="w-4 h-4 text-sky-400 animate-pulse" />
                         </div>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h4 className="text-xs font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                      <h4 className="text-xs font-bold text-white truncate group-hover:text-sky-400 transition-colors">
                         {song.title}
                       </h4>
-                      <p className="text-[11px] text-zinc-400 truncate font-medium">
+                      <p className="text-[11px] text-slate-400 truncate font-medium">
                         {song.artist}
                       </p>
                     </div>
@@ -160,11 +158,11 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
             <section className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-bold text-white tracking-wide flex items-center gap-2">
-                  <ListMusic className="w-4 h-4 text-cyan-400" /> Featured JioSaavn Playlists
+                  <ListMusic className="w-4 h-4 text-sky-400" /> Featured JioSaavn Playlists
                 </h2>
                 <button
                   onClick={() => setActiveView("playlists")}
-                  className="text-[11px] font-bold text-cyan-400 hover:underline"
+                  className="text-[11px] font-bold text-sky-400 hover:underline"
                 >
                   View All
                 </button>
@@ -175,30 +173,30 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
                   <div
                     key={pl.id}
                     onClick={() => handleOpenPlaylist(pl.id)}
-                    className="group bg-zinc-900/50 hover:bg-zinc-850/80 border border-zinc-850 hover:border-cyan-500/40 rounded-2xl p-3 cursor-pointer transition-all hover:scale-[1.02] relative overflow-hidden"
+                    className="group bg-slate-800/50 hover:bg-slate-800/80 border border-white/[0.06] hover:border-sky-400/30 rounded-2xl p-3 cursor-pointer transition-all hover:scale-[1.02] relative overflow-hidden shadow-lg backdrop-blur-lg"
                   >
-                    <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 bg-zinc-800">
+                    <div className="relative aspect-square rounded-xl overflow-hidden mb-2.5 bg-slate-900">
                       <img
                         src={pl.image || "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4"}
                         alt={pl.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       />
                       {pl.songCount && (
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/70 border border-white/10 text-[10px] font-bold text-white">
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-slate-950/80 border border-white/10 text-[10px] font-bold text-white">
                           {pl.songCount} Tracks
                         </div>
                       )}
-                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                        <button className="w-10 h-10 rounded-full bg-cyan-400 text-zinc-950 flex items-center justify-center shadow-lg">
-                          <Play className="w-4 h-4 fill-zinc-950 ml-0.5" />
+                      <div className="absolute inset-0 bg-slate-950/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button className="w-10 h-10 rounded-full bg-gradient-to-tr from-sky-400 to-blue-600 hover:from-sky-300 hover:to-blue-500 text-white flex items-center justify-center shadow-lg">
+                          <Play className="w-4 h-4 fill-white ml-0.5" />
                         </button>
                       </div>
                     </div>
 
-                    <h4 className="text-xs font-bold text-white truncate group-hover:text-cyan-400 transition-colors">
+                    <h4 className="text-xs font-bold text-white truncate group-hover:text-sky-400 transition-colors">
                       {pl.title}
                     </h4>
-                    <p className="text-[11px] text-zinc-400 truncate mt-0.5 font-medium">
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5 font-medium">
                       {pl.subtitle || "JioSaavn Playlist"}
                     </p>
                   </div>
@@ -208,16 +206,15 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
           )}
         </div>
 
-
         {/* Right Column: Active Rooms Widget */}
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <Users className="w-4 h-4 text-yellow-400" /> Active Rooms
+              <Users className="w-4 h-4 text-sky-400" /> Active Rooms
             </h2>
             <button
               onClick={() => setActiveView("rooms")}
-              className="text-[11px] font-bold text-cyan-400 hover:underline"
+              className="text-[11px] font-bold text-sky-400 hover:underline"
             >
               View All
             </button>
@@ -249,29 +246,29 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
               <div
                 key={room.id}
                 onClick={() => setActiveView("rooms")}
-                className="p-4 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-850 rounded-2xl cursor-pointer transition-all space-y-3"
+                className="p-4 bg-slate-800/60 hover:bg-slate-800/90 border border-white/[0.08] hover:border-sky-400/40 rounded-2xl cursor-pointer transition-all space-y-3 shadow-md backdrop-blur-lg"
               >
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-white truncate max-w-[130px]">
                     {room.name}
                   </h4>
-                  <span className="flex items-center gap-1 text-[10px] font-extrabold text-yellow-400 bg-yellow-950/40 px-2 py-0.5 rounded-full border border-yellow-500/20">
+                  <span className="flex items-center gap-1 text-[10px] font-extrabold text-sky-400 bg-sky-500/15 px-2 py-0.5 rounded-full border border-sky-500/30">
                     ● {room.members}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                <div className="flex items-center justify-between text-[11px] text-slate-400">
                   <div className="flex -space-x-2">
                     {room.avatars.map((url, i) => (
                       <img
                         key={i}
                         src={url}
                         alt="member"
-                        className="w-5 h-5 rounded-full border border-zinc-900 object-cover"
+                        className="w-5 h-5 rounded-full border border-slate-900 object-cover"
                       />
                     ))}
                   </div>
-                  <span className="truncate max-w-[120px] text-right font-medium">
+                  <span className="truncate max-w-[120px] text-right font-medium text-slate-300">
                     Now: {room.song}
                   </span>
                 </div>

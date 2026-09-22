@@ -76,9 +76,9 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
   if (loading || (id && activePlaylist?.id !== id && !loadError)) {
     return (
       <div className="p-12 text-center my-16 space-y-4 animate-fade-in">
-        <Loader2 className="w-10 h-10 text-yellow-400 mx-auto animate-spin" />
+        <Loader2 className="w-10 h-10 text-sky-400 mx-auto animate-spin" />
         <h3 className="text-base font-bold text-white">Loading Playlist...</h3>
-        <p className="text-xs text-zinc-400">Fetching tracks and album artwork</p>
+        <p className="text-xs text-slate-400">Fetching tracks and album artwork</p>
       </div>
     );
   }
@@ -86,12 +86,12 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
   if (loadError || !activePlaylist || (id && activePlaylist.id !== id)) {
     return (
       <div className="p-8 text-center my-16 space-y-4 animate-fade-in">
-        <Disc className="w-12 h-12 text-zinc-600 mx-auto" />
+        <Disc className="w-12 h-12 text-slate-600 mx-auto" />
         <h3 className="text-xl font-bold text-white">Playlist Not Found</h3>
-        <p className="text-xs text-zinc-400">The requested playlist could not be loaded or is unavailable.</p>
+        <p className="text-xs text-slate-400">The requested playlist could not be loaded or is unavailable.</p>
         <button
           onClick={handleBack}
-          className="px-5 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-bold text-xs rounded-full transition-all"
+          className="px-5 py-2.5 bg-gradient-to-r from-sky-400 to-blue-600 hover:from-sky-300 hover:to-blue-500 text-white font-bold text-xs rounded-full shadow-lg shadow-sky-500/25 transition-all"
         >
           Back to Playlists
         </button>
@@ -117,44 +117,47 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
       {/* Back button */}
       <button
         onClick={handleBack}
-        className="flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-white transition-colors"
+        className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to Playlists
       </button>
 
       {/* Playlist Hero Banner */}
-      <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 bg-gradient-to-b from-zinc-850 to-zinc-950 border border-zinc-800 p-6 sm:p-8 rounded-3xl">
+      <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 bg-gradient-to-b from-slate-800 via-slate-900 to-[#0b1329] border border-white/10 p-6 sm:p-8 rounded-3xl shadow-2xl relative overflow-hidden backdrop-blur-xl">
+        {/* Ambient glow decoration */}
+        <div className="absolute top-0 right-0 w-80 h-80 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+
         <img
           src={
             activePlaylist.cover_url ||
             "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=500&q=80"
           }
           alt={activePlaylist.name}
-          className="w-40 h-40 sm:w-48 sm:h-48 rounded-2xl object-cover shadow-2xl shrink-0"
+          className="w-40 h-40 sm:w-48 sm:h-48 rounded-2xl object-cover shadow-2xl shrink-0 border border-white/10 relative z-10"
         />
-        <div className="space-y-2 text-center sm:text-left flex-1">
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-yellow-400">
+        <div className="space-y-2 text-center sm:text-left flex-1 relative z-10">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-sky-400">
             {(activePlaylist as any).is_saavn ? "JioSaavn Curated" : "Playlist"}
           </span>
           <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
             {activePlaylist.name}
           </h1>
-          <p className="text-xs text-zinc-400">{activePlaylist.description || "No description provided."}</p>
-          <div className="text-xs text-zinc-500 font-medium pt-1">{activePlaylist.songs.length} songs</div>
+          <p className="text-xs text-slate-300">{activePlaylist.description || "No description provided."}</p>
+          <div className="text-xs text-slate-400 font-medium pt-1">{activePlaylist.songs.length} songs</div>
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-4">
             <button
               onClick={handlePlayAll}
               disabled={activePlaylist.songs.length === 0}
-              className="flex items-center gap-2 px-6 py-3 bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-full shadow-lg transition-all"
+              className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-sky-400 to-blue-600 hover:from-sky-300 hover:to-blue-500 disabled:opacity-50 text-white font-bold text-xs rounded-full shadow-lg shadow-sky-500/30 transition-all"
             >
               <Play className="w-4 h-4 fill-current" /> Play All
             </button>
             {!(activePlaylist as any).is_saavn && (
               <button
                 onClick={handleDelete}
-                className="p-3 text-zinc-400 hover:text-rose-400 bg-zinc-900 border border-zinc-800 rounded-full transition-colors"
+                className="p-3 text-slate-300 hover:text-rose-400 bg-slate-800 border border-white/10 rounded-full transition-colors"
                 title="Delete Playlist"
               >
                 <Trash2 className="w-4 h-4" />
@@ -166,9 +169,9 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
 
       {/* Song List */}
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-zinc-300">Songs in Playlist</h3>
+        <h3 className="text-sm font-bold text-white">Songs in Playlist</h3>
         {activePlaylist.songs.length === 0 ? (
-          <div className="p-12 text-center border border-dashed border-zinc-800 rounded-3xl text-zinc-500 text-xs">
+          <div className="p-12 text-center border border-dashed border-slate-700/60 rounded-3xl text-slate-400 text-xs bg-slate-900/40 backdrop-blur-xl">
             No songs added yet. Click "+" on any song card or row to add it here!
           </div>
         ) : (

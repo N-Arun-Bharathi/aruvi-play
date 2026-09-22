@@ -132,17 +132,22 @@ export function App() {
   // Show loading spinner during hydration
   if (loading) {
     return (
-      <div className="flex h-screen bg-zinc-950 items-center justify-center text-white">
+      <div className="flex h-screen bg-gradient-to-br from-[#0a0f1d] via-[#0f172a] to-[#131f38] items-center justify-center text-white">
         <div className="flex flex-col items-center gap-4">
           <img src="/aruvi-play.png" alt="Aruvi Play" className="w-16 h-16 object-contain animate-pulse" />
-          <p className="text-sm font-semibold text-zinc-400">Loading Aruvi Play...</p>
+          <p className="text-sm font-semibold text-slate-300">Loading Aruvi Play...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-zinc-950 text-white font-sans overflow-hidden antialiased">
+    <div className="flex h-screen text-slate-100 font-sans overflow-hidden antialiased relative bg-gradient-to-br from-[#0a0f1d] via-[#0f172a] to-[#131f38]">
+      {/* Dynamic Ambient Electric Sky Blue & Royal Blue Blobs */}
+      <div className="absolute -top-32 -left-32 w-[450px] h-[450px] bg-[#38bdf8]/15 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute top-1/4 -right-24 w-[500px] h-[500px] bg-[#3b82f6]/15 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute -bottom-28 left-1/4 w-[600px] h-[600px] bg-[#6366f1]/12 rounded-full blur-[150px] pointer-events-none" />
+
       {/* Toast Alerts */}
       <ToastContainer />
 
@@ -159,7 +164,7 @@ export function App() {
       <Sidebar activeView={activeView} setActiveView={handleNavigateView} />
 
       {/* Main App Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative z-10">
         {/* Top Header */}
         <Header
           activeView={activeView}
