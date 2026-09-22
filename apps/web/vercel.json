@@ -3,6 +3,11 @@
     {
       "source": "/jiosaavn-api/:path*",
       "destination": "https://www.jiosaavn.com/:path*"
+    },
+    {
+      "source": "/((?!api|jiosaavn-api).*|^(?!.*\\.[^/]+$).*)",
+      "destination": "/index.html"
     }
   ]
 }
+

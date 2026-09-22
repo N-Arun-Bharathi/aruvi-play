@@ -1,16 +1,56 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { usePlaylistStore } from "../store/playlistStore";
 import { usePlayerStore } from "../store/playerStore";
 import { SongListRow } from "../components/SongListRow";
-import { Play, Shuffle, Trash2, ArrowLeft, Disc } from "lucide-react";
+import { Play, Trash2, ArrowLeft, Disc, Loader2 } from "lucide-react";
 
 interface PlaylistDetailViewProps {
-  setActiveView: (view: string) => void;
+  setActiveView?: (view: string) => void;
 }
 
 export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiveView }) => {
-  const { activePlaylist, deletePlaylist } = usePlaylistStore();
-  const { playSong, toggleShuffle } = usePlayerStore();
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const { playlists, activePlaylist, setActivePlaylist, loadSaavnPlaylist, deletePlaylist } = usePlaylistStore();
+  const { playSong } = usePlayerStore();
+
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (id && (!activePlaylist || activePlaylist.id !== id)) {
+      // 1. Check local custom playlists
+      const foundLocal = playlists.find((p) => p.id === id);
+      if (foundLocal) {
+        setActivePlaylist(foundLocal);
+        return;
+      }
+
+      // 2. Fetch JioSaavn playlist details
+      setLoading(true);
+      loadSaavnPlaylist(id)
+        .catch((e) => console.warn("Failed to fetch playlist by route id:", e))
+        .finally(() => setLoading(false));
+    }
+  }, [id, activePlaylist?.id, playlists]);
+
+  const handleBack = () => {
+    if (setActiveView) {
+      setActiveView("playlists");
+    } else {
+      navigate("/playlists");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="p-12 text-center my-16 space-y-4">
+        <Loader2 className="w-10 h-10 text-emerald-400 mx-auto animate-spin" />
+        <h3 className="text-base font-bold text-white">Loading Playlist...</h3>
+      </div>
+    );
+  }
 
   if (!activePlaylist) {
     return (
@@ -18,8 +58,8 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
         <Disc className="w-12 h-12 text-zinc-600 mx-auto" />
         <h3 className="text-xl font-bold text-white">No Playlist Selected</h3>
         <button
-          onClick={() => setActiveView("playlists")}
-          className="px-5 py-2.5 bg-emerald-500 text-zinc-950 font-bold text-xs rounded-full"
+          onClick={handleBack}
+          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-full transition-all"
         >
           Back to Playlists
         </button>
@@ -36,7 +76,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
   const handleDelete = () => {
     if (confirm(`Delete playlist "${activePlaylist.name}"?`)) {
       deletePlaylist(activePlaylist.id);
-      setActiveView("playlists");
+      handleBack();
     }
   };
 
@@ -44,7 +84,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
     <div className="p-4 sm:p-8 space-y-8 max-w-7xl mx-auto pb-32">
       {/* Back button */}
       <button
-        onClick={() => setActiveView("playlists")}
+        onClick={handleBack}
         className="flex items-center gap-2 text-xs font-semibold text-zinc-400 hover:text-white transition-colors"
       >
         <ArrowLeft className="w-4 h-4" /> Back to Playlists
@@ -85,7 +125,6 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
             )}
           </div>
         </div>
-
       </div>
 
       {/* Song List */}
@@ -106,3 +145,4 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
     </div>
   );
 };
+

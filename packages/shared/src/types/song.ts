@@ -58,3 +58,16 @@ export interface SaavnPlaylist {
   songs?: Song[];
 }
 
+export interface LyricLine {
+  time: number;
+  text: string;
+}
+
+export interface LyricsData {
+  synced: boolean;
+  lines: LyricLine[];
+  plainText: string;
+}
+
+
+

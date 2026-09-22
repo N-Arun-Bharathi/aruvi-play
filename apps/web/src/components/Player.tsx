@@ -1,6 +1,6 @@
 import React from "react";
 import { usePlayerStore } from "../store/playerStore";
-import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, ListMusic, Maximize2 } from "lucide-react";
+import { Play, Pause, SkipBack, SkipForward, Volume2, VolumeX, ListMusic, Maximize2, Mic2 } from "lucide-react";
 
 interface PlayerProps {
   onOpenQueue?: () => void;
@@ -118,8 +118,17 @@ export const Player: React.FC<PlayerProps> = ({ onOpenQueue }) => {
         </button>
       </div>
 
-      {/* Right: Actions (Volume & Queue) */}
-      <div className="flex items-center gap-3 shrink-0 flex-1 justify-end relative z-30">
+      {/* Right: Actions (Lyrics, Volume, Fullscreen & Queue) */}
+      <div className="flex items-center gap-2.5 shrink-0 flex-1 justify-end relative z-30">
+        {/* Lyrics Button */}
+        <button
+          onClick={toggleExpanded}
+          className="text-zinc-400 hover:text-cyan-400 p-1.5 rounded-full hover:bg-zinc-800/60 transition-colors"
+          title="Lyrics & Visualizer"
+        >
+          <Mic2 className="w-4 h-4" />
+        </button>
+
         {/* Volume Slider */}
         <div className="hidden sm:flex items-center gap-2 group/vol">
           <button onClick={toggleMute} className="text-zinc-400 hover:text-white transition-colors">
@@ -163,3 +172,4 @@ export const Player: React.FC<PlayerProps> = ({ onOpenQueue }) => {
     </div>
   );
 };
+

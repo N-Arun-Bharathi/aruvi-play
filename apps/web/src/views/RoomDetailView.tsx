@@ -1,16 +1,20 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useRoomStore } from "../store/roomStore";
 import { usePlayerStore } from "../store/playerStore";
 import { Song, searchSongs } from "@aruvi/shared";
-import { Radio, Users, Copy, Check, LogOut, Music, Plus, Play, Search, ShieldCheck } from "lucide-react";
+import { Radio, Users, Copy, Check, LogOut, Music, Plus, Play, Search, ShieldCheck, Loader2 } from "lucide-react";
 import { useToastStore } from "../store/toastStore";
 
 interface RoomDetailViewProps {
-  setActiveView: (view: string) => void;
+  setActiveView?: (view: string) => void;
 }
 
 export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView }) => {
-  const { currentRoom, leaveRoom, addSongToRoomQueue } = useRoomStore();
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const { currentRoom, activeRooms, joinRoomByCode, leaveRoom, addSongToRoomQueue } = useRoomStore();
   const { currentSong, isPlaying, playSong } = usePlayerStore();
   const toast = useToastStore();
 
@@ -18,6 +22,33 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Song[]>([]);
   const [searching, setSearching] = useState(false);
+  const [loadingRoom, setLoadingRoom] = useState(false);
+
+  useEffect(() => {
+    if (id && (!currentRoom || (currentRoom.code !== id && currentRoom.id !== id))) {
+      setLoadingRoom(true);
+      joinRoomByCode(id)
+        .catch((e) => console.warn("Failed to join room by route id:", e))
+        .finally(() => setLoadingRoom(false));
+    }
+  }, [id, currentRoom?.id, currentRoom?.code]);
+
+  const handleBack = () => {
+    if (setActiveView) {
+      setActiveView("rooms");
+    } else {
+      navigate("/rooms");
+    }
+  };
+
+  if (loadingRoom) {
+    return (
+      <div className="p-12 text-center my-16 space-y-4">
+        <Loader2 className="w-10 h-10 text-emerald-400 mx-auto animate-spin" />
+        <h3 className="text-base font-bold text-white">Connecting to Room...</h3>
+      </div>
+    );
+  }
 
   if (!currentRoom) {
     return (
@@ -25,8 +56,8 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
         <Radio className="w-12 h-12 text-zinc-600 mx-auto" />
         <h3 className="text-xl font-bold text-white">No Active Room</h3>
         <button
-          onClick={() => setActiveView("rooms")}
-          className="px-5 py-2.5 bg-emerald-500 text-zinc-950 font-bold text-xs rounded-full"
+          onClick={handleBack}
+          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-full transition-all"
         >
           Back to Rooms
         </button>
@@ -38,6 +69,7 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
     navigator.clipboard.writeText(currentRoom.code);
     setCopied(true);
     toast.show(`Room Code ${currentRoom.code} copied!`, "success");
+
     setTimeout(() => setCopied(false), 2000);
   };
 
@@ -88,7 +120,7 @@ export const RoomDetailView: React.FC<RoomDetailViewProps> = ({ setActiveView })
           <button
             onClick={() => {
               leaveRoom();
-              setActiveView("rooms");
+              handleBack();
             }}
             className="flex items-center gap-2 px-4 py-2.5 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 border border-rose-500/30 text-xs font-bold rounded-2xl transition-all"
           >

@@ -34,6 +34,10 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
   const activeLang = (preferredLanguage || "Tamil").toLowerCase();
 
   useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
+
+  useEffect(() => {
     if (activeTab === "playlists") {
       setLoadingSaavn(true);
       getFeaturedPlaylists([activeLang])
