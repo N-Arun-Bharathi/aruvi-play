@@ -55,9 +55,8 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
     loadData();
   }, []);
 
-  const handleOpenPlaylist = async (plId: string) => {
-    await loadSaavnPlaylist(plId);
-    setActiveView("playlist-detail");
+  const handleOpenPlaylist = (plId: string) => {
+    setActiveView(`/playlists/${plId}`);
   };
 
 

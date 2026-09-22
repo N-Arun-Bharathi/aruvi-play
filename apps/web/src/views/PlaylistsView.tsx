@@ -178,15 +178,8 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({ setActiveView }) =
   }, [fetchPlaylists]);
 
   // Handle open playlist details
-  const handleOpenSaavnPlaylist = async (id: string) => {
-    try {
-      const pl = await loadSaavnPlaylist(id);
-      if (pl) {
-        setActiveView("playlist-detail");
-      }
-    } catch (err) {
-      console.error("Error opening playlist:", err);
-    }
+  const handleOpenSaavnPlaylist = (id: string) => {
+    setActiveView(`/playlists/${id}`);
   };
 
   // Handle quick play
@@ -402,7 +395,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = ({ setActiveView }) =
                   key={pl.id}
                   onClick={() => {
                     setActivePlaylist(pl);
-                    setActiveView("playlist-detail");
+                    setActiveView(`/playlists/${pl.id}`);
                   }}
                   className="group p-4 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-850 hover:border-yellow-500/30 rounded-2xl cursor-pointer transition-all duration-300 hover:scale-[1.02] shadow-xl flex flex-col justify-between"
                 >

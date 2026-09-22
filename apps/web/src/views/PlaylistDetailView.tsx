@@ -13,27 +13,56 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { playlists, activePlaylist, setActivePlaylist, loadSaavnPlaylist, deletePlaylist } = usePlaylistStore();
+  const { playlists, activePlaylist, setActivePlaylist, loadSaavnPlaylist, deletePlaylist } =
+    usePlaylistStore();
   const { playSong } = usePlayerStore();
 
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
-    if (id && (!activePlaylist || activePlaylist.id !== id)) {
-      // 1. Check local custom playlists
-      const foundLocal = playlists.find((p) => p.id === id);
-      if (foundLocal) {
-        setActivePlaylist(foundLocal);
-        return;
-      }
+    if (!id) return;
 
-      // 2. Fetch JioSaavn playlist details
-      setLoading(true);
-      loadSaavnPlaylist(id)
-        .catch((e) => console.warn("Failed to fetch playlist by route id:", e))
-        .finally(() => setLoading(false));
+    // If activePlaylist already matches the requested route ID, do nothing
+    if (activePlaylist && activePlaylist.id === id) {
+      setLoading(false);
+      setLoadError(false);
+      return;
     }
-  }, [id, activePlaylist?.id, playlists]);
+
+    // 1. Check local custom playlists
+    const foundLocal = playlists.find((p) => p.id === id);
+    if (foundLocal) {
+      setActivePlaylist(foundLocal);
+      setLoading(false);
+      setLoadError(false);
+      return;
+    }
+
+    // 2. Fetch JioSaavn playlist details
+    let isCancelled = false;
+    setLoading(true);
+    setLoadError(false);
+
+    loadSaavnPlaylist(id)
+      .then((res) => {
+        if (isCancelled) return;
+        if (!res) {
+          setLoadError(true);
+        }
+      })
+      .catch((e) => {
+        console.warn("Failed to fetch playlist by route id:", e);
+        if (!isCancelled) setLoadError(true);
+      })
+      .finally(() => {
+        if (!isCancelled) setLoading(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [id, activePlaylist?.id, playlists, loadSaavnPlaylist, setActivePlaylist]);
 
   const handleBack = () => {
     if (setActiveView) {
@@ -43,23 +72,26 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
     }
   };
 
-  if (loading) {
+  // If loading or if activePlaylist in store does not match the URL param id
+  if (loading || (id && activePlaylist?.id !== id && !loadError)) {
     return (
-      <div className="p-12 text-center my-16 space-y-4">
-        <Loader2 className="w-10 h-10 text-emerald-400 mx-auto animate-spin" />
+      <div className="p-12 text-center my-16 space-y-4 animate-fade-in">
+        <Loader2 className="w-10 h-10 text-yellow-400 mx-auto animate-spin" />
         <h3 className="text-base font-bold text-white">Loading Playlist...</h3>
+        <p className="text-xs text-zinc-400">Fetching tracks and album artwork</p>
       </div>
     );
   }
 
-  if (!activePlaylist) {
+  if (loadError || !activePlaylist || (id && activePlaylist.id !== id)) {
     return (
-      <div className="p-8 text-center my-16 space-y-4">
+      <div className="p-8 text-center my-16 space-y-4 animate-fade-in">
         <Disc className="w-12 h-12 text-zinc-600 mx-auto" />
-        <h3 className="text-xl font-bold text-white">No Playlist Selected</h3>
+        <h3 className="text-xl font-bold text-white">Playlist Not Found</h3>
+        <p className="text-xs text-zinc-400">The requested playlist could not be loaded or is unavailable.</p>
         <button
           onClick={handleBack}
-          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-bold text-xs rounded-full transition-all"
+          className="px-5 py-2.5 bg-yellow-400 hover:bg-yellow-300 text-zinc-950 font-bold text-xs rounded-full transition-all"
         >
           Back to Playlists
         </button>
@@ -81,7 +113,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
   };
 
   return (
-    <div className="p-4 sm:p-8 space-y-8 max-w-7xl mx-auto pb-32">
+    <div className="p-4 sm:p-8 space-y-8 max-w-7xl mx-auto pb-32 animate-fade-in">
       {/* Back button */}
       <button
         onClick={handleBack}
@@ -93,15 +125,20 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
       {/* Playlist Hero Banner */}
       <div className="flex flex-col sm:flex-row items-center sm:items-end gap-6 bg-gradient-to-b from-zinc-850 to-zinc-950 border border-zinc-800 p-6 sm:p-8 rounded-3xl">
         <img
-          src={activePlaylist.cover_url || "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=500&q=80"}
+          src={
+            activePlaylist.cover_url ||
+            "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=500&q=80"
+          }
           alt={activePlaylist.name}
           className="w-40 h-40 sm:w-48 sm:h-48 rounded-2xl object-cover shadow-2xl shrink-0"
         />
         <div className="space-y-2 text-center sm:text-left flex-1">
-          <span className="text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">
+          <span className="text-[10px] font-extrabold uppercase tracking-widest text-yellow-400">
             {(activePlaylist as any).is_saavn ? "JioSaavn Curated" : "Playlist"}
           </span>
-          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">{activePlaylist.name}</h1>
+          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+            {activePlaylist.name}
+          </h1>
           <p className="text-xs text-zinc-400">{activePlaylist.description || "No description provided."}</p>
           <div className="text-xs text-zinc-500 font-medium pt-1">{activePlaylist.songs.length} songs</div>
 
@@ -110,7 +147,7 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
             <button
               onClick={handlePlayAll}
               disabled={activePlaylist.songs.length === 0}
-              className="flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-full shadow-lg transition-all"
+              className="flex items-center gap-2 px-6 py-3 bg-yellow-400 hover:bg-yellow-300 disabled:opacity-50 text-zinc-950 font-bold text-xs rounded-full shadow-lg transition-all"
             >
               <Play className="w-4 h-4 fill-current" /> Play All
             </button>
@@ -145,4 +182,3 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
     </div>
   );
 };
-

@@ -334,7 +334,7 @@ export async function getPlaylistDetails(listId: string): Promise<SaavnPlaylist 
   apiCallCount++;
 
   try {
-    const res = await client.get("/api.php", {
+    let res = await client.get("/api.php", {
       params: {
         __call: "playlist.getDetails",
         listid: listId,
@@ -345,24 +345,57 @@ export async function getPlaylistDetails(listId: string): Promise<SaavnPlaylist 
       },
     });
 
-    const data = res.data;
+    let data = res.data;
+    if (typeof data === "string") {
+      try {
+        data = JSON.parse(data);
+      } catch (e) {}
+    }
+
+    if (!data || data.status === "failure" || (!data.list && !data.songs && !data.data?.songs)) {
+      try {
+        res = await client.get("/api.php", {
+          params: {
+            __call: "webapi.get",
+            token: listId,
+            type: "playlist",
+            _format: "json",
+            _marker: "0",
+            api_version: "4",
+            ctx: "web6dot0",
+          },
+        });
+        if (res.data) data = res.data;
+      } catch (e2) {}
+    }
+
     if (!data) return null;
 
-    const rawList: any[] = data.list || data.songs || [];
+    const rawList: any[] =
+      data.list ||
+      data.songs ||
+      data.data?.songs ||
+      data.data?.list ||
+      (Array.isArray(data) ? data : []);
+
     const songs: Song[] = rawList
       .map(mapSaavnToSong)
       .filter((s: Song | null): s is Song => s !== null);
 
     return {
       id: String(data.id || data.listid || listId),
-      title: decodeHtml(data.title || data.listname || "Untitled Playlist"),
-      subtitle: decodeHtml(data.subtitle || data.header_desc || ""),
+      title: decodeHtml(data.title || data.listname || data.name || "Untitled Playlist"),
+      subtitle: decodeHtml(data.subtitle || data.header_desc || data.description || ""),
       headerDesc: decodeHtml(data.header_desc || ""),
       image: pickPlaylistImage(data.image),
-      songCount: data.list_count ? parseInt(data.list_count, 10) : songs.length,
+      songCount: data.list_count
+        ? parseInt(data.list_count, 10)
+        : data.more_info?.song_count
+        ? parseInt(data.more_info.song_count, 10)
+        : songs.length,
       followerCount: data.more_info?.follower_count || data.follower_count,
       permaUrl: data.perma_url,
-      language: data.language,
+      language: data.language || data.more_info?.language,
       songs,
     };
   } catch (err) {

@@ -56,9 +56,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
     setShowCreateModal(false);
   };
 
-  const handleOpenSaavnPlaylist = async (id: string) => {
-    await loadSaavnPlaylist(id);
-    setActiveView("playlist-detail");
+  const handleOpenSaavnPlaylist = (id: string) => {
+    setActiveView(`/playlists/${id}`);
   };
 
 
@@ -194,7 +193,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({ initialTab = "liked", 
                     key={pl.id}
                     onClick={() => {
                       usePlaylistStore.getState().setActivePlaylist(pl);
-                      setActiveView("playlist-detail");
+                      setActiveView(`/playlists/${pl.id}`);
                     }}
                     className="group p-4 bg-zinc-900/60 hover:bg-zinc-850 border border-zinc-850 rounded-2xl cursor-pointer transition-all hover:scale-[1.02] shadow-lg flex flex-col justify-between"
                   >

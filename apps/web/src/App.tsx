@@ -68,6 +68,12 @@ export function App() {
 
   // Unified navigation helper that accepts both route paths and view IDs
   const handleNavigateView = (view: string) => {
+    if (!view) return;
+    if (view.startsWith("/")) {
+      navigate(view);
+      return;
+    }
+
     switch (view) {
       case "home":
         navigate("/");
@@ -78,13 +84,15 @@ export function App() {
       case "playlists":
         navigate("/playlists");
         break;
-      case "playlist-detail":
-        if (activePlaylist?.id) {
-          navigate(`/playlists/${activePlaylist.id}`);
+      case "playlist-detail": {
+        const currentPl = usePlaylistStore.getState().activePlaylist;
+        if (currentPl?.id) {
+          navigate(`/playlists/${currentPl.id}`);
         } else {
           navigate("/playlists");
         }
         break;
+      }
       case "library":
         navigate("/library");
         break;
@@ -97,13 +105,15 @@ export function App() {
       case "rooms":
         navigate("/rooms");
         break;
-      case "room-detail":
-        if (currentRoom?.id || currentRoom?.code) {
-          navigate(`/rooms/${currentRoom.code || currentRoom.id}`);
+      case "room-detail": {
+        const room = useRoomStore.getState().currentRoom;
+        if (room?.id || room?.code) {
+          navigate(`/rooms/${room.code || room.id}`);
         } else {
           navigate("/rooms");
         }
         break;
+      }
       case "profile":
         navigate("/profile");
         break;
@@ -111,11 +121,7 @@ export function App() {
         navigate("/settings");
         break;
       default:
-        if (view.startsWith("/")) {
-          navigate(view);
-        } else {
-          navigate(`/${view}`);
-        }
+        navigate(`/${view}`);
         break;
     }
   };
