@@ -92,7 +92,6 @@ class TrackPlayerWrapper {
         // Safety fallback: If playback reaches within 0.5s of the end and position > 3s
         if (data.duration > 3 && data.position >= data.duration - 0.5 && this.playing) {
           console.log("TrackPlayerWrapper: PlaybackProgressUpdated near end detected, triggering auto-advance");
-          this.playing = false;
           this.emitPlaybackStatus(true);
         }
       });
@@ -320,9 +319,7 @@ export async function stopAndResetPlayer() {
     console.warn("stopAndResetPlayer error:", e);
   } finally {
     if (playerWrapper) {
-      setTimeout(() => {
-        playerWrapper.setIsResetting(false);
-      }, 300);
+      playerWrapper.setIsResetting(false);
     }
   }
 }
@@ -359,9 +356,10 @@ export async function loadAndPlay(song: Song) {
     console.error("loadAndPlay: playerWrapper.play failed:", playErr);
     throw playErr;
   } finally {
-    setTimeout(() => {
-      if (playerWrapper) playerWrapper.setIsResetting(false);
-    }, 400);
+    if (playerWrapper) {
+      playerWrapper.setIsResetting(false);
+      playerWrapper.playing = true;
+    }
   }
 }
 

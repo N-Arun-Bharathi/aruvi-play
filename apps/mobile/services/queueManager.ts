@@ -25,7 +25,6 @@ export class QueueManager {
   public currentlyPlayingId: string | null = null;
   private isFetchingRelated: boolean = false;
   private isTransitioning: boolean = false;
-  private isFinishing: boolean = false;
   private lastSessionSyncTime: number = 0;
   private queueSaveTimer: any = null;
 
@@ -488,33 +487,38 @@ export class QueueManager {
     }
   }
 
-  public async onTrackFinished() {
-    if (this.isResolving || this.isTransitioning || this.isFinishing) {
-      console.log("QueueManager: Skipping onTrackFinished because player is busy", {
-        resolving: this.isResolving,
-        transitioning: this.isTransitioning,
-        finishing: this.isFinishing,
-      });
-      return;
-    }
+  private lastFinishedKey: string | null = null;
+  private lastFinishTimestamp: number = 0;
 
+  public async onTrackFinished() {
+    const now = Date.now();
     const currentSong = this.queue[this.index];
     if (!currentSong) return;
 
     const trackKey = `${currentSong.id || currentSong.title}_${this.index}`;
-    if (this.lastFinishedId === trackKey) {
-      console.log("QueueManager: Skipping onTrackFinished because song already handled:", trackKey);
+
+    // Debounce duplicate events for the same track within 2.5 seconds
+    if (this.lastFinishedKey === trackKey && now - this.lastFinishTimestamp < 2500) {
+      console.log("QueueManager: Skipping duplicate onTrackFinished within debounce window:", trackKey);
       return;
     }
 
-    this.isFinishing = true;
-    this.lastFinishedId = trackKey;
+    if (this.isResolving || this.isTransitioning) {
+      console.log("QueueManager: Skipping onTrackFinished because player is busy resolving or transitioning", {
+        resolving: this.isResolving,
+        transitioning: this.isTransitioning,
+      });
+      return;
+    }
+
+    this.lastFinishedKey = trackKey;
+    this.lastFinishTimestamp = now;
+
+    console.log("QueueManager: onTrackFinished triggered for song:", currentSong.title, "at index:", this.index);
 
     try {
       const { usePlayerStore } = require("../store/playerStore");
       const store = usePlayerStore.getState();
-
-      console.log("QueueManager: onTrackFinished called for song:", currentSong.title, "at index:", this.index);
 
       if (store.repeat === "one") {
         console.log(`QueueManager: Repeat One active -> repeating track ${currentSong.title}`);
@@ -533,10 +537,6 @@ export class QueueManager {
       await this.playNext();
     } catch (e) {
       console.error("QueueManager: Error during onTrackFinished:", e);
-    } finally {
-      setTimeout(() => {
-        this.isFinishing = false;
-      }, 800);
     }
   }
 
