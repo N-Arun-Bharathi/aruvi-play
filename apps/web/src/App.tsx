@@ -24,6 +24,7 @@ import { useLikedStore } from "./store/likedStore";
 import { usePlaylistStore } from "./store/playlistStore";
 import { useHistoryStore } from "./store/historyStore";
 import { useRoomStore } from "./store/roomStore";
+import { usePlayerStore } from "./store/playerStore";
 
 export function App() {
   const navigate = useNavigate();
@@ -37,11 +38,13 @@ export function App() {
   const { loadPlaylists, activePlaylist } = usePlaylistStore();
   const { loadHistory } = useHistoryStore();
   const { fetchActiveRooms, currentRoom } = useRoomStore();
+  const { hydrate: hydratePlayer } = usePlayerStore();
 
   // Startup Hydration
   useEffect(() => {
     hydrateAuth();
     hydrateLiked();
+    hydratePlayer();
     loadPlaylists();
     loadHistory();
     fetchActiveRooms();

@@ -24,6 +24,7 @@ interface PlayerState {
   isExpanded: boolean;
 
   // Actions
+  hydrate: () => void;
   playSong: (song: Song, newQueue?: Song[]) => void;
   togglePlay: () => void;
   pause: () => void;
@@ -38,17 +39,166 @@ interface PlayerState {
   toggleExpanded: () => void;
 }
 
+const PLAYER_STORAGE_KEY = "aruvi_saved_player_state";
+
+interface SavedPlayerState {
+  currentSong: Song | null;
+  queue: Song[];
+  originalQueue: Song[];
+  currentIndex: number;
+  position: number;
+  duration: number;
+  volume: number;
+  repeatMode: RepeatMode;
+  isShuffle: boolean;
+}
+
 // HTML5 Audio Singleton
 const audio = new Audio();
 audio.preload = "auto";
 
-export const usePlayerStore = create<PlayerState>((set, get) => {
-  // Listeners for Audio element
-  audio.ontimeupdate = () => {
-    set({
-      position: audio.currentTime || 0,
-      duration: audio.duration || 0,
+// Persist helper
+function persistPlayerState(state: Partial<SavedPlayerState>) {
+  try {
+    const raw = localStorage.getItem(PLAYER_STORAGE_KEY);
+    const existing = raw ? JSON.parse(raw) : {};
+    const merged = { ...existing, ...state };
+    localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(merged));
+  } catch (e) {
+    // Ignore storage errors
+  }
+}
+
+// MediaSession Metadata Helper
+function updateMediaSessionMetadata(song: Song | null) {
+  if (!("mediaSession" in navigator) || !song) return;
+
+  try {
+    const artworkList: MediaImage[] = song.artwork
+      ? [
+          { src: song.artwork, sizes: "96x96", type: "image/jpeg" },
+          { src: song.artwork, sizes: "128x128", type: "image/jpeg" },
+          { src: song.artwork, sizes: "256x256", type: "image/jpeg" },
+          { src: song.artwork, sizes: "512x512", type: "image/jpeg" },
+        ]
+      : [{ src: "/aruvi-play.png", sizes: "512x512", type: "image/png" }];
+
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: song.title,
+      artist: song.artist,
+      album: song.album || "Aruvi Play",
+      artwork: artworkList,
     });
+  } catch (e) {
+    console.warn("Failed to set MediaSession metadata:", e);
+  }
+}
+
+// MediaSession Position State Helper
+function updateMediaSessionPositionState(position: number, duration: number) {
+  if (!("mediaSession" in navigator) || typeof navigator.mediaSession.setPositionState !== "function") return;
+  if (!duration || duration <= 0 || isNaN(duration) || isNaN(position)) return;
+
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: Math.max(duration, 0),
+      playbackRate: audio.playbackRate || 1,
+      position: Math.min(Math.max(position, 0), duration),
+    });
+  } catch (e) {}
+}
+
+export const usePlayerStore = create<PlayerState>((set, get) => {
+  // Setup media session action handlers for Chrome / OS notification controls
+  const setupMediaSessionHandlers = () => {
+    if (!("mediaSession" in navigator)) return;
+
+    const actionMap: Array<[MediaSessionAction, (details: any) => void]> = [
+      [
+        "play",
+        () => {
+          get().resume();
+        },
+      ],
+      [
+        "pause",
+        () => {
+          get().pause();
+        },
+      ],
+      [
+        "previoustrack",
+        () => {
+          get().prev();
+        },
+      ],
+      [
+        "nexttrack",
+        () => {
+          get().next();
+        },
+      ],
+      [
+        "seekto",
+        (details) => {
+          if (details.seekTime !== undefined && details.seekTime !== null) {
+            get().seekTo(details.seekTime);
+          }
+        },
+      ],
+      [
+        "seekbackward",
+        (details) => {
+          const skip = details.seekOffset || 10;
+          get().seekTo(Math.max((audio.currentTime || 0) - skip, 0));
+        },
+      ],
+      [
+        "seekforward",
+        (details) => {
+          const skip = details.seekOffset || 10;
+          get().seekTo(Math.min((audio.currentTime || 0) + skip, audio.duration || 0));
+        },
+      ],
+      [
+        "stop",
+        () => {
+          get().pause();
+        },
+      ],
+    ];
+
+    for (const [action, handler] of actionMap) {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch (e) {
+        // Ignored for unsupported actions in older browser engines
+      }
+    }
+  };
+
+  // Initialize Media Session Handlers immediately
+  setupMediaSessionHandlers();
+
+  // Listeners for Audio element
+  let lastPersistTime = 0;
+  audio.ontimeupdate = () => {
+    const curTime = audio.currentTime || 0;
+    const dur = audio.duration || 0;
+
+    set({
+      position: curTime,
+      duration: dur,
+    });
+
+    updateMediaSessionPositionState(curTime, dur);
+
+    // Periodically throttle saving position to localStorage every 4 seconds
+    const now = Date.now();
+    if (now - lastPersistTime > 4000) {
+      lastPersistTime = now;
+      persistPlayerState({ position: curTime, duration: dur });
+    }
   };
 
   audio.onended = () => {
@@ -61,8 +211,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     }
   };
 
-  audio.onplay = () => set({ isPlaying: true });
-  audio.onpause = () => set({ isPlaying: false });
+  audio.onplay = () => {
+    set({ isPlaying: true });
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.playbackState = "playing";
+    }
+  };
+
+  audio.onpause = () => {
+    set({ isPlaying: false });
+    if ("mediaSession" in navigator) {
+      navigator.mediaSession.playbackState = "paused";
+    }
+    persistPlayerState({ position: audio.currentTime || 0 });
+  };
+
   audio.onerror = (e) => {
     console.warn("Audio load error on source URL, auto-advancing to next song:", e);
     set({ isPlaying: false });
@@ -72,27 +235,30 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
   const loadAndPlayTrack = (song: Song) => {
     audio.src = song.url;
-    audio.play().then(() => {
-      set({ isPlaying: true });
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: song.title,
-          artist: song.artist,
-          album: song.album || "Aruvi Play",
-          artwork: song.artwork ? [{ src: song.artwork, sizes: '512x512', type: 'image/jpeg' }] : [],
-        });
-      }
-    }).catch((err) => {
-      console.error("Audio playback error:", err);
-      set({ isPlaying: false });
-    });
+    audio
+      .play()
+      .then(() => {
+        set({ isPlaying: true });
+        updateMediaSessionMetadata(song);
+        if ("mediaSession" in navigator) {
+          navigator.mediaSession.playbackState = "playing";
+        }
+      })
+      .catch((err) => {
+        console.error("Audio playback error:", err);
+        set({ isPlaying: false });
+      });
   };
 
   const appendRelatedIfNeeded = async (song: Song) => {
     const { queue, currentIndex } = get();
     if (queue.length - currentIndex <= 3 && song.source === "online") {
       try {
-        const preferredLang = (useSettingsStore.getState().preferredLanguage || song.language || "Tamil").toLowerCase();
+        const preferredLang = (
+          useSettingsStore.getState().preferredLanguage ||
+          song.language ||
+          "Tamil"
+        ).toLowerCase();
         let related: Song[] = [];
         try {
           related = await getRelatedSongs(song.id);
@@ -149,7 +315,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         });
 
         if (newItems.length > 0) {
-          set({ queue: [...currentQueue, ...newItems] });
+          const updatedQ = [...currentQueue, ...newItems];
+          set({ queue: updatedQ });
+          persistPlayerState({ queue: updatedQ });
         }
       } catch (err) {
         console.error("Failed to append related songs:", err);
@@ -171,11 +339,55 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     isShuffle: false,
     isExpanded: false,
 
+    hydrate: () => {
+      try {
+        const raw = localStorage.getItem(PLAYER_STORAGE_KEY);
+        if (!raw) return;
+        const saved: SavedPlayerState = JSON.parse(raw);
+        if (saved && saved.currentSong) {
+          const song = saved.currentSong;
+          if (song.url) {
+            audio.src = song.url;
+            if (saved.position > 0) {
+              audio.currentTime = saved.position;
+            }
+          }
+          if (saved.volume !== undefined) {
+            audio.volume = saved.volume;
+          }
+
+          set({
+            currentSong: song,
+            queue: saved.queue && saved.queue.length > 0 ? saved.queue : [song],
+            originalQueue: saved.originalQueue && saved.originalQueue.length > 0 ? saved.originalQueue : [song],
+            currentIndex: saved.currentIndex >= 0 ? saved.currentIndex : 0,
+            position: saved.position || 0,
+            duration: saved.duration || song.duration || 0,
+            volume: saved.volume !== undefined ? saved.volume : 0.8,
+            repeatMode: saved.repeatMode || "off",
+            isShuffle: saved.isShuffle || false,
+            isPlaying: false,
+          });
+
+          updateMediaSessionMetadata(song);
+          if ("mediaSession" in navigator) {
+            navigator.mediaSession.playbackState = "paused";
+          }
+        }
+      } catch (e) {
+        console.warn("Failed to hydrate player state:", e);
+      }
+    },
+
     playSong: (song: Song, newQueue?: Song[]) => {
       const rawQ = newQueue && newQueue.length > 0 ? newQueue : [song];
       const clickedIdx = rawQ.findIndex((s) => s.id === song.id);
       const songArtist = extractPrimaryArtist(song).toLowerCase();
-      const preferredLang = (useSettingsStore.getState().preferredLanguage || song.language || "Tamil").toLowerCase();
+      const preferredLang = (
+        useSettingsStore.getState().preferredLanguage ||
+        song.language ||
+        "Tamil"
+      ).toLowerCase();
 
       // Deduplicate queue to remove alternate versions/variations AND unrelated text search hits
       let q = rawQ.filter((s, idx) => {
@@ -207,6 +419,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         originalQueue: q,
         currentIndex: 0,
         currentSong: song,
+      });
+
+      persistPlayerState({
+        currentSong: song,
+        queue: q,
+        originalQueue: q,
+        currentIndex: 0,
+        position: 0,
+        duration: song.duration || 0,
       });
 
       loadAndPlayTrack(song);
@@ -253,6 +474,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
       const nextSong = queue[nextIndex];
       set({ currentIndex: nextIndex, currentSong: nextSong });
+
+      persistPlayerState({
+        currentSong: nextSong,
+        currentIndex: nextIndex,
+        position: 0,
+        duration: nextSong.duration || 0,
+      });
+
       loadAndPlayTrack(nextSong);
       appendRelatedIfNeeded(nextSong);
     },
@@ -271,17 +500,27 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
       const prevSong = queue[prevIndex];
       set({ currentIndex: prevIndex, currentSong: prevSong });
+
+      persistPlayerState({
+        currentSong: prevSong,
+        currentIndex: prevIndex,
+        position: 0,
+        duration: prevSong.duration || 0,
+      });
+
       loadAndPlayTrack(prevSong);
     },
 
     seekTo: (seconds: number) => {
       audio.currentTime = seconds;
       set({ position: seconds });
+      persistPlayerState({ position: seconds });
     },
 
     setVolume: (vol: number) => {
       audio.volume = vol;
       set({ volume: vol, isMuted: vol === 0 });
+      persistPlayerState({ volume: vol });
     },
 
     toggleMute: () => {
@@ -299,22 +538,29 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       const { isShuffle, queue, originalQueue, currentSong } = get();
       if (isShuffle) {
         const activeIndex = originalQueue.findIndex((s) => s.id === currentSong?.id);
-        set({ isShuffle: false, queue: originalQueue, currentIndex: activeIndex >= 0 ? activeIndex : 0 });
+        const nextIdx = activeIndex >= 0 ? activeIndex : 0;
+        set({ isShuffle: false, queue: originalQueue, currentIndex: nextIdx });
+        persistPlayerState({ isShuffle: false, queue: originalQueue, currentIndex: nextIdx });
       } else {
         const shuffled = [...queue].sort(() => Math.random() - 0.5);
+        let newQ: Song[];
         if (currentSong) {
           const filtered = shuffled.filter((s) => s.id !== currentSong.id);
-          set({ isShuffle: true, queue: [currentSong, ...filtered], currentIndex: 0 });
+          newQ = [currentSong, ...filtered];
         } else {
-          set({ isShuffle: true, queue: shuffled, currentIndex: 0 });
+          newQ = shuffled;
         }
+        set({ isShuffle: true, queue: newQ, currentIndex: 0 });
+        persistPlayerState({ isShuffle: true, queue: newQ, currentIndex: 0 });
       }
     },
 
     cycleRepeat: () => {
       const { repeatMode } = get();
-      const nextMode: RepeatMode = repeatMode === "off" ? "all" : repeatMode === "all" ? "one" : "off";
+      const nextMode: RepeatMode =
+        repeatMode === "off" ? "all" : repeatMode === "all" ? "one" : "off";
       set({ repeatMode: nextMode });
+      persistPlayerState({ repeatMode: nextMode });
     },
 
     toggleExpanded: () => set((s) => ({ isExpanded: !s.isExpanded })),
