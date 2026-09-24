@@ -1,6 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { usePlayerStore } from "../store/playerStore";
 import { getSongLyrics, LyricsData } from "@aruvi/shared";
+import { EqualizerModal } from "./EqualizerModal";
+import { SleepTimerModal } from "./SleepTimerModal";
+import { ShareCardModal } from "./ShareCardModal";
+import { InsightsModal } from "./InsightsModal";
 import {
   ChevronDown,
   Play,
@@ -16,6 +20,11 @@ import {
   Mic2,
   Sparkles,
   RefreshCw,
+  Sliders,
+  Moon,
+  Share2,
+  BarChart3,
+  Zap,
 } from "lucide-react";
 
 interface FullPlayerModalProps {
@@ -44,12 +53,22 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
     toggleShuffle,
     repeatMode,
     cycleRepeat,
+    equalizer,
+    sleepTimer,
+    playbackSettings,
+    setPlaybackSpeed,
   } = usePlayerStore();
 
   const [lyricsData, setLyricsData] = useState<LyricsData | null>(null);
   const [loadingLyrics, setLoadingLyrics] = useState(false);
   const [fullLyricsMode, setFullLyricsMode] = useState(false);
   const lyricsContainerRef = useRef<HTMLDivElement>(null);
+
+  // Modals
+  const [isEqOpen, setIsEqOpen] = useState(false);
+  const [isSleepOpen, setIsSleepOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
 
   // Fetch lyrics whenever currentSong changes
   useEffect(() => {
@@ -130,6 +149,14 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
       .finally(() => setLoadingLyrics(false));
   };
 
+  const cycleSpeed = () => {
+    const currentSpeed = playbackSettings.playbackSpeed || 1.0;
+    const speeds = [0.75, 1.0, 1.25, 1.5, 2.0];
+    const currentIndex = speeds.indexOf(currentSpeed);
+    const nextSpeed = speeds[(currentIndex + 1) % speeds.length];
+    setPlaybackSpeed(nextSpeed);
+  };
+
   return (
     <div className="fixed inset-0 z-[9999] bg-gradient-to-br from-[#0a0f1d] via-[#0f172a] to-[#131f38] text-slate-100 flex flex-col justify-between overflow-hidden animate-fade-in">
       {/* Background Ambient Glow Orbs */}
@@ -138,7 +165,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
       <div className="absolute -bottom-40 left-1/3 w-[600px] h-[600px] bg-[#0ea5e9]/15 rounded-full blur-[150px] pointer-events-none" />
 
       {/* Top Header Bar */}
-      <header className="h-16 px-6 sm:px-8 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-2xl z-10">
+      <header className="h-16 px-4 sm:px-8 flex items-center justify-between border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-2xl z-10">
         <div className="flex items-center gap-3">
           <button
             onClick={toggleExpanded}
@@ -148,11 +175,59 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
           </button>
           <div className="flex items-center gap-2">
             <span className="font-black text-[#38bdf8] text-base tracking-widest">A</span>
-            <span className="text-xs font-bold text-white uppercase tracking-wider">Now Playing</span>
+            <span className="text-xs font-bold text-white uppercase tracking-wider hidden sm:inline">
+              Now Playing
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-slate-400">
+        {/* Feature Pack Action Icons */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Equalizer Launch */}
+          <button
+            onClick={() => setIsEqOpen(true)}
+            className={`p-2 rounded-full border transition-all ${
+              equalizer.enabled
+                ? "bg-[#38bdf8]/20 border-[#38bdf8]/50 text-[#38bdf8] shadow-sm shadow-[#38bdf8]/20"
+                : "bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white"
+            }`}
+            title="5-Band Equalizer"
+          >
+            <Sliders className="w-4 h-4" />
+          </button>
+
+          {/* Sleep Timer */}
+          <button
+            onClick={() => setIsSleepOpen(true)}
+            className={`p-2 rounded-full border transition-all ${
+              sleepTimer.active
+                ? "bg-indigo-500/20 border-indigo-400/50 text-indigo-300 shadow-sm shadow-indigo-500/20"
+                : "bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white"
+            }`}
+            title="Sleep Timer"
+          >
+            <Moon className="w-4 h-4" />
+          </button>
+
+          {/* Share Story Card */}
+          <button
+            onClick={() => setIsShareOpen(true)}
+            className="p-2 rounded-full border bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all"
+            title="Share Aesthetic Story Card"
+          >
+            <Share2 className="w-4 h-4" />
+          </button>
+
+          {/* Listening Insights */}
+          <button
+            onClick={() => setIsInsightsOpen(true)}
+            className="p-2 rounded-full border bg-slate-900/80 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700 transition-all"
+            title="Listening Insights & Wrapped"
+          >
+            <BarChart3 className="w-4 h-4" />
+          </button>
+
+          {/* Lyrics Focus Toggle */}
           <button
             onClick={() => setFullLyricsMode(!fullLyricsMode)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
@@ -162,7 +237,7 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
             }`}
           >
             <Mic2 className="w-3.5 h-3.5" />
-            <span>Lyrics Focus</span>
+            <span className="hidden sm:inline">Lyrics Focus</span>
           </button>
         </div>
       </header>
@@ -397,49 +472,62 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
       )}
 
       {/* Bottom Player Navigation Controls */}
-      <footer className="h-20 border-t border-slate-800/80 px-8 flex items-center justify-between bg-slate-950/85 backdrop-blur-2xl z-10">
-        {/* Left Toggles */}
-        <div className="flex items-center gap-3">
+      <footer className="h-20 border-t border-slate-800/80 px-4 sm:px-8 flex items-center justify-between bg-slate-950/85 backdrop-blur-2xl z-10">
+        {/* Left Toggles (Minimize, Shuffle, Repeat, Speed) */}
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={toggleExpanded}
-            className="p-2.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2 sm:p-2.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Minimize"
           >
             <Minimize2 className="w-4 h-4" />
           </button>
           <button
             onClick={toggleShuffle}
-            className={`p-2.5 rounded-full transition-colors ${
+            className={`p-2 sm:p-2.5 rounded-full transition-colors ${
               isShuffle ? "bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/40" : "text-slate-400 hover:text-white"
             }`}
+            title="Shuffle"
           >
             <Shuffle className="w-4 h-4" />
           </button>
           <button
             onClick={cycleRepeat}
-            className={`p-2.5 rounded-full transition-colors ${
+            className={`p-2 sm:p-2.5 rounded-full transition-colors ${
               repeatMode !== "off"
                 ? "bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/40"
                 : "text-slate-400 hover:text-white"
             }`}
+            title="Repeat"
           >
             <Repeat className="w-4 h-4" />
+          </button>
+
+          {/* Speed badge */}
+          <button
+            onClick={cycleSpeed}
+            className="px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-sky-400 hover:text-sky-300 font-mono font-bold text-xs flex items-center gap-1 transition-colors"
+            title="Playback Speed"
+          >
+            <Zap className="w-3 h-3" />
+            <span>{playbackSettings.playbackSpeed || 1.0}x</span>
           </button>
         </div>
 
         {/* Center Main Controls */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6">
           <button onClick={prev} className="text-slate-400 hover:text-white transition-colors">
             <SkipBack className="w-5 h-5" />
           </button>
 
           <button
             onClick={togglePlay}
-            className="w-14 h-14 rounded-full bg-gradient-to-tr from-[#38bdf8] to-[#2563eb] hover:from-[#0ea5e9] hover:to-[#1d4ed8] text-slate-950 flex items-center justify-center shadow-xl shadow-[#38bdf8]/30 hover:scale-105 transition-all"
+            className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-tr from-[#38bdf8] to-[#2563eb] hover:from-[#0ea5e9] hover:to-[#1d4ed8] text-slate-950 flex items-center justify-center shadow-xl shadow-[#38bdf8]/30 hover:scale-105 transition-all"
           >
             {isPlaying ? (
-              <Pause className="w-6 h-6 fill-slate-950" />
+              <Pause className="w-5 h-5 sm:w-6 sm:h-6 fill-slate-950" />
             ) : (
-              <Play className="w-6 h-6 fill-slate-950 ml-0.5" />
+              <Play className="w-5 h-5 sm:w-6 sm:h-6 fill-slate-950 ml-0.5" />
             )}
           </button>
 
@@ -460,10 +548,16 @@ export const FullPlayerModal: React.FC<FullPlayerModalProps> = ({ onOpenQueue })
             step="0.01"
             value={isMuted ? 0 : volume}
             onChange={(e) => setVolume(parseFloat(e.target.value))}
-            className="w-24 accent-[#38bdf8] h-1.5 rounded-lg bg-slate-800 cursor-pointer"
+            className="w-20 sm:w-24 accent-[#38bdf8] h-1.5 rounded-lg bg-slate-800 cursor-pointer hidden xs:block"
           />
         </div>
       </footer>
+
+      {/* Spotify Feature Modals */}
+      <EqualizerModal isOpen={isEqOpen} onClose={() => setIsEqOpen(false)} />
+      <SleepTimerModal isOpen={isSleepOpen} onClose={() => setIsSleepOpen(false)} />
+      <ShareCardModal isOpen={isShareOpen} onClose={() => setIsShareOpen(false)} song={currentSong} />
+      <InsightsModal isOpen={isInsightsOpen} onClose={() => setIsInsightsOpen(false)} />
     </div>
   );
 };

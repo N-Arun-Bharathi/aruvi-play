@@ -1,4 +1,5 @@
 export * from "./types/song";
+export * from "./types/audio";
 export * from "./types/auth";
 export * from "./types/room";
 export * from "./types/playlist";
@@ -10,3 +11,4 @@ export * from "./utils/random";
 export * from "./services/saavn";
 export * from "./services/supabase";
 export * from "./utils/version";
+

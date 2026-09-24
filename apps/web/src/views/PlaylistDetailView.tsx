@@ -2,35 +2,45 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { usePlaylistStore } from "../store/playlistStore";
 import { usePlayerStore } from "../store/playerStore";
+import { useToastStore } from "../store/toastStore";
 import { SongListRow } from "../components/SongListRow";
-import { Play, Trash2, ArrowLeft, Disc, Loader2 } from "lucide-react";
+import { Song, getRelatedSongs, searchSongs, extractPrimaryArtist, isAlternateVersion } from "@aruvi/shared";
+import { Play, Trash2, ArrowLeft, Disc, Loader2, Sparkles, Plus, Check } from "lucide-react";
 
 interface PlaylistDetailViewProps {
   setActiveView?: (view: string) => void;
+}
+
+interface DisplayTrack {
+  song: Song;
+  isEnhanced?: boolean;
 }
 
 export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiveView }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const { playlists, activePlaylist, setActivePlaylist, loadSaavnPlaylist, deletePlaylist } =
+  const { playlists, activePlaylist, setActivePlaylist, loadSaavnPlaylist, deletePlaylist, addSongToPlaylist } =
     usePlaylistStore();
   const { playSong } = usePlayerStore();
+  const { show: showToast } = useToastStore();
 
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isEnhancedMode, setIsEnhancedMode] = useState(false);
+  const [enhancedTracks, setEnhancedTracks] = useState<DisplayTrack[]>([]);
+  const [addedSongIds, setAddedSongIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!id) return;
 
-    // If activePlaylist already matches the requested route ID, do nothing
     if (activePlaylist && activePlaylist.id === id) {
       setLoading(false);
       setLoadError(false);
       return;
     }
 
-    // 1. Check local custom playlists
     const foundLocal = playlists.find((p) => p.id === id);
     if (foundLocal) {
       setActivePlaylist(foundLocal);
@@ -39,7 +49,6 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
       return;
     }
 
-    // 2. Fetch JioSaavn playlist details
     let isCancelled = false;
     setLoading(true);
     setLoadError(false);
@@ -72,7 +81,74 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
     }
   };
 
-  // If loading or if activePlaylist in store does not match the URL param id
+  const handleToggleEnhance = async () => {
+    if (isEnhancedMode) {
+      setIsEnhancedMode(false);
+      showToast("Smart Enhance turned off", "info");
+      return;
+    }
+
+    if (!activePlaylist || activePlaylist.songs.length === 0) {
+      showToast("Add songs to this playlist first to enable Smart Enhance!", "info");
+      return;
+    }
+
+    setIsEnhancing(true);
+    try {
+      const originalSongs = activePlaylist.songs;
+      const seedSong = originalSongs[0];
+      const artist = extractPrimaryArtist(seedSong);
+
+      let recommendations: Song[] = [];
+      try {
+        recommendations = await getRelatedSongs(seedSong.id);
+      } catch (e) {}
+
+      if (recommendations.length < 5 && artist) {
+        try {
+          const artistHits = await searchSongs(`${artist} hits`);
+          recommendations = [...recommendations, ...artistHits];
+        } catch (e) {}
+      }
+
+      // Filter out existing songs
+      const filteredRecs = recommendations.filter(
+        (rec) => !originalSongs.some((orig) => orig.id === rec.id || isAlternateVersion(rec, orig))
+      );
+
+      // Build interleaved enhanced list: 2 original songs -> 1 recommended song
+      const mixed: DisplayTrack[] = [];
+      let recIndex = 0;
+
+      for (let i = 0; i < originalSongs.length; i++) {
+        mixed.push({ song: originalSongs[i], isEnhanced: false });
+        if ((i + 1) % 2 === 0 && recIndex < filteredRecs.length) {
+          mixed.push({ song: filteredRecs[recIndex], isEnhanced: true });
+          recIndex++;
+        }
+      }
+
+      setEnhancedTracks(mixed);
+      setIsEnhancedMode(true);
+      showToast("✨ Smart Enhance activated! Added AI recommendations.", "success");
+    } catch (e) {
+      console.error("Enhance playlist error:", e);
+      showToast("Could not fetch recommendations at this moment.", "error");
+    } finally {
+      setIsEnhancing(false);
+    }
+  };
+
+  const handleAddEnhancedToPlaylist = async (song: Song) => {
+    if (!activePlaylist || (activePlaylist as any).is_saavn) {
+      showToast("Cannot add to JioSaavn curated playlists directly.", "info");
+      return;
+    }
+    await addSongToPlaylist(activePlaylist.id, song);
+    setAddedSongIds((prev) => new Set(prev).add(song.id));
+    showToast(`Added "${song.title}" permanently to playlist!`, "success");
+  };
+
   if (loading || (id && activePlaylist?.id !== id && !loadError)) {
     return (
       <div className="p-12 text-center my-16 space-y-4 animate-fade-in">
@@ -99,9 +175,11 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
     );
   }
 
+  const effectiveSongs = isEnhancedMode ? enhancedTracks.map((t) => t.song) : activePlaylist.songs;
+
   const handlePlayAll = () => {
-    if (activePlaylist.songs.length > 0) {
-      playSong(activePlaylist.songs[0], activePlaylist.songs);
+    if (effectiveSongs.length > 0) {
+      playSong(effectiveSongs[0], effectiveSongs);
     }
   };
 
@@ -143,17 +221,38 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
             {activePlaylist.name}
           </h1>
           <p className="text-xs text-slate-300">{activePlaylist.description || "No description provided."}</p>
-          <div className="text-xs text-slate-400 font-medium pt-1">{activePlaylist.songs.length} songs</div>
+          <div className="text-xs text-slate-400 font-medium pt-1">
+            {isEnhancedMode ? `${effectiveSongs.length} songs (Enhanced)` : `${activePlaylist.songs.length} songs`}
+          </div>
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 pt-4">
             <button
               onClick={handlePlayAll}
-              disabled={activePlaylist.songs.length === 0}
+              disabled={effectiveSongs.length === 0}
               className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-sky-400 to-blue-600 hover:from-sky-300 hover:to-blue-500 disabled:opacity-50 text-white font-bold text-xs rounded-full shadow-lg shadow-sky-500/30 transition-all"
             >
               <Play className="w-4 h-4 fill-current" /> Play All
             </button>
+
+            {/* Smart Enhance Playlist Button */}
+            <button
+              onClick={handleToggleEnhance}
+              disabled={isEnhancing || activePlaylist.songs.length === 0}
+              className={`flex items-center gap-2 px-5 py-3 rounded-full text-xs font-bold border transition-all ${
+                isEnhancedMode
+                  ? "bg-sky-500/20 text-sky-300 border-sky-400/50 shadow-md shadow-sky-500/15"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border-white/10"
+              }`}
+            >
+              {isEnhancing ? (
+                <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
+              ) : (
+                <Sparkles className="w-4 h-4 text-sky-400" />
+              )}
+              <span>{isEnhancedMode ? "Enhanced Active" : "Enhance Playlist"}</span>
+            </button>
+
             {!(activePlaylist as any).is_saavn && (
               <button
                 onClick={handleDelete}
@@ -169,10 +268,50 @@ export const PlaylistDetailView: React.FC<PlaylistDetailViewProps> = ({ setActiv
 
       {/* Song List */}
       <div className="space-y-3">
-        <h3 className="text-sm font-bold text-white">Songs in Playlist</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold text-white">Songs in Playlist</h3>
+          {isEnhancedMode && (
+            <span className="text-xs font-extrabold text-sky-400 flex items-center gap-1">
+              <Sparkles className="w-3.5 h-3.5" /> AI Recommended Tracks Added
+            </span>
+          )}
+        </div>
+
         {activePlaylist.songs.length === 0 ? (
           <div className="p-12 text-center border border-dashed border-slate-700/60 rounded-3xl text-slate-400 text-xs bg-slate-900/40 backdrop-blur-xl">
             No songs added yet. Click "+" on any song card or row to add it here!
+          </div>
+        ) : isEnhancedMode ? (
+          <div className="space-y-1">
+            {enhancedTracks.map((item, idx) => (
+              <div key={`${item.song.id}_${idx}`} className="relative group">
+                <SongListRow song={item.song} index={idx} queue={effectiveSongs} />
+                {item.isEnhanced && (
+                  <div className="absolute top-1/2 -translate-y-1/2 right-16 sm:right-28 flex items-center gap-2 pointer-events-auto">
+                    <span className="hidden sm:inline px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-400/40 text-[9px] font-black uppercase tracking-wider">
+                      ✨ Recommended
+                    </span>
+                    {!(activePlaylist as any).is_saavn && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAddEnhancedToPlaylist(item.song);
+                        }}
+                        disabled={addedSongIds.has(item.song.id)}
+                        className="p-1.5 rounded-full bg-slate-800 hover:bg-sky-500 text-slate-300 hover:text-slate-950 transition-colors border border-slate-700"
+                        title="Add to this playlist permanently"
+                      >
+                        {addedSongIds.has(item.song.id) ? (
+                          <Check className="w-3.5 h-3.5 text-sky-400" />
+                        ) : (
+                          <Plus className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         ) : (
           <div className="space-y-1">
