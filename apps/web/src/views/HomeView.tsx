@@ -25,6 +25,34 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
 
   const userName = userProfile?.name || "Arun";
 
+  const getGreeting = () => {
+    const hrs = new Date().getHours();
+    if (hrs < 12) {
+      return {
+        greeting: "Good morning",
+        subtext: "Here's your personal soundtrack to kickstart your day.",
+      };
+    }
+    if (hrs < 17) {
+      return {
+        greeting: "Good afternoon",
+        subtext: "Here's your personal soundtrack for this afternoon.",
+      };
+    }
+    if (hrs < 22) {
+      return {
+        greeting: "Good evening",
+        subtext: "Here's your personal soundtrack for tonight.",
+      };
+    }
+    return {
+      greeting: "Good night",
+      subtext: "Unwind and relax with your late-night soundtrack.",
+    };
+  };
+
+  const { greeting, subtext } = getGreeting();
+
   useEffect(() => {
     async function loadData() {
       setLoading(true);
@@ -63,9 +91,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveView }) => {
       {/* Greeting Header */}
       <div className="space-y-1">
         <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-          Good evening, {userName}
+          {greeting}, {userName}
         </h1>
-        <p className="text-xs text-slate-400 font-medium">Here's your personal soundtrack for tonight.</p>
+        <p className="text-xs text-slate-400 font-medium">{subtext}</p>
       </div>
 
       {/* Main Grid + Active Rooms Right Sidebar */}
