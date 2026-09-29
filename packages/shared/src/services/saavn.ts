@@ -54,9 +54,10 @@ export function decryptMediaUrl(encryptedUrl?: string): string | undefined {
 
     return decryptedStr
       .replace("_96.mp4", "_320.mp4")
-      .replace("_96.mp3", "_320.mp3")
+      .replace("_96.mp3", "_320.mp4")
       .replace("_160.mp4", "_320.mp4")
-      .replace("_160.mp3", "_320.mp3");
+      .replace("_160.mp3", "_320.mp4")
+      .replace(/^http:/, "https:");
   } catch (err) {
     return undefined;
   }
@@ -267,8 +268,15 @@ export async function searchSongs(query: string, preferredLangs?: string[]): Pro
 
 export async function getTrendingSongs(preferredLangs?: string[]): Promise<Song[]> {
   const lang = preferredLangs && preferredLangs.length > 0 ? preferredLangs[0] : "tamil";
-  const defaultQuery = `${lang} latest hits top 20`;
-  return searchSongs(defaultQuery, preferredLangs);
+  const defaultQuery = `${lang} trending hits`;
+  const songs = await searchSongs(defaultQuery, preferredLangs);
+  if (songs.length >= 10) return songs;
+  const fallbackSongs = await searchSongs(`${lang} latest hits`, preferredLangs);
+  const combined = [...songs];
+  for (const s of fallbackSongs) {
+    if (!combined.some((c) => c.id === s.id)) combined.push(s);
+  }
+  return combined;
 }
 
 export async function getRelatedSongs(songId: string): Promise<Song[]> {
@@ -304,13 +312,38 @@ export async function getRelatedSongs(songId: string): Promise<Song[]> {
   }
 }
 
-export async function getSongById(id: string): Promise<Song | null> {
+export async function getSongDetails(id: string): Promise<Song | null> {
   if (songByIdCache.has(id)) {
     return songByIdCache.get(id)!;
   }
+  try {
+    const res = await client.get("/api.php", {
+      params: {
+        __call: "song.getDetails",
+        pids: id,
+        _format: "json",
+        _marker: "0",
+        api_version: "4",
+      },
+    });
+    const songObj = res.data?.[id] || res.data?.songs?.[0];
+    if (songObj) {
+      const mapped = mapSaavnToSong(songObj);
+      if (mapped) {
+        songByIdCache.set(id, mapped);
+        return mapped;
+      }
+    }
+  } catch (e) {}
+
   const results = await searchSongs(id);
   return results.length > 0 ? results[0] : null;
 }
+
+export async function getSongById(id: string): Promise<Song | null> {
+  return getSongDetails(id);
+}
+
 
 function pickPlaylistImage(image: any): string | undefined {
   if (!image) return undefined;

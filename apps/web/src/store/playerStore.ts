@@ -4,6 +4,7 @@ import {
   RepeatMode,
   getRelatedSongs,
   searchSongs,
+  getSongDetails,
   isAlternateVersion,
   extractPrimaryArtist,
   EqualizerSettings,
@@ -80,7 +81,7 @@ const DEFAULT_EQUALIZER: EqualizerSettings = {
 };
 
 const DEFAULT_PLAYBACK_SETTINGS: PlaybackSettings = {
-  crossfadeSeconds: 3,
+  crossfadeSeconds: 0,
   playbackSpeed: 1.0,
   audioNormalization: true,
   smartShuffle: false,
@@ -94,112 +95,9 @@ const DEFAULT_SLEEP_TIMER: SleepTimerState = {
   endAtTimestamp: null,
 };
 
-// HTML5 Audio Singleton
+// HTML5 Audio Singleton - Standard Direct Audio Output
 const audio = new Audio();
 audio.preload = "auto";
-
-// Web Audio API DSP Engine
-class WebAudioEngine {
-  private ctx: AudioContext | null = null;
-  private source: MediaElementAudioSourceNode | null = null;
-  private preampNode: GainNode | null = null;
-  private filters: {
-    f60: BiquadFilterNode;
-    f230: BiquadFilterNode;
-    f910: BiquadFilterNode;
-    f3600: BiquadFilterNode;
-    f14000: BiquadFilterNode;
-  } | null = null;
-  private masterGain: GainNode | null = null;
-  private isInitialized = false;
-
-  public init(audioEl: HTMLAudioElement) {
-    if (this.isInitialized || typeof window === "undefined") return;
-    try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtx) return;
-      this.ctx = new AudioCtx();
-      this.source = this.ctx.createMediaElementSource(audioEl);
-
-      this.preampNode = this.ctx.createGain();
-
-      // 60Hz Low Shelf
-      const f60 = this.ctx.createBiquadFilter();
-      f60.type = "lowshelf";
-      f60.frequency.value = 60;
-
-      // 230Hz Peaking
-      const f230 = this.ctx.createBiquadFilter();
-      f230.type = "peaking";
-      f230.frequency.value = 230;
-      f230.Q.value = 1.0;
-
-      // 910Hz Peaking
-      const f910 = this.ctx.createBiquadFilter();
-      f910.type = "peaking";
-      f910.frequency.value = 910;
-      f910.Q.value = 1.0;
-
-      // 3.6kHz Peaking
-      const f3600 = this.ctx.createBiquadFilter();
-      f3600.type = "peaking";
-      f3600.frequency.value = 3600;
-      f3600.Q.value = 1.0;
-
-      // 14kHz High Shelf
-      const f14000 = this.ctx.createBiquadFilter();
-      f14000.type = "highshelf";
-      f14000.frequency.value = 14000;
-
-      this.masterGain = this.ctx.createGain();
-
-      // Connect graph: source -> preamp -> f60 -> f230 -> f910 -> f3600 -> f14000 -> masterGain -> destination
-      this.source.connect(this.preampNode);
-      this.preampNode.connect(f60);
-      f60.connect(f230);
-      f230.connect(f910);
-      f910.connect(f3600);
-      f3600.connect(f14000);
-      f14000.connect(this.masterGain);
-      this.masterGain.connect(this.ctx.destination);
-
-      this.filters = { f60, f230, f910, f3600, f14000 };
-      this.isInitialized = true;
-    } catch (e) {
-      console.warn("Web Audio API could not be attached directly to element:", e);
-    }
-  }
-
-  public ensureRunning() {
-    if (this.ctx && this.ctx.state === "suspended") {
-      this.ctx.resume().catch(() => {});
-    }
-  }
-
-  public applyEqualizer(settings: EqualizerSettings) {
-    if (!this.filters || !this.preampNode) return;
-    if (!settings.enabled) {
-      this.preampNode.gain.value = 1;
-      this.filters.f60.gain.value = 0;
-      this.filters.f230.gain.value = 0;
-      this.filters.f910.gain.value = 0;
-      this.filters.f3600.gain.value = 0;
-      this.filters.f14000.gain.value = 0;
-      return;
-    }
-
-    const preampLinear = Math.pow(10, (settings.preamp || 0) / 20);
-    this.preampNode.gain.value = preampLinear;
-
-    this.filters.f60.gain.value = settings.bands.band60 || 0;
-    this.filters.f230.gain.value = settings.bands.band230 || 0;
-    this.filters.f910.gain.value = settings.bands.band910 || 0;
-    this.filters.f3600.gain.value = settings.bands.band3600 || 0;
-    this.filters.f14000.gain.value = settings.bands.band14000 || 0;
-  }
-}
-
-const audioDsp = new WebAudioEngine();
 
 // MediaSession Metadata Helper
 function updateMediaSessionMetadata(song: Song | null) {
@@ -372,71 +270,72 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
   };
 
   audio.onerror = (e) => {
-    console.warn("Audio load error on source URL, auto-advancing to next song:", e);
-    set({ isPlaying: false });
-    const { next } = get();
-    setTimeout(() => next(), 500);
+    console.warn("Audio playback error on source URL:", audio.src, e);
+    const { currentSong, isPlaying } = get();
+    // Only attempt recovery lookup if playback was actually active
+    if (isPlaying && currentSong?.id) {
+      getSongDetails(currentSong.id).then((freshSong) => {
+        if (freshSong?.url && freshSong.url !== audio.src) {
+          audio.src = freshSong.url;
+          audio.play().catch((err) => {
+            console.error("Audio recovery play failed:", err);
+            set({ isPlaying: false });
+          });
+        } else {
+          set({ isPlaying: false });
+        }
+      }).catch(() => {
+        set({ isPlaying: false });
+      });
+    } else {
+      set({ isPlaying: false });
+    }
   };
 
-  const loadAndPlayTrack = (song: Song) => {
+  const loadAndPlayTrack = async (song: Song) => {
     // Record to history store
     useHistoryStore.getState().addSongToHistory(song);
 
-    // Ensure Web Audio Engine graph is initialized on user click
-    audioDsp.init(audio);
-    audioDsp.ensureRunning();
-    audioDsp.applyEqualizer(get().equalizer);
+    let streamUrl = song.url;
+    if (!streamUrl || streamUrl === "") {
+      try {
+        const details = await getSongDetails(song.id);
+        if (details?.url) {
+          streamUrl = details.url;
+          song.url = details.url;
+        }
+      } catch (e) {
+        console.warn("Failed to fetch fresh song details:", e);
+      }
+    }
 
-    // Crossfade / Smooth volume ramp
-    const targetVolume = get().volume;
-    const crossfade = get().playbackSettings.crossfadeSeconds;
+    if (!streamUrl) {
+      console.warn("No audio stream URL available for track:", song.title);
+      useToastStore.getState().show(`Audio unavailable for ${song.title}`, "error");
+      get().next();
+      return;
+    }
 
-    audio.src = song.url;
+    const currentVolume = get().isMuted ? 0 : (get().volume ?? 0.8);
+    audio.volume = currentVolume;
     audio.playbackRate = get().playbackSettings.playbackSpeed || 1.0;
 
-    if (crossfade > 0) {
-      audio.volume = 0;
-      audio
-        .play()
-        .then(() => {
-          set({ isPlaying: true });
-          updateMediaSessionMetadata(song);
-          if ("mediaSession" in navigator) {
-            navigator.mediaSession.playbackState = "playing";
-          }
+    if (audio.src !== streamUrl) {
+      audio.src = streamUrl;
+    }
 
-          // Ramp volume up over 400ms
-          const fadeSteps = 10;
-          const stepTime = 40;
-          let currentStep = 0;
-          const fadeInterval = setInterval(() => {
-            currentStep++;
-            audio.volume = Math.min(targetVolume, (currentStep / fadeSteps) * targetVolume);
-            if (currentStep >= fadeSteps) {
-              clearInterval(fadeInterval);
-              audio.volume = targetVolume;
-            }
-          }, stepTime);
-        })
-        .catch((err) => {
-          console.error("Audio playback error:", err);
-          set({ isPlaying: false });
-        });
-    } else {
-      audio.volume = targetVolume;
-      audio
-        .play()
-        .then(() => {
-          set({ isPlaying: true });
-          updateMediaSessionMetadata(song);
-          if ("mediaSession" in navigator) {
-            navigator.mediaSession.playbackState = "playing";
-          }
-        })
-        .catch((err) => {
-          console.error("Audio playback error:", err);
-          set({ isPlaying: false });
-        });
+    try {
+      await audio.play();
+      set({ isPlaying: true });
+      updateMediaSessionMetadata(song);
+      if ("mediaSession" in navigator) {
+        navigator.mediaSession.playbackState = "playing";
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") {
+        console.error("Audio play error:", err);
+        set({ isPlaying: false });
+      }
     }
   };
 
@@ -530,17 +429,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     // Hydration
     hydrate: () => {
       try {
-        // Hydrate player state
         const rawPlayer = localStorage.getItem(PLAYER_STORAGE_KEY);
         if (rawPlayer) {
           const saved = JSON.parse(rawPlayer);
           if (saved && saved.currentSong) {
             const song = saved.currentSong;
-            if (song.url) {
-              audio.src = song.url;
-              if (saved.position > 0) audio.currentTime = saved.position;
+            if (saved.volume !== undefined) {
+              audio.volume = saved.volume;
             }
-            if (saved.volume !== undefined) audio.volume = saved.volume;
 
             set({
               currentSong: song,
@@ -559,14 +455,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
           }
         }
 
-        // Hydrate Equalizer
         const rawEq = localStorage.getItem(EQUALIZER_STORAGE_KEY);
         if (rawEq) {
           const eq: EqualizerSettings = JSON.parse(rawEq);
           set({ equalizer: eq });
         }
 
-        // Hydrate Playback Settings
         const rawPb = localStorage.getItem(PLAYBACK_SETTINGS_KEY);
         if (rawPb) {
           const pb: PlaybackSettings = JSON.parse(rawPb);
@@ -574,7 +468,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
           if (pb.playbackSpeed) audio.playbackRate = pb.playbackSpeed;
         }
 
-        // Load Listening Insights
         useInsightsStore.getState().loadStats();
       } catch (e) {
         console.warn("Failed to hydrate player store:", e);
@@ -585,7 +478,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     setEqualizerEnabled: (enabled: boolean) => {
       const updated: EqualizerSettings = { ...get().equalizer, enabled };
       set({ equalizer: updated });
-      audioDsp.applyEqualizer(updated);
       try {
         localStorage.setItem(EQUALIZER_STORAGE_KEY, JSON.stringify(updated));
       } catch (e) {}
@@ -600,7 +492,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         preamp: presetConfig.preamp,
       };
       set({ equalizer: updated });
-      audioDsp.applyEqualizer(updated);
       try {
         localStorage.setItem(EQUALIZER_STORAGE_KEY, JSON.stringify(updated));
       } catch (e) {}
@@ -614,7 +505,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         bands: updatedBands,
       };
       set({ equalizer: updated });
-      audioDsp.applyEqualizer(updated);
       try {
         localStorage.setItem(EQUALIZER_STORAGE_KEY, JSON.stringify(updated));
       } catch (e) {}
@@ -626,7 +516,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         preamp: gain,
       };
       set({ equalizer: updated });
-      audioDsp.applyEqualizer(updated);
       try {
         localStorage.setItem(EQUALIZER_STORAGE_KEY, JSON.stringify(updated));
       } catch (e) {}
@@ -682,16 +571,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
 
         const rem = sleepTimer.remainingSeconds - 1;
 
-        // Gentle volume fade-out in final 10 seconds
         if (rem <= 10 && rem > 0) {
-          audio.volume = Math.max(0, (rem / 10) * volume);
+          audio.volume = Math.max(0, (rem / 10) * (volume || 0.8));
         }
 
         if (rem <= 0) {
           clearInterval(sleepTimerInterval);
           sleepTimerInterval = null;
           audio.pause();
-          audio.volume = volume; // Restore baseline volume
+          audio.volume = volume || 0.8;
           set({
             isPlaying: false,
             sleepTimer: { ...DEFAULT_SLEEP_TIMER },
@@ -783,7 +671,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
       let targetIndex = 0;
 
       if (newQueue && newQueue.length > 1) {
-        // Explicit queue passed (e.g. Daily Mix, Playlist, Liked Songs, Search) -> Preserve all items
         const seen = new Set<string>();
         q = rawQ.filter((s) => {
           if (!s || !s.id) return false;
@@ -794,7 +681,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
         targetIndex = q.findIndex((s) => s.id === targetSong.id);
         if (targetIndex < 0) targetIndex = 0;
       } else {
-        // Single track clicked -> create filtered queue with no duplicate stems
         q = rawQ.filter((s, idx) => {
           if (idx === clickedIdx) return true;
           if (isAlternateVersion(s, targetSong)) return false;
@@ -815,22 +701,58 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     },
 
     togglePlay: () => {
-      const { isPlaying, currentSong } = get();
+      const { isPlaying, currentSong, position } = get();
       if (!currentSong) return;
-      audioDsp.init(audio);
-      audioDsp.ensureRunning();
       if (isPlaying) {
         audio.pause();
       } else {
-        audio.play().catch(console.error);
+        const needsReload = !audio.src || audio.src === "" || (currentSong.url && !audio.src.includes(currentSong.url.split("?")[0]));
+        if (needsReload) {
+          loadAndPlayTrack(currentSong).then(() => {
+            if (position > 0 && Math.abs(audio.currentTime - position) > 2) {
+              try { audio.currentTime = position; } catch (e) {}
+            }
+          });
+        } else {
+          if (position > 0 && Math.abs(audio.currentTime - position) > 2) {
+            try { audio.currentTime = position; } catch (e) {}
+          }
+          audio.play().then(() => {
+            set({ isPlaying: true });
+          }).catch((err) => {
+            console.warn("Audio play rejected, attempting fresh track load:", err);
+            loadAndPlayTrack(currentSong);
+          });
+        }
       }
     },
 
-    pause: () => audio.pause(),
+    pause: () => {
+      audio.pause();
+      set({ isPlaying: false });
+    },
+
     resume: () => {
-      audioDsp.init(audio);
-      audioDsp.ensureRunning();
-      audio.play().catch(console.error);
+      const { currentSong, position } = get();
+      if (!currentSong) return;
+      const needsReload = !audio.src || audio.src === "" || (currentSong.url && !audio.src.includes(currentSong.url.split("?")[0]));
+      if (needsReload) {
+        loadAndPlayTrack(currentSong).then(() => {
+          if (position > 0 && Math.abs(audio.currentTime - position) > 2) {
+            try { audio.currentTime = position; } catch (e) {}
+          }
+        });
+      } else {
+        if (position > 0 && Math.abs(audio.currentTime - position) > 2) {
+          try { audio.currentTime = position; } catch (e) {}
+        }
+        audio.play().then(() => {
+          set({ isPlaying: true });
+        }).catch((err) => {
+          console.error("Audio resume error:", err);
+          loadAndPlayTrack(currentSong);
+        });
+      }
     },
 
     next: () => {
@@ -897,20 +819,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => {
     },
 
     seekTo: (seconds: number) => {
-      audio.currentTime = seconds;
-      set({ position: seconds });
+      if (isFinite(seconds) && seconds >= 0) {
+        audio.currentTime = seconds;
+        set({ position: seconds });
+      }
     },
 
     setVolume: (vol: number) => {
-      audio.volume = vol;
-      set({ volume: vol, isMuted: vol === 0 });
+      const clamped = Math.max(0, Math.min(1, vol));
+      audio.volume = clamped;
+      set({ volume: clamped, isMuted: clamped === 0 });
     },
 
     toggleMute: () => {
       const { isMuted, volume } = get();
       if (isMuted) {
-        audio.volume = volume || 0.8;
-        set({ isMuted: false });
+        const targetVol = volume > 0 ? volume : 0.8;
+        audio.volume = targetVol;
+        set({ isMuted: false, volume: targetVol });
       } else {
         audio.volume = 0;
         set({ isMuted: true });

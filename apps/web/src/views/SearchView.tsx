@@ -114,7 +114,7 @@ export const SearchView: React.FC<SearchViewProps> = ({ initialQuery = "" }) => 
 
           <div className="space-y-1">
             {results.map((song, idx) => (
-              <SongListRow key={song.id} song={song} index={idx} />
+              <SongListRow key={song.id} song={song} index={idx} queue={results} />
             ))}
           </div>
         </div>
