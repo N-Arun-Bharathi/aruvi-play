@@ -44,11 +44,10 @@ interface CategoryTab {
 
 const PLAYLIST_CATEGORIES: CategoryTab[] = [
   { id: "all", label: "✨ All", icon: "sparkles" },
-  { id: "charts", label: "🔥 Top Charts", querySuffix: "trending", icon: "fire" },
+  { id: "melodies", label: "💖 Melodies", querySuffix: "melody hits romance", icon: "heart-filled" },
+  { id: "kuthu", label: "💃 Kuthu & Party", querySuffix: "kuthu dance hits", icon: "music" },
   { id: "artists", label: "⭐ Let's Play", querySuffix: "lets play", icon: "star" },
   { id: "decades", label: "📻 Decades", querySuffix: "1990s 2000s 1980s", icon: "disc" },
-  { id: "kuthu", label: "💃 Kuthu & Party", querySuffix: "kuthu dance hits", icon: "music" },
-  { id: "melodies", label: "💖 Melodies", querySuffix: "melody hits romance", icon: "heart-filled" },
   { id: "custom", label: "📁 My Custom", icon: "list" },
 ];
 

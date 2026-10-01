@@ -13,7 +13,7 @@ interface SongListRowProps {
 }
 
 export const SongListRow: React.FC<SongListRowProps> = ({ song, index, queue }) => {
-  const { currentSong, playSong, togglePlay } = usePlayerStore();
+  const { currentSong, playSong, togglePlay, isPlaying } = usePlayerStore();
   const { isLiked, toggleLike } = useLikedStore();
   const { authMode, openAuthModal } = useAuthStore();
   const { playlists, addSongToPlaylist } = usePlaylistStore();
@@ -57,12 +57,25 @@ export const SongListRow: React.FC<SongListRowProps> = ({ song, index, queue }) 
     >
       {/* Left Index & Artwork & Title */}
       <div className="flex items-center gap-3.5 min-w-0 flex-1">
-        <span className="w-5 text-center text-xs font-semibold text-slate-400 group-hover:hidden">
-          {isCurrent ? <Music className="w-4 h-4 text-sky-400 mx-auto animate-pulse" /> : index + 1}
+        <span className="w-6 text-center text-xs font-semibold text-slate-400 group-hover:hidden flex items-center justify-center">
+          {isCurrent ? (
+            isPlaying ? (
+              <div className="flex items-end justify-center gap-0.5 h-3.5 w-4 mx-auto">
+                <span className="w-0.5 h-full bg-sky-400 animate-pulse rounded-full" />
+                <span className="w-0.5 h-2/3 bg-sky-400 animate-bounce rounded-full" />
+                <span className="w-0.5 h-4/5 bg-sky-400 animate-pulse rounded-full" />
+                <span className="w-0.5 h-1/2 bg-sky-400 animate-bounce rounded-full" />
+              </div>
+            ) : (
+              <Music className="w-4 h-4 text-sky-400 mx-auto" />
+            )
+          ) : (
+            index + 1
+          )}
         </span>
         <button
           onClick={handlePlay}
-          className="w-5 hidden group-hover:flex items-center justify-center text-white hover:text-sky-400 transition-colors"
+          className="w-6 hidden group-hover:flex items-center justify-center text-white hover:text-sky-400 transition-colors"
         >
           <Play className="w-4 h-4 fill-current" />
         </button>
